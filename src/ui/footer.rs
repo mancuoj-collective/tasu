@@ -1,13 +1,14 @@
-use ratatui::Frame;
-use ratatui::layout::Rect;
-use ratatui::text::{Line, Span};
-use ratatui::widgets::Paragraph;
+use ratatui::{
+    Frame,
+    layout::Rect,
+    text::{Line, Span},
+    widgets::Paragraph,
+};
 
 use crate::app::{App, Mode};
-use crate::theme;
 
 pub fn draw(f: &mut Frame, app: &App, area: Rect) {
-    f.render_widget(Paragraph::new(hint_line(&hints(app))), area);
+    f.render_widget(Paragraph::new(hint_line(app)), area);
 }
 
 pub fn hints(app: &App) -> Vec<(&'static str, &'static str)> {
@@ -15,25 +16,26 @@ pub fn hints(app: &App) -> Vec<(&'static str, &'static str)> {
         Mode::Normal => vec![
             ("q", "quit"),
             ("j/k", "move"),
+            ("space", "toggle"),
             ("a", "add"),
             ("e", "edit"),
             ("d", "delete"),
-            ("space", "toggle"),
         ],
         Mode::Add | Mode::Edit => vec![("enter", "save"), ("esc", "cancel")],
         Mode::ConfirmDelete => vec![("y", "delete"), ("n", "cancel")],
     }
 }
 
-fn hint_line(entries: &[(&'static str, &'static str)]) -> Line<'static> {
+fn hint_line(app: &App) -> Line<'static> {
+    let t = app.theme;
     let mut spans = vec![Span::raw(" ")];
-    for (index, (key, desc)) in entries.iter().enumerate() {
+    for (index, (key, desc)) in hints(app).iter().enumerate() {
         if index > 0 {
-            spans.push(Span::raw("  "));
+            spans.push(Span::styled("  ", t.disabled()));
         }
-        spans.push(Span::styled(*key, theme::key()));
+        spans.push(Span::styled(*key, t.key_hint().0));
         spans.push(Span::raw(" "));
-        spans.push(Span::styled(*desc, theme::muted()));
+        spans.push(Span::styled(*desc, t.key_hint().1));
     }
     Line::from(spans)
 }

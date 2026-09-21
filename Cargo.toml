@@ -14,7 +14,11 @@ authors = ["mancuoj <mancuoj@gmail.com>"]
 [dependencies]
 anyhow = "1.0.104"
 crossterm = "0.29.0"
+dirs = "7.0.0"
 ratatui = "0.30.2"
+terminal-colorsaurus = "1.0.3"
+tui-input = "0.15.4"
+unicode-width = "0.2.2"
 
 # Read the optimization guideline for more details: https://ratatui.rs/recipes/apps/release-your-app/#optimizations
 [profile.release]

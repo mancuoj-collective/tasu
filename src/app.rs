@@ -1,16 +1,13 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use crossterm::event::{
-    Event::Key,
+    self, Event,
     KeyCode::{self},
-    KeyEvent, KeyEventKind, KeyModifiers,
+    KeyEvent, KeyModifiers,
 };
 use ratatui::{DefaultTerminal, widgets::ListState};
+use tui_input::{Input, backend::crossterm::EventHandler};
 
-use crate::{
-    event::{AppEvent, Event, EventHandler},
-    todo::Todo,
-    ui,
-};
+use crate::{theme::Theme, todo::Todo, ui};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
@@ -23,22 +20,22 @@ pub enum Mode {
 
 pub struct App {
     pub should_quit: bool,
-    pub events: EventHandler,
+    pub theme: Theme,
     pub mode: Mode,
     pub todos: Vec<Todo>,
     pub state: ListState,
-    pub input: String,
+    pub input: Input,
 }
 
 impl Default for App {
     fn default() -> Self {
         Self {
             should_quit: false,
-            events: EventHandler::new(),
+            theme: Theme::detect(),
             mode: Mode::default(),
             todos: vec![Todo::new("read docs"), Todo::new("build apps")],
             state: ListState::default().with_selected(Some(0)),
-            input: String::new(),
+            input: Input::default(),
         }
     }
 }
@@ -48,36 +45,21 @@ impl App {
         Self::default()
     }
 
-    pub fn run(mut self, mut terminal: DefaultTerminal) -> Result<()> {
+    pub fn run(&mut self, terminal: &mut DefaultTerminal) -> Result<()> {
         while !self.should_quit {
-            terminal.draw(|f| ui::draw(f, &mut self))?;
-            self.handle_events()?;
+            terminal.draw(|f| ui::draw(f, self))?;
+            let event = event::read().context("failed to read crossterm event")?;
+            if let Some(key) = event.as_key_press_event() {
+                self.on_key(key);
+            }
         }
         Ok(())
     }
 
-    fn handle_events(&mut self) -> Result<()> {
-        match self.events.next()? {
-            Event::Tick => self.tick(),
-            Event::Crossterm(event) => match event {
-                Key(key_event) if key_event.kind == KeyEventKind::Press => {
-                    self.handle_key_event(key_event)?
-                }
-                _ => {}
-            },
-            Event::App(app_event) => match app_event {
-                AppEvent::Quit => self.quit(),
-            },
-        }
-        Ok(())
-    }
-
-    fn handle_key_event(&mut self, key: KeyEvent) -> Result<()> {
-        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-
-        if ctrl && matches!(key.code, KeyCode::Char('c' | 'C')) {
-            self.events.send(AppEvent::Quit);
-            return Ok(());
+    fn on_key(&mut self, key: KeyEvent) {
+        if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+            self.quit();
+            return;
         }
 
         match self.mode {
@@ -85,22 +67,21 @@ impl App {
             Mode::Add | Mode::Edit => self.input_key(key),
             Mode::ConfirmDelete => self.confirm_key(key),
         }
-        Ok(())
     }
 
     fn normal_key(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Esc | KeyCode::Char('q') => self.events.send(AppEvent::Quit),
+            KeyCode::Esc | KeyCode::Char('q') => self.quit(),
             KeyCode::Char('j') | KeyCode::Down => self.state.select_next(),
             KeyCode::Char('k') | KeyCode::Up => self.state.select_previous(),
             KeyCode::Char(' ') => self.toggle(),
             KeyCode::Char('a') => {
-                self.input.clear();
+                self.input.reset();
                 self.mode = Mode::Add;
             }
             KeyCode::Char('e') => {
                 if let Some(i) = self.state.selected() {
-                    self.input = self.todos[i].title.clone();
+                    self.input = Input::new(self.todos[i].title.clone());
                     self.mode = Mode::Edit;
                 }
             }
@@ -116,7 +97,7 @@ impl App {
     fn input_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Enter => {
-                let title = self.input.trim().to_string();
+                let title = self.input.value().trim().to_string();
                 if !title.is_empty() {
                     match self.mode {
                         Mode::Add => {
@@ -131,18 +112,16 @@ impl App {
                         _ => {}
                     }
                 }
-                self.input.clear();
+                self.input.reset();
                 self.mode = Mode::Normal;
             }
             KeyCode::Esc => {
-                self.input.clear();
+                self.input.reset();
                 self.mode = Mode::Normal;
             }
-            KeyCode::Backspace => {
-                self.input.pop();
+            _ => {
+                self.input.handle_event(&Event::Key(key));
             }
-            KeyCode::Char(c) => self.input.push(c),
-            _ => {}
         }
     }
 
@@ -163,8 +142,6 @@ impl App {
             _ => {}
         }
     }
-
-    fn tick(&self) {}
 
     fn quit(&mut self) {
         self.should_quit = true;
