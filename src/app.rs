@@ -1,10 +1,7 @@
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use tui_input::{Input, backend::crossterm::EventHandler};
 
-use crate::{
-    theme::Theme,
-    todo::{Todo, TodoList},
-};
+use crate::{store::Store, theme::Theme, todo::TodoList};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
@@ -29,7 +26,7 @@ impl Default for App {
             should_quit: false,
             theme: Theme::detect(),
             mode: Mode::default(),
-            todos: TodoList::with_items(vec![Todo::new("read docs"), Todo::new("build apps")]),
+            todos: TodoList::with_items(Store::load().todos),
             input: Input::default(),
         }
     }
@@ -58,7 +55,12 @@ impl App {
             KeyCode::Esc | KeyCode::Char('q') => self.quit(),
             KeyCode::Char('j') | KeyCode::Down => self.todos.select_next(),
             KeyCode::Char('k') | KeyCode::Up => self.todos.select_previous(),
-            KeyCode::Char(' ') => self.todos.toggle_selected(),
+            KeyCode::Char('g') | KeyCode::Home => self.todos.select_first(),
+            KeyCode::Char('G') | KeyCode::End => self.todos.select_last(),
+            KeyCode::Char(' ') => {
+                self.todos.toggle_selected();
+                self.persist();
+            }
             KeyCode::Char('a') => {
                 self.input.reset();
                 self.mode = Mode::Add;
@@ -86,6 +88,7 @@ impl App {
                         Mode::Edit => self.todos.rename_selected(title),
                         _ => {}
                     }
+                    self.persist();
                 }
                 self.input.reset();
                 self.mode = Mode::Normal;
@@ -105,10 +108,18 @@ impl App {
             KeyCode::Char('y') => {
                 self.todos.remove_selected();
                 self.mode = Mode::Normal;
+                self.persist();
             }
             KeyCode::Char('n') | KeyCode::Esc => self.mode = Mode::Normal,
             _ => {}
         }
+    }
+
+    fn persist(&self) {
+        Store {
+            todos: self.todos.items().to_vec(),
+        }
+        .save();
     }
 
     fn quit(&mut self) {

@@ -4,6 +4,7 @@ use crossterm::event;
 use crate::app::App;
 
 pub mod app;
+pub mod store;
 pub mod theme;
 pub mod todo;
 pub mod ui;

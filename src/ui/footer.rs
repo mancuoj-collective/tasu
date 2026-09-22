@@ -16,6 +16,7 @@ pub fn hints(app: &App) -> &'static [(&'static str, &'static str)] {
         Mode::Normal => &[
             ("q", "quit"),
             ("j/k", "move"),
+            ("g/G", "top/bottom"),
             ("space", "toggle"),
             ("a", "add"),
             ("e", "edit"),

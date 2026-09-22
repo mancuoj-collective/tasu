@@ -5,7 +5,9 @@ A terminal todo list manager built with [ratatui](https://ratatui.rs).
 ## Status
 
 Early development. The core todo workflow is implemented: add, edit, toggle and
-delete items in an in-memory list. Persistence is not implemented yet.
+delete items. Todos are persisted to `todos.json` in the platform data
+directory (`$XDG_DATA_HOME/tasu` on Linux, `~/Library/Application Support/tasu`
+on macOS) after every change.
 
 ## Installation
 
@@ -23,16 +25,18 @@ cargo run --release
 
 ## Usage
 
-| Key          | Action      |
-| ------------ | ----------- |
-| `q` / `Esc`  | Quit        |
-| `Ctrl` + `c` | Quit        |
-| `j` / `Down` | Move down   |
-| `k` / `Up`   | Move up     |
-| `space`      | Toggle done |
-| `a`          | Add         |
-| `e`          | Edit        |
-| `d`          | Delete      |
+| Key          | Action         |
+| ------------ | -------------- |
+| `q` / `Esc`  | Quit           |
+| `Ctrl` + `c` | Quit           |
+| `j` / `Down` | Move down      |
+| `k` / `Up`   | Move up        |
+| `g` / `Home` | Move to top    |
+| `G` / `End`  | Move to bottom |
+| `space`      | Toggle done    |
+| `a`          | Add            |
+| `e`          | Edit           |
+| `d`          | Delete         |
 
 In the add/edit prompt, `Enter` saves and `Esc` cancels. In the delete prompt,
 `y` confirms and `n` / `Esc` cancels.

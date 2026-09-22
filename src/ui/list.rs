@@ -4,8 +4,8 @@ use ratatui::{
     style::Style,
     text::{Line, Span},
     widgets::{
-        Block, BorderType, List, ListItem, Padding, Paragraph, Scrollbar, ScrollbarOrientation,
-        ScrollbarState,
+        Block, BorderType, HighlightSpacing, List, ListItem, Padding, Paragraph, Scrollbar,
+        ScrollbarOrientation, ScrollbarState,
     },
 };
 
@@ -17,10 +17,6 @@ use crate::{
 
 pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let t = app.theme;
-    if app.todos.is_empty() {
-        empty(f, t, area);
-        return;
-    }
 
     let done = app.todos.done_count();
     let total = app.todos.len();
@@ -38,13 +34,19 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let inner = block.inner(area);
     f.render_widget(block, area);
 
-    let position = app.todos.selected().unwrap_or(0);
+    if app.todos.is_empty() {
+        empty(f, t, area);
+        return;
+    }
+
     let (todos, state) = app.todos.split_mut();
 
     let items: Vec<ListItem> = todos.iter().map(|todo| list_item(todo, t)).collect();
     let list = List::new(items)
         .highlight_symbol("▍ ")
-        .highlight_style(t.highlight());
+        .highlight_style(t.highlight())
+        .highlight_spacing(HighlightSpacing::Always)
+        .scroll_padding(2);
 
     let (list_area, scrollbar_area) = if total > inner.height as usize {
         let [list, bar] =
@@ -57,7 +59,8 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     f.render_stateful_widget(list, list_area, state);
 
     if let Some(bar_area) = scrollbar_area {
-        let mut state = ScrollbarState::new(total).position(position);
+        let mut scrollbar_state =
+            ScrollbarState::new(total).position(state.selected().unwrap_or_default());
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
             .begin_symbol(None)
             .end_symbol(None)
@@ -65,7 +68,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
             .thumb_symbol("┃")
             .track_style(t.border(false))
             .thumb_style(Style::new().fg(t.primary));
-        f.render_stateful_widget(scrollbar, bar_area, &mut state);
+        f.render_stateful_widget(scrollbar, bar_area, &mut scrollbar_state);
     }
 }
 

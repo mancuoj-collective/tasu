@@ -1,7 +1,10 @@
 use ratatui::widgets::ListState;
+use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Todo {
     pub title: String,
+    #[serde(default)]
     pub done: bool,
 }
 
@@ -30,15 +33,22 @@ impl TodoList {
     }
 
     pub fn with_items(items: Vec<Todo>) -> Self {
-        let selected = (!items.is_empty()).then_some(0);
-        Self {
+        let mut list = Self {
             items,
-            state: ListState::default().with_selected(selected),
+            state: ListState::default(),
+        };
+        if !list.is_empty() {
+            list.select_first();
         }
+        list
     }
 
     pub fn len(&self) -> usize {
         self.items.len()
+    }
+
+    pub fn items(&self) -> &[Todo] {
+        &self.items
     }
 
     pub fn is_empty(&self) -> bool {
@@ -50,7 +60,7 @@ impl TodoList {
     }
 
     pub fn selected(&self) -> Option<usize> {
-        self.state.selected()
+        self.state.selected().filter(|&index| index < self.len())
     }
 
     fn selected_mut(&mut self) -> Option<&mut Todo> {
@@ -69,6 +79,14 @@ impl TodoList {
 
     pub fn select_previous(&mut self) {
         self.state.select_previous();
+    }
+
+    pub fn select_first(&mut self) {
+        self.state.select_first();
+    }
+
+    pub fn select_last(&mut self) {
+        self.state.select_last();
     }
 
     pub fn add(&mut self, title: impl Into<String>) {
