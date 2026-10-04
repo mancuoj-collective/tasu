@@ -6,10 +6,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.2.0] - 2026-10-05
+## [0.3.0] - 2026-10-05
 
 A rewrite: the product is now a list that ages itself, with a layered
-architecture and optional git sync.
+architecture and optional git sync. (0.2.0 was tagged but never published, so
+0.3.0 is the first release of the rewrite.)
 
 ### Added
 
@@ -33,11 +34,21 @@ architecture and optional git sync.
 - Replaced the flat, dated-todo model with the three-bucket pipeline. Tasks are
   no longer just a checklist; they sink as they age.
 
+### Fixed
+
+- Every previously-swallowed error is now visible: sync failures (footer dot
+  and the reason in `?` help), a failed final push on exit, a board that could
+  not be written, a malformed config file, and a failed corrupt-file backup.
+- Changing the remote now actually updates `origin`.
+- A rejected push retries with a pull first, so a non-fast-forward recovers.
+- A conflicting pull aborts the rebase instead of leaving the repository stuck.
+- No remote means no git at all; the config file is never committed.
+
 ## [0.1.0] - 2026-09-22
 
 Initial release: a flat terminal todo list with JSON persistence (add, edit,
 toggle, delete) built with ratatui.
 
-[Unreleased]: https://github.com/mancuoj-collective/tasu/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.2.0
+[Unreleased]: https://github.com/mancuoj-collective/tasu/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.3.0
 [0.1.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.1.0
