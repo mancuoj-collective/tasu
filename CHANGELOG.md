@@ -6,6 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-05
+
+### Added
+
+- Prebuilt binaries for macOS (arm64/x86_64), Linux (arm64/x86_64) and Windows
+  (x86_64), plus `curl | sh` and PowerShell installers.
+- A Homebrew tap: `brew install mancuoj/tap/tasu` installs a prebuilt binary, no
+  Rust toolchain required.
+
+### Changed
+
+- Releases are built by [dist](https://opensource.axo.dev/cargo-dist) and
+  published to crates.io from a separate workflow.
+
 ## [0.3.0] - 2026-10-05
 
 Hardening on top of the 0.2.0 rewrite: no silent failures, and sync that
@@ -58,7 +72,8 @@ architecture and optional git sync.
 Initial release: a flat terminal todo list with JSON persistence (add, edit,
 toggle, delete) built with ratatui.
 
-[Unreleased]: https://github.com/mancuoj-collective/tasu/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/mancuoj-collective/tasu/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.4.0
 [0.3.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.3.0
 [0.2.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.2.0
 [0.1.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.1.0
