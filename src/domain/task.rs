@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 /// Where a task currently sits in the aging pipeline.
 ///
 /// `Today` and `Week` are time-scoped and demote automatically; `Later` is the
-/// terminal bucket. See [`crate::domain::settle`].
+/// terminal bucket. See [`mod@crate::domain::settle`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Bucket {
