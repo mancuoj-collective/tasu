@@ -39,8 +39,9 @@ terminal.draw(render(&model))
 
 ```
 src/
-  main.rs            入口：解析 CLI 并分发
+  main.rs            入口：装配 store/sync、跑主循环
   cli.rs             clap 定义
+  config.rs          设置：数据目录 / remote（环境变量 > 配置文件 > 默认）
   command/mod.rs     `add` 等一次性命令
   domain/
     task.rs          Task / TaskState / Bucket
@@ -135,10 +136,10 @@ fn settle(board: &mut Board, now: DateTime<Local>) {
 
 | Effect | 含义 |
 | --- | --- |
-| `Save` | 原子写 `todos.json` |
-| `Sync` | 标记 dirty；由 Tick 的 debounce 决定何时 commit+push |
-| `PullThenLoad` | 启动时先 `git pull`，再加载并 `settle` |
-| `Quit` | 退出（退出前保底 push） |
+| `Save` | 原子写 `todos.json`；同时把同步标记为 dirty，由 Tick 的 debounce 决定何时 commit+push |
+| `Quit` | 退出；退出前同步 flush 一次保底 push |
+
+启动时的 pull 不由 `update` 触发：主循环首帧后投递一次后台 pull，远端带来的文件变化由 **mtime 侦测**经 `Action::Reload` 回流。主循环自身维护 `last_mtime`，写入后立即刷新它，从而把"自己的写"和"外部的写"区分开。
 
 ## 主循环与并发
 
