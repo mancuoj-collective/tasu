@@ -164,6 +164,7 @@ fn help_modal(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path, syn
         ("c", "history"),
         ("tab", "history: done / dropped (or \u{2190}\u{2192})"),
         ("q / esc", "quit"),
+        ("ctrl+c", "quit anywhere"),
     ];
 
     let full = f.area();

@@ -55,7 +55,8 @@ fn run_tui(config: Config) -> Result<()> {
         sync.pull();
     }
 
-    ratatui::run(|terminal| {
+    // Restore the terminal first; the final push must not freeze the UI.
+    let result = ratatui::run(|terminal| {
         while !model.should_quit {
             terminal
                 .draw(|frame| ui::draw(frame, &model, &theme, &board_path, remote.as_deref()))?;
@@ -69,9 +70,10 @@ fn run_tui(config: Config) -> Result<()> {
             let effects = update(&mut model, action, Local::now());
             runtime.apply(&mut model, effects);
         }
-        runtime.flush();
         Ok(())
-    })
+    });
+    runtime.flush();
+    result
 }
 
 /// Owns the store and the sync worker, plus the small amount of state needed to

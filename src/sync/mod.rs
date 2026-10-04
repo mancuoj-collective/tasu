@@ -1,7 +1,13 @@
+use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
+use std::time::{Duration, Instant};
+
+/// Network operations are bounded so a hung connection cannot freeze a caller.
+const NETWORK_TIMEOUT: Duration = Duration::from_secs(20);
+const PUSH_TIMEOUT: Duration = Duration::from_secs(8);
 
 /// Git-backed sync for a single writer.
 ///
@@ -89,11 +95,9 @@ pub fn pull_now(repo: &Path, remote: Option<&str>) -> Result<(), String> {
 /// Check that a remote is reachable and that credentials work, without asking
 /// for input. Empty repositories count as reachable.
 pub fn probe_remote(url: &str) -> Result<(), String> {
-    let output = Command::new("git")
-        .args(["ls-remote", url])
-        .output()
-        .map_err(|err| err.to_string())?;
-    check(output)
+    let mut cmd = Command::new("git");
+    cmd.args(["ls-remote", url]);
+    run_bounded(&mut cmd, NETWORK_TIMEOUT)
 }
 
 fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), String> {
@@ -159,19 +163,17 @@ fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), String> {
 }
 
 fn clone(url: &str, repo: &Path) -> Result<(), String> {
-    let output = Command::new("git")
-        .args(["clone", "--quiet", url])
-        .arg(repo)
-        .output()
-        .map_err(|err| err.to_string())?;
-    check(output)
+    let mut cmd = Command::new("git");
+    cmd.args(["clone", "--quiet", url]).arg(repo);
+    run_bounded(&mut cmd, NETWORK_TIMEOUT)
 }
 
 fn pull(repo: &Path, remote: Option<&str>) -> Result<(), String> {
     if remote.is_none() {
         return Ok(());
     }
-    git(repo, &["pull", "--rebase", "--autostash", "--quiet"])
+    let mut cmd = git_cmd(repo, &["pull", "--rebase", "--autostash", "--quiet"]);
+    run_bounded(&mut cmd, NETWORK_TIMEOUT)
 }
 
 fn commit_push(repo: &Path, remote: Option<&str>) -> Result<(), String> {
@@ -194,19 +196,62 @@ fn commit_push(repo: &Path, remote: Option<&str>) -> Result<(), String> {
         Err(message) => return Err(message),
     }
     if remote.is_some() {
-        git(repo, &["push", "--quiet", "-u", "origin", "HEAD"])?;
+        let mut cmd = git_cmd(repo, &["push", "--quiet", "-u", "origin", "HEAD"]);
+        run_bounded(&mut cmd, PUSH_TIMEOUT)?;
     }
     Ok(())
 }
 
+fn git_cmd(repo: &Path, args: &[&str]) -> Command {
+    let mut cmd = Command::new("git");
+    cmd.arg("-C").arg(repo).args(args);
+    cmd
+}
+
 fn git(repo: &Path, args: &[&str]) -> Result<(), String> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(repo)
-        .args(args)
+    let output = git_cmd(repo, args)
         .output()
         .map_err(|err| err.to_string())?;
     check(output)
+}
+
+/// Run a command with a deadline, killing it if it overruns. Used for the
+/// network-bound git operations so nothing can hang indefinitely.
+fn run_bounded(cmd: &mut Command, timeout: Duration) -> Result<(), String> {
+    let mut child = cmd
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|err| err.to_string())?;
+
+    let deadline = Instant::now() + timeout;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) if status.success() => return Ok(()),
+            Ok(Some(_)) => {
+                let mut message = String::new();
+                if let Some(mut stderr) = child.stderr.take() {
+                    let _ = stderr.read_to_string(&mut message);
+                }
+                let message = message.trim();
+                return Err(if message.is_empty() {
+                    "git command failed".to_string()
+                } else {
+                    message.to_string()
+                });
+            }
+            Ok(None) => {
+                if Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err("git command timed out".to_string());
+                }
+                thread::sleep(Duration::from_millis(50));
+            }
+            Err(err) => return Err(err.to_string()),
+        }
+    }
 }
 
 fn check(output: std::process::Output) -> Result<(), String> {

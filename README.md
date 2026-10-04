@@ -48,6 +48,7 @@ tasu remote <url>    # set the git sync remote (see below)
 | Key | Action |
 | --- | --- |
 | `q` / `Esc` | quit |
+| `Ctrl`+`c` | quit from anywhere |
 | `j` / `k` / `↑` / `↓` | move the cursor |
 | `h` / `l` / `←` / `→` | jump to the previous / next bucket |
 | `g` / `G` | go to the top / bottom |

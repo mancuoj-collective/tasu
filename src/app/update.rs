@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use chrono::{DateTime, Local};
-use crossterm::event::{Event, KeyCode, KeyEvent};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use tui_input::backend::crossterm::EventHandler;
 
 use crate::domain::settle;
@@ -16,6 +16,15 @@ const TOAST_TTL: Duration = Duration::from_secs(3);
 /// to I/O: the caller owns the clock, the disk and the terminal.
 pub fn update(model: &mut Model, action: Action, now: DateTime<Local>) -> Vec<Effect> {
     model.now = now;
+
+    // Ctrl+C is a global escape hatch, in every mode.
+    if let Action::Key(key) = &action
+        && key.modifiers.contains(KeyModifiers::CONTROL)
+        && key.code == KeyCode::Char('c')
+    {
+        return vec![Effect::Quit];
+    }
+
     match action {
         Action::Tick => tick(model, now),
         Action::Reload(board) => {
@@ -345,6 +354,20 @@ mod tests {
         update(&mut model, press(KeyCode::Esc), at(2026, 10, 5));
         assert_eq!(model.ui.mode, Mode::Normal);
         assert_eq!(model.ui.help_scroll.get(), 0);
+    }
+
+    #[test]
+    fn ctrl_c_quits_from_any_mode() {
+        let mut model = model();
+        for mode in [Mode::Normal, Mode::Add, Mode::Completed, Mode::Help] {
+            model.ui.mode = mode;
+            let action = Action::Key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
+            assert_eq!(
+                update(&mut model, action, at(2026, 10, 5)),
+                vec![Effect::Quit],
+                "ctrl+c should quit from {mode:?}"
+            );
+        }
     }
 
     #[test]
