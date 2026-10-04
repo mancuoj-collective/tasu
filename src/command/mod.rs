@@ -31,6 +31,24 @@ pub fn add(config: &Config, words: &[String]) -> Result<()> {
     Ok(())
 }
 
+/// `tasu sync`: force one pull-then-push and report what happened.
+pub fn sync(config: &Config) -> Result<()> {
+    let Some(url) = config.remote.as_deref() else {
+        println!("sync off (local only); set one with: tasu remote <owner/repo>");
+        return Ok(());
+    };
+    println!("syncing {url}");
+
+    if let Err(err) = crate::sync::pull_now(&config.data_dir, Some(url)) {
+        println!("pull failed:\n  {err}");
+    }
+    match crate::sync::commit_now(&config.data_dir, Some(url)) {
+        Ok(()) => println!("push ok"),
+        Err(err) => println!("push failed:\n  {err}"),
+    }
+    Ok(())
+}
+
 /// `tasu config`: show the resolved settings.
 pub fn config(config: &Config) {
     println!("data dir   {}", config.data_dir.display());

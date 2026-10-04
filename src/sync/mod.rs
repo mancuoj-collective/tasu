@@ -104,7 +104,11 @@ fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), String> {
     if repo.join(".git").exists() {
         ensure_gitignore(repo);
         if let Some(url) = remote {
-            let _ = git(repo, &["remote", "add", "origin", url]);
+            // set-url works on an existing origin (unlike `remote add`, which
+            // silently fails and leaves a stale URL).
+            if git(repo, &["remote", "set-url", "origin", url]).is_err() {
+                let _ = git(repo, &["remote", "add", "origin", url]);
+            }
         }
         return Ok(());
     }
@@ -439,5 +443,35 @@ mod tests {
             !files.contains("config.json"),
             "machine-local config must not be synced: {files}"
         );
+    }
+
+    #[test]
+    fn changing_the_remote_updates_origin() {
+        let dir = tempfile::tempdir().unwrap();
+        let first = bare_remote(dir.path());
+        let second = dir.path().join("second.git");
+        assert!(
+            Command::new("git")
+                .args(["init", "--bare", "--quiet"])
+                .arg(&second)
+                .status()
+                .unwrap()
+                .success()
+        );
+        let second = second.to_string_lossy().into_owned();
+
+        let data = dir.path().join("data");
+        std::fs::create_dir_all(&data).unwrap();
+        std::fs::write(data.join("todos.json"), "{\"version\":1,\"tasks\":[]}").unwrap();
+        ensure_repo(&data, Some(&first)).unwrap();
+        ensure_repo(&data, Some(&second)).unwrap();
+
+        let out = Command::new("git")
+            .arg("-C")
+            .arg(&data)
+            .args(["remote", "get-url", "origin"])
+            .output()
+            .unwrap();
+        assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), second);
     }
 }

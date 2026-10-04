@@ -32,6 +32,7 @@ fn main() -> Result<()> {
             Ok(())
         }
         Some(Command::Remote { url, clear }) => command::remote(&config, url.as_deref(), clear),
+        Some(Command::Sync) => command::sync(&config),
         None => run_tui(config),
     }
 }
@@ -83,9 +84,13 @@ struct Runtime {
     last_mtime: Option<SystemTime>,
     dirty: bool,
     last_change: Instant,
-    in_flight: bool,
     retry_at: Option<Instant>,
     sync_status: SyncStatus,
+    /// Number of jobs the worker is still running.
+    in_flight: usize,
+    /// A previous sync failed; pull before the next push to recover a
+    /// rejected (non-fast-forward) push.
+    needs_pull: bool,
 }
 
 impl Runtime {
@@ -105,9 +110,10 @@ impl Runtime {
             last_mtime: None,
             dirty: false,
             last_change: Instant::now(),
-            in_flight: false,
             retry_at: None,
             sync_status,
+            in_flight: 0,
+            needs_pull: false,
         }
     }
 
@@ -115,7 +121,7 @@ impl Runtime {
     fn start_sync(&mut self) {
         if let Some(sync) = &self.sync {
             sync.pull();
-            self.in_flight = true;
+            self.in_flight += 1;
             self.sync_status = SyncStatus::Syncing;
         }
     }
@@ -129,7 +135,10 @@ impl Runtime {
         for effect in effects {
             match effect {
                 Effect::Save => {
-                    let _ = self.store.save(&model.board);
+                    match self.store.save(&model.board) {
+                        Ok(()) => model.ui.error = None,
+                        Err(err) => model.ui.error = Some(format!("could not save: {err}")),
+                    }
                     self.sync_mtime();
                     self.dirty = true;
                     self.last_change = Instant::now();
@@ -147,9 +156,10 @@ impl Runtime {
     fn poll_external(&mut self) -> Option<Action> {
         if let Some(sync) = &self.sync {
             while let Some(result) = sync.poll() {
-                self.in_flight = false;
+                self.in_flight = self.in_flight.saturating_sub(1);
                 if result.is_err() {
                     self.dirty = true;
+                    self.needs_pull = true;
                     self.retry_at = Some(Instant::now() + RETRY);
                     self.sync_status = SyncStatus::Failed;
                 } else {
@@ -157,12 +167,19 @@ impl Runtime {
                 }
             }
             if self.dirty
-                && !self.in_flight
+                && self.in_flight == 0
                 && self.last_change.elapsed() >= DEBOUNCE
                 && self.retry_at.is_none_or(|at| Instant::now() >= at)
             {
+                // After a failure, pull first so a rejected non-fast-forward
+                // push can recover instead of retrying forever.
+                if self.needs_pull {
+                    sync.pull();
+                    self.in_flight += 1;
+                    self.needs_pull = false;
+                }
                 sync.commit_push();
-                self.in_flight = true;
+                self.in_flight += 1;
                 self.dirty = false;
                 self.retry_at = None;
                 self.sync_status = SyncStatus::Syncing;

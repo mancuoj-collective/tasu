@@ -47,6 +47,7 @@ tasu                 # open the app
 tasu add "buy cat food"   # record a task without opening the app
 tasu config          # show the resolved data dir, config file and sync remote
 tasu remote <url>    # set the git sync remote (see below)
+tasu sync            # run one pull-then-push now and print the result
 ```
 
 | Key | Action |
@@ -130,7 +131,11 @@ How it behaves inside the app:
 - shows a blinking dot in the footer while a sync is running (a warning-coloured
   dot if the last one failed);
 - pushes once more on exit;
-- if the network is down or the push fails, stays quiet and retries later.
+- if the network is down or the push fails, stays quiet and retries later
+  (pulling first, so a rejected push can recover).
+
+If syncing seems stuck, `tasu sync` runs it once and prints the real git error,
+and `tasu config` shows which remote is in use.
 
 `tasu add` pulls before it reads and pushes after it writes, so a machine that
 only ever uses the CLI stays in sync too.

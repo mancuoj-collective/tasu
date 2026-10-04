@@ -73,8 +73,10 @@ fn too_small(f: &mut Frame, theme: &Theme) {
 }
 
 fn footer(f: &mut Frame, model: &Model, theme: &Theme, area: ratatui::layout::Rect) {
-    // Right side shows sync progress/failure when relevant, else the toast.
-    let right = status_line(model, theme).or_else(|| toast_line(model, theme));
+    // Right side: a write error wins, then sync progress, then the toast.
+    let right = error_line(model, theme)
+        .or_else(|| status_line(model, theme))
+        .or_else(|| toast_line(model, theme));
     let right_width = right.as_ref().map(line_width).unwrap_or(0);
     let gap = if right_width > 0 { 2 } else { 0 };
 
@@ -115,6 +117,14 @@ fn toast_line(model: &Model, theme: &Theme) -> Option<Line<'static>> {
         .toast
         .as_ref()
         .map(|toast| Line::from(Span::styled(format!(" {} ", toast.text), theme.success())))
+}
+
+/// A write error takes priority over everything else on the right.
+fn error_line(model: &Model, theme: &Theme) -> Option<Line<'static>> {
+    model.ui.error.as_ref().map(|message| {
+        let short: String = message.chars().take(60).collect();
+        Line::from(Span::styled(format!(" \u{26a0} {short} "), theme.warn()))
+    })
 }
 
 fn line_width(line: &Line) -> u16 {

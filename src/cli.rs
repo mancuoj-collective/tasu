@@ -25,4 +25,6 @@ pub enum Command {
         #[arg(long)]
         clear: bool,
     },
+    /// Run one pull-then-push now and report the result.
+    Sync,
 }
