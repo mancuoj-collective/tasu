@@ -16,6 +16,11 @@ pub fn add(config: &Config, words: &[String]) -> Result<()> {
     }
 
     let store = Store::new(config.board_path());
+
+    // Best-effort pull before reading, so a machine that only ever uses the
+    // CLI still converges with the remote.
+    let _ = sync::pull_now(&config.data_dir, config.remote.as_deref());
+
     let now = Local::now();
     let mut board = store.load();
     settle(&mut board, now);

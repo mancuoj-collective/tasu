@@ -185,6 +185,47 @@ fn help_scroll_moves_back_up_from_the_bottom() {
     );
 }
 
+#[test]
+fn cli_add_converges_across_two_machines() {
+    let dir = tempfile::tempdir().unwrap();
+    let remote = dir.path().join("remote.git");
+    assert!(
+        Command::new("git")
+            .args(["init", "--bare", "--quiet"])
+            .arg(&remote)
+            .status()
+            .unwrap()
+            .success()
+    );
+    let url = remote.to_string_lossy().into_owned();
+
+    let machine_a = dir.path().join("a");
+    let machine_b = dir.path().join("b");
+    let config_a = Config {
+        data_dir: machine_a.clone(),
+        remote: Some(url.clone()),
+    };
+    let config_b = Config {
+        data_dir: machine_b.clone(),
+        remote: Some(url.clone()),
+    };
+
+    // A publishes, B clones and adds, then A pulls before adding again.
+    command::add(&config_a, &["from A".to_string()]).unwrap();
+    command::add(&config_b, &["from B".to_string()]).unwrap();
+    command::add(&config_a, &["back on A".to_string()]).unwrap();
+
+    let board = Store::new(machine_a.join("todos.json")).load();
+    let titles: Vec<&str> = board
+        .tasks()
+        .iter()
+        .map(|task| task.title.as_str())
+        .collect();
+    assert!(titles.contains(&"from A"));
+    assert!(titles.contains(&"from B"), "A did not pull B's task");
+    assert!(titles.contains(&"back on A"));
+}
+
 fn clone(remote: &Path, into: &Path) {
     let status = Command::new("git")
         .args(["clone", "--quiet"])

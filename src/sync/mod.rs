@@ -79,6 +79,13 @@ pub fn commit_now(repo: &Path, remote: Option<&str>) -> Result<(), String> {
     commit_push(repo, remote)
 }
 
+/// One synchronous pull, used before a one-shot command reads the board so a
+/// CLI-only machine does not diverge from the remote.
+pub fn pull_now(repo: &Path, remote: Option<&str>) -> Result<(), String> {
+    ensure_repo(repo, remote)?;
+    pull(repo, remote)
+}
+
 fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), String> {
     if repo.join(".git").exists() {
         if let Some(url) = remote {
