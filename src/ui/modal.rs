@@ -24,7 +24,7 @@ pub fn draw(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path) {
     match model.ui.mode {
         Mode::Add | Mode::Edit => input_modal(f, model, theme),
         Mode::Completed => completed_modal(f, model, theme),
-        Mode::Help => help_modal(f, theme, data_path),
+        Mode::Help => help_modal(f, model, theme, data_path),
         Mode::Normal => {}
     }
 }
@@ -147,7 +147,7 @@ fn search_box(f: &mut Frame, model: &Model, theme: &Theme, area: Rect) {
     f.set_cursor_position((x, inner.y));
 }
 
-fn help_modal(f: &mut Frame, theme: &Theme, data_path: &Path) {
+fn help_modal(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path) {
     let (key_style, label_style) = theme.key_hint();
     let entries = [
         ("j / k", "move"),
@@ -165,9 +165,9 @@ fn help_modal(f: &mut Frame, theme: &Theme, data_path: &Path) {
     ];
 
     let full = f.area();
-    let width = full.width.saturating_sub(4).min(48);
-    // Content width inside the border (2) and horizontal padding (2).
-    let inner = width.saturating_sub(4) as usize;
+    let width = full.width.saturating_sub(4).min(50);
+    // Content width inside the border (2) and horizontal padding (2 per side).
+    let inner = width.saturating_sub(6) as usize;
 
     let mut lines: Vec<Line> = Vec::new();
     // Center the logo by its widest row so the letters stay aligned.
@@ -202,13 +202,22 @@ fn help_modal(f: &mut Frame, theme: &Theme, data_path: &Path) {
         label_style,
     )));
 
-    let height = (lines.len() as u16 + 2).min(full.height);
-    let area = centered(full, width, height);
-    f.render_widget(Clear, area);
+    let padding = Padding::new(2, 2, 1, 1);
     let block = Block::bordered()
         .border_style(theme.accent())
-        .padding(Padding::horizontal(1));
-    f.render_widget(Paragraph::new(lines).block(block), area);
+        .padding(padding);
+    // Height fits the content but never exceeds the screen; extra lines scroll.
+    let height = (lines.len() as u16 + 4).min(full.height);
+    let area = centered(full, width, height);
+    f.render_widget(Clear, area);
+
+    let inner_height = height.saturating_sub(4) as usize;
+    let offset = model
+        .ui
+        .help_scroll
+        .min(lines.len().saturating_sub(inner_height));
+    let visible: Vec<Line> = lines.into_iter().skip(offset).collect();
+    f.render_widget(Paragraph::new(visible).block(block), area);
 }
 
 /// Keep the tail of a long path (the meaningful part) and mark the cut.

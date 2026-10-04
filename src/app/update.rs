@@ -28,10 +28,7 @@ pub fn update(model: &mut Model, action: Action, now: DateTime<Local>) -> Vec<Ef
             Mode::Normal => normal(model, key, now),
             Mode::Add | Mode::Edit => editing(model, key, now),
             Mode::Completed => completed(model, key, now),
-            Mode::Help => {
-                model.ui.mode = Mode::Normal;
-                Vec::new()
-            }
+            Mode::Help => help(model, key),
         },
     }
 }
@@ -110,7 +107,10 @@ fn normal(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effect>
             model.ui.done_filter.reset();
             model.ui.history_view = HistoryView::Done;
         }
-        KeyCode::Char('?') => model.ui.mode = Mode::Help,
+        KeyCode::Char('?') => {
+            model.ui.help_scroll = 0;
+            model.ui.mode = Mode::Help;
+        }
         _ => {}
     }
     effects
@@ -223,6 +223,26 @@ fn completed(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effe
     }
 }
 
+/// The help overlay: scroll with the arrows (or j/k), close explicitly. The
+/// modal clamps the offset, so we only bound growth here.
+fn help(model: &mut Model, key: KeyEvent) -> Vec<Effect> {
+    const MAX_SCROLL: usize = 64;
+    match key.code {
+        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('?') => {
+            model.ui.mode = Mode::Normal;
+            model.ui.help_scroll = 0;
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            model.ui.help_scroll = (model.ui.help_scroll + 1).min(MAX_SCROLL);
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            model.ui.help_scroll = model.ui.help_scroll.saturating_sub(1);
+        }
+        _ => {}
+    }
+    Vec::new()
+}
+
 #[cfg(test)]
 mod tests {
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -309,6 +329,25 @@ mod tests {
         assert_eq!(model.selected(), Some(1), "l should jump to Later");
         update(&mut model, press(KeyCode::Char('h')), at(2026, 10, 5));
         assert_eq!(model.selected(), Some(0), "h should jump back to Today");
+    }
+
+    #[test]
+    fn help_scrolls_and_closes_explicitly() {
+        let mut model = model();
+        update(&mut model, press(KeyCode::Char('?')), at(2026, 10, 5));
+        assert_eq!(model.ui.mode, Mode::Help);
+
+        update(&mut model, press(KeyCode::Down), at(2026, 10, 5));
+        update(&mut model, press(KeyCode::Down), at(2026, 10, 5));
+        assert_eq!(model.ui.help_scroll, 2);
+
+        // A random key must not dismiss the help.
+        update(&mut model, press(KeyCode::Char('x')), at(2026, 10, 5));
+        assert_eq!(model.ui.mode, Mode::Help);
+
+        update(&mut model, press(KeyCode::Esc), at(2026, 10, 5));
+        assert_eq!(model.ui.mode, Mode::Normal);
+        assert_eq!(model.ui.help_scroll, 0);
     }
 
     #[test]

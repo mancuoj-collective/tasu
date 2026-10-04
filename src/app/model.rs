@@ -36,6 +36,7 @@ pub struct UiState {
     pub done_cursor: usize,
     pub done_filter: Input,
     pub history_view: HistoryView,
+    pub help_scroll: usize,
 }
 
 impl Default for UiState {
@@ -48,6 +49,7 @@ impl Default for UiState {
             done_cursor: 0,
             done_filter: Input::default(),
             history_view: HistoryView::Done,
+            help_scroll: 0,
         }
     }
 }

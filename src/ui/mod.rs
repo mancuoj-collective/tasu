@@ -117,7 +117,7 @@ fn hint_line(model: &Model, theme: &Theme) -> Line<'static> {
             ("\u{2191}\u{2193}", "move"),
             ("esc", "back"),
         ],
-        Mode::Help => &[("any key", "close")],
+        Mode::Help => &[("\u{2191}\u{2193}", "scroll"), ("esc", "close")],
     };
 
     let mut spans = Vec::new();
