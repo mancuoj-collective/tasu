@@ -137,10 +137,11 @@ fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), String> {
         .map(|mut entries| entries.next().is_none())
         .unwrap_or(true);
     if empty && clone(url, repo).is_ok() {
-        ensure_gitignore(repo);
-        // The clone may have left an unborn HEAD when the remote's symbolic
-        // `HEAD` points at a branch that does not exist; settle onto a real one.
+        // Check out first: an untracked `.gitignore` written before the
+        // checkout would block git from creating the tracked one, leaving the
+        // board unpopulated.
         settle_head(repo, &target_branch(url));
+        ensure_gitignore(repo);
         return Ok(());
     }
 
@@ -826,10 +827,13 @@ mod tests {
         ensure_repo(&data, Some(&remote)).unwrap();
         commit_push(&data, Some(&remote)).unwrap();
 
+        // Read the branch tasu actually pushes rather than the bare repo's
+        // `HEAD`, which may still point at a host-default branch that was never
+        // pushed.
         let tree = Command::new("git")
             .arg("--git-dir")
             .arg(&remote)
-            .args(["ls-tree", "-r", "--name-only", "HEAD"])
+            .args(["ls-tree", "-r", "--name-only", "refs/heads/main"])
             .output()
             .unwrap();
         let files = String::from_utf8_lossy(&tree.stdout);

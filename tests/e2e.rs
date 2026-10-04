@@ -154,6 +154,16 @@ fn cli_add_syncs_to_a_remote_and_back() {
     };
     command::add(&config, &["Nand2Tetris".to_string()]).unwrap();
 
+    // A hosting provider points its default branch at the first pushed branch;
+    // a local bare repo does not, and a raw `git clone` would check out nothing.
+    let status = Command::new("git")
+        .arg("--git-dir")
+        .arg(&remote)
+        .args(["symbolic-ref", "HEAD", "refs/heads/main"])
+        .status()
+        .unwrap();
+    assert!(status.success());
+
     let second = dir.path().join("second");
     clone(&remote, &second);
     let board = Store::new(second.join("todos.json")).load();
