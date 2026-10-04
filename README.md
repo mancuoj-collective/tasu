@@ -26,6 +26,18 @@ TODAY
 
 ## Install
 
+Prebuilt binaries (no Rust needed):
+
+```bash
+brew install mancuoj/tap/tasu    # macOS / Linux
+```
+
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/mancuoj-collective/tasu/releases/latest/download/tasu-installer.sh | sh
+```
+
+With Cargo:
+
 ```bash
 cargo install tasu
 ```
