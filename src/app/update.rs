@@ -10,7 +10,7 @@ use super::action::{Action, Effect};
 use super::model::{HistoryView, Mode, Model};
 
 /// The toast lingers this long before a `Tick` clears it.
-const TOAST_TTL: Duration = Duration::from_secs(5);
+const TOAST_TTL: Duration = Duration::from_secs(3);
 
 /// Turn an action into state changes and a list of effects. Pure with respect
 /// to I/O: the caller owns the clock, the disk and the terminal.

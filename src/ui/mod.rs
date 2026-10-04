@@ -80,10 +80,11 @@ fn hint_line(model: &Model, theme: &Theme) -> Line<'static> {
     let (key_style, label_style) = theme.key_hint();
     let hints: &[(&str, &str)] = match model.ui.mode {
         Mode::Normal => &[
+            ("?", "help"),
             ("q", "quit"),
             ("a", "add"),
+            ("c", "history"),
             ("[/]", "bucket"),
-            ("?", "help"),
         ],
         Mode::Add | Mode::Edit => &[("enter", "save"), ("esc", "cancel")],
         Mode::Completed => &[
