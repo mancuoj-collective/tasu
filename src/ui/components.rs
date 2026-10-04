@@ -21,11 +21,12 @@ pub fn task_line(task: &Task, theme: &Theme, width: u16) -> Line<'static> {
         TaskState::Archived => theme.disabled(),
     };
 
-    // mark + " "
-    let available = (width as usize).saturating_sub(2);
+    // " " + mark + " "
+    let available = (width as usize).saturating_sub(3);
     let title = truncate(&task.title, available);
 
     Line::from(vec![
+        Span::raw(" "),
         Span::styled(format!("{mark} "), mark_style),
         Span::styled(title, title_style),
     ])
