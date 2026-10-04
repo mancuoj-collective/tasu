@@ -59,7 +59,7 @@ fn input_modal(f: &mut Frame, model: &Model, theme: &Theme) {
 fn completed_modal(f: &mut Frame, model: &Model, theme: &Theme) {
     let items = model.history_items();
     // A fixed default height so switching tabs never resizes the box.
-    let height = 18u16.min(f.area().height);
+    let height = 18u16.min(f.area().height.saturating_sub(2));
     let area = centered(f.area(), 60, height);
     f.render_widget(Clear, area);
 
@@ -206,8 +206,9 @@ fn help_modal(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path) {
     let block = Block::bordered()
         .border_style(theme.accent())
         .padding(padding);
-    // Height fits the content but never exceeds the screen; extra lines scroll.
-    let height = (lines.len() as u16 + 4).min(full.height);
+    // Height fits the content but never exceeds the screen (one blank row to
+    // spare top and bottom); extra lines scroll.
+    let height = (lines.len() as u16 + 4).min(full.height.saturating_sub(2));
     let area = centered(full, width, height);
     f.render_widget(Clear, area);
 
@@ -235,7 +236,9 @@ fn truncate_start(text: &str, max: usize) -> String {
 
 fn centered(area: Rect, width: u16, height: u16) -> Rect {
     let width = width.min(area.width.saturating_sub(4));
-    let height = height.min(area.height);
+    // Keep one blank row above and below so a tall modal never touches the
+    // screen edges.
+    let height = height.min(area.height.saturating_sub(2));
     let [area] = Layout::horizontal([Constraint::Length(width)])
         .flex(Flex::Center)
         .areas(area);
