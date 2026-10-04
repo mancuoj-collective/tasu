@@ -41,6 +41,8 @@ Requires Rust 1.88 or newer.
 ```bash
 tasu                 # open the app
 tasu add "buy cat food"   # record a task without opening the app
+tasu config          # show the resolved data dir, config file and sync remote
+tasu remote <url>    # set the git sync remote (see below)
 ```
 
 | Key | Action |
@@ -95,9 +97,13 @@ self-hosted server all work the same. Create an **empty private** repository and
 point tasu at it:
 
 ```bash
-export TASU_REMOTE=git@github.com:you/tasu-data.git
-tasu
+tasu remote git@github.com:you/tasu-data.git   # writes it to the config file
+tasu                                            # next start clones/syncs
 ```
+
+`tasu remote` with no argument prints the current remote, and
+`tasu remote --clear` turns syncing off. The data directory and sync remote are
+also shown at the bottom of the in-app help (`?`).
 
 On the first run tasu initializes the data directory as a git repository and
 pushes. On another machine, an empty data directory is **cloned** from the

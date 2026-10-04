@@ -27,12 +27,18 @@ fn main() -> Result<()> {
     let config = Config::load();
     match cli.command {
         Some(Command::Add { title }) => command::add(&config, &title),
+        Some(Command::Config) => {
+            command::config(&config);
+            Ok(())
+        }
+        Some(Command::Remote { url, clear }) => command::remote(&config, url.as_deref(), clear),
         None => run_tui(config),
     }
 }
 
 fn run_tui(config: Config) -> Result<()> {
     let board_path = config.board_path();
+    let remote = config.remote.clone();
     let mut runtime = Runtime::new(&config);
 
     let now = Local::now();
@@ -51,7 +57,8 @@ fn run_tui(config: Config) -> Result<()> {
 
     ratatui::run(|terminal| {
         while !model.should_quit {
-            terminal.draw(|frame| ui::draw(frame, &model, &theme, &board_path))?;
+            terminal
+                .draw(|frame| ui::draw(frame, &model, &theme, &board_path, remote.as_deref()))?;
 
             if let Some(action) = runtime.poll_external() {
                 let effects = update(&mut model, action, Local::now());

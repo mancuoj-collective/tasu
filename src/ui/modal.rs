@@ -22,11 +22,11 @@ const HELP_ART: [&str; 3] = [
     " \u{2580}  \u{2580} \u{2580} \u{2584}\u{2584}\u{2580} \u{2580}\u{2584}\u{2580}",
 ];
 
-pub fn draw(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path) {
+pub fn draw(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path, sync: Option<&str>) {
     match model.ui.mode {
         Mode::Add | Mode::Edit => input_modal(f, model, theme),
         Mode::Completed => completed_modal(f, model, theme),
-        Mode::Help => help_modal(f, model, theme, data_path),
+        Mode::Help => help_modal(f, model, theme, data_path, sync),
         Mode::Normal => {}
     }
 }
@@ -149,7 +149,7 @@ fn search_box(f: &mut Frame, model: &Model, theme: &Theme, area: Rect) {
     f.set_cursor_position((x, inner.y));
 }
 
-fn help_modal(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path) {
+fn help_modal(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path, sync: Option<&str>) {
     let (key_style, label_style) = theme.key_hint();
     let entries = [
         ("j / k", "move"),
@@ -196,15 +196,20 @@ fn help_modal(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path) {
     }
 
     lines.push(Line::default());
-    let label = "data";
-    let available = inner.saturating_sub(label.chars().count() + 2);
-    let path = truncate_middle(&display_path(data_path), available);
-    let data = format!("{label}  {path}");
-    let data_pad = inner.saturating_sub(data.width()) / 2;
-    lines.push(Line::from(Span::styled(
-        format!("{}{data}", " ".repeat(data_pad)),
-        label_style,
-    )));
+    let info_line = |text: &str| -> Line<'static> {
+        let text = truncate_middle(text, inner);
+        let pad = inner.saturating_sub(text.width()) / 2;
+        Line::from(Span::styled(
+            format!("{}{text}", " ".repeat(pad)),
+            label_style,
+        ))
+    };
+    lines.push(info_line(&format!("data  {}", display_path(data_path))));
+    let sync = match sync {
+        Some(url) => format!("sync  {url}"),
+        None => "sync  off \u{b7} tasu remote <url>".to_string(),
+    };
+    lines.push(info_line(&sync));
 
     let padding = Padding::new(2, 2, 1, 1);
     let block = Block::bordered()

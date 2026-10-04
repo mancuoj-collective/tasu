@@ -33,7 +33,7 @@ pub(crate) fn scroll_offset(cursor: usize, total: usize, height: usize) -> usize
         .min(total.saturating_sub(height))
 }
 
-pub fn draw(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path) {
+pub fn draw(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path, sync: Option<&str>) {
     f.render_widget(Block::new().style(theme.root()), f.area());
 
     if f.area().width < MIN_WIDTH || f.area().height < MIN_HEIGHT {
@@ -51,7 +51,7 @@ pub fn draw(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path) {
         sections::draw(f, model, list, theme);
     }
     footer(f, model, theme, footer_area);
-    modal::draw(f, model, theme, data_path);
+    modal::draw(f, model, theme, data_path, sync);
 }
 
 fn too_small(f: &mut Frame, theme: &Theme) {

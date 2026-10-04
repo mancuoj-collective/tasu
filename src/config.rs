@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// Zero-config by default: without a `remote`, tasu is purely local and never
 /// invokes git. Settings come from the environment first, then a config file.
@@ -31,11 +31,25 @@ impl Config {
     pub fn board_path(&self) -> PathBuf {
         self.data_dir.join("todos.json")
     }
+
+    /// Path of the config file, if the platform has a config directory.
+    pub fn config_file() -> Option<PathBuf> {
+        dirs::config_dir().map(|dir| dir.join("tasu").join("config.json"))
+    }
+
+    /// Set (or clear) the sync remote in the config file.
+    pub fn set_remote(remote: Option<&str>) -> std::io::Result<PathBuf> {
+        let mut file = FileConfig::read();
+        file.remote = remote.map(str::to_string);
+        file.write()
+    }
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 struct FileConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     data_dir: Option<PathBuf>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     remote: Option<String>,
 }
 
@@ -43,13 +57,24 @@ impl FileConfig {
     /// Config lives beside the code's user config, not in the (synced) data
     /// directory, so it never travels between machines.
     fn read() -> Self {
-        let Some(path) = dirs::config_dir().map(|dir| dir.join("tasu").join("config.json")) else {
+        let Some(path) = Config::config_file() else {
             return Self::default();
         };
         let Ok(text) = std::fs::read_to_string(path) else {
             return Self::default();
         };
         serde_json::from_str(&text).unwrap_or_default()
+    }
+
+    fn write(&self) -> std::io::Result<PathBuf> {
+        let path = Config::config_file()
+            .ok_or_else(|| std::io::Error::other("no config directory on this platform"))?;
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let json = serde_json::to_string_pretty(self)?;
+        std::fs::write(&path, json)?;
+        Ok(path)
     }
 }
 

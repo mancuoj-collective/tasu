@@ -126,6 +126,7 @@ fn print(model: &Model, width: u16, height: u16) {
                 model,
                 &ui::theme::Theme::DARK,
                 std::path::Path::new("/Users/mancuoj/Library/Application Support/tasu/todos.json"),
+                Some("git@github.com:mancuoj/tasu-data.git"),
             )
         })
         .unwrap();

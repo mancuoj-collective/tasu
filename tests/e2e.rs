@@ -44,6 +44,7 @@ fn render(model: &Model, width: u16, height: u16) -> String {
                 model,
                 &ui::theme::Theme::DARK,
                 Path::new("/tmp/tasu/todos.json"),
+                None,
             )
         })
         .unwrap();

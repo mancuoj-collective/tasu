@@ -30,3 +30,31 @@ pub fn add(config: &Config, words: &[String]) -> Result<()> {
     let _ = sync::commit_now(&config.data_dir, config.remote.as_deref());
     Ok(())
 }
+
+/// `tasu config`: show the resolved settings.
+pub fn config(config: &Config) {
+    println!("data dir   {}", config.data_dir.display());
+    println!("board      {}", config.board_path().display());
+    if let Some(path) = Config::config_file() {
+        println!("config     {}", path.display());
+    }
+    match &config.remote {
+        Some(url) => println!("sync       {url}"),
+        None => println!("sync       off (local only)"),
+    }
+}
+
+/// `tasu remote`: show, set or clear the sync remote.
+pub fn remote(config: &Config, url: Option<&str>, clear: bool) -> Result<()> {
+    if clear {
+        Config::set_remote(None)?;
+        println!("sync disabled");
+    } else if let Some(url) = url {
+        let path = Config::set_remote(Some(url))?;
+        println!("sync remote set to {url}");
+        println!("config written to {}", path.display());
+    } else {
+        println!("{}", config.remote.as_deref().unwrap_or("none"));
+    }
+    Ok(())
+}
