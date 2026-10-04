@@ -24,8 +24,9 @@ architecture and optional git sync.
 - Optional git sync against any remote (private repo, Gist, self-hosted, or a
   local path): pull on start, debounced push after changes, best-effort push on
   exit. Offline and unconfigured are both fine.
-- `tasu add` for capturing without opening the app, plus `tasu config` and
-  `tasu remote` (GitHub `owner/repo` shorthand, and a reachability check).
+- `tasu add` for capturing without opening the app, plus `tasu config`,
+  `tasu remote` (GitHub `owner/repo` shorthand, and a reachability check) and
+  `tasu sync` for running one round and reporting the real error.
 
 ### Changed
 
