@@ -53,18 +53,40 @@ fn footer(f: &mut Frame, model: &Model, theme: &Theme, area: ratatui::layout::Re
         .as_ref()
         .map(|toast| toast.text.clone())
         .unwrap_or_default();
-    let toast_width = toast.chars().count() as u16 + 2;
-    let [left, right] = Layout::horizontal([
+    let toast_width = if toast.is_empty() {
+        0
+    } else {
+        toast.chars().count() as u16 + 2
+    };
+    let show_help = model.ui.mode == Mode::Normal;
+    let help_width = if show_help { 8 } else { 0 };
+
+    let [left, toast_area, help_area] = Layout::horizontal([
         Constraint::Min(1),
         Constraint::Length(toast_width.min(area.width)),
+        Constraint::Length(help_width.min(area.width)),
     ])
     .areas(area);
 
+    // Left hints may be truncated on narrow terminals; `? help` stays pinned.
     f.render_widget(Paragraph::new(hint_line(model, theme)), left);
+
     if !toast.is_empty() {
         f.render_widget(
             Paragraph::new(Span::styled(format!(" {toast} "), theme.success())),
-            right,
+            toast_area,
+        );
+    }
+
+    if show_help {
+        let (key_style, label_style) = theme.key_hint();
+        f.render_widget(
+            Paragraph::new(Line::from(vec![
+                Span::styled("?", key_style),
+                Span::raw(" "),
+                Span::styled("help", label_style),
+            ])),
+            help_area,
         );
     }
 }
@@ -80,7 +102,6 @@ fn hint_line(model: &Model, theme: &Theme) -> Line<'static> {
             ("[/]", "bucket"),
             ("x", "archive"),
             ("c", "history"),
-            ("?", "help"),
         ],
         Mode::Add | Mode::Edit => &[("enter", "save"), ("esc", "cancel")],
         Mode::Completed => &[("type", "search"), ("enter", "restore"), ("esc", "back")],
