@@ -11,10 +11,15 @@ use crate::app::{Mode, Model};
 
 use super::{components, scroll_offset, theme::Theme};
 
-/// Compact block-letter `tasu`, shown at the top of help.
-const HELP_ART: [&str; 2] = [
-    "\u{2580}\u{2588}\u{2580}  \u{2584}\u{2580}\u{2588}  \u{2584}\u{2580}  \u{2588} \u{2588}",
-    " \u{2588}   \u{2588}\u{2580}\u{2588}  \u{2580}\u{2584}  \u{2588}\u{2584}\u{2588}",
+/// Block-letter `tasu` (ANSI Shadow), shown at the top of help. The `s` glyph
+/// is unambiguous here, unlike the compact half-block version it replaces.
+const HELP_ART: [&str; 6] = [
+    " ████████╗ █████╗ ███████╗██╗   ██╗",
+    " ╚══██╔══╝██╔══██╗██╔════╝██║   ██║",
+    "    ██║   ███████║███████╗██║   ██║",
+    "    ██║   ██╔══██║╚════██║██║   ██║",
+    "    ██║   ██║  ██║███████║╚██████╔╝",
+    "    ╚═╝   ╚═╝  ╚═╝╚══════╝ ╚═════╝ ",
 ];
 
 pub fn draw(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path) {
@@ -123,33 +128,43 @@ fn help_modal(f: &mut Frame, theme: &Theme, data_path: &Path) {
         ("q / esc", "quit"),
     ];
 
-    let mut lines: Vec<Line> = HELP_ART
-        .iter()
-        .map(|row| Line::from(Span::styled((*row).to_string(), theme.accent())))
-        .collect();
+    let full = f.area();
+    let width = full.width.saturating_sub(4).min(48);
+    // Content width inside the border (2) and horizontal padding (2).
+    let inner = width.saturating_sub(4) as usize;
+
+    let mut lines: Vec<Line> = Vec::new();
+    for row in HELP_ART {
+        let pad = inner.saturating_sub(row.chars().count()) / 2;
+        lines.push(Line::from(Span::styled(
+            format!("{}{row}", " ".repeat(pad)),
+            theme.accent(),
+        )));
+    }
     lines.push(Line::default());
     lines.push(Line::from(vec![
         Span::styled("data  ", key_style),
         Span::styled(
-            truncate_start(&data_path.display().to_string(), 40),
+            truncate_start(&data_path.display().to_string(), inner.saturating_sub(6)),
             label_style,
         ),
     ]));
     lines.push(Line::default());
+
+    let label_width = inner.saturating_sub(10);
     for (key, label) in entries {
         lines.push(Line::from(vec![
-            Span::styled(format!("{key:<8}"), key_style),
-            Span::styled(label.to_string(), label_style),
+            Span::styled(format!("{key:<10}"), key_style),
+            Span::styled(format!("{label:>label_width$}"), label_style),
         ]));
     }
 
-    let height = (lines.len() as u16 + 2).min(f.area().height);
-    let area = centered(f.area(), 48, height);
+    let height = (lines.len() as u16 + 2).min(full.height);
+    let area = centered(full, width, height);
     f.render_widget(Clear, area);
     let block = Block::bordered()
         .border_style(theme.accent())
-        .padding(Padding::horizontal(1))
-        .title(Span::styled(" help ", theme.accent()));
+        .padding(Padding::horizontal(1));
     f.render_widget(Paragraph::new(lines).block(block), area);
 }
 
