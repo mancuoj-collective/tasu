@@ -144,7 +144,7 @@ fn editing(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effect
                 Mode::Add => {
                     model.board.add(title, now);
                     model.ui.cursor = 0;
-                    model.set_toast("已存入 今天");
+                    model.set_toast("saved to today");
                 }
                 Mode::Edit => {
                     if let Some(index) = model.selected() {

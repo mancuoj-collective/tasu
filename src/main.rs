@@ -32,6 +32,7 @@ fn main() -> Result<()> {
 }
 
 fn run_tui(config: Config) -> Result<()> {
+    let board_path = config.board_path();
     let mut runtime = Runtime::new(&config);
 
     let now = Local::now();
@@ -50,7 +51,7 @@ fn run_tui(config: Config) -> Result<()> {
 
     ratatui::run(|terminal| {
         while !model.should_quit {
-            terminal.draw(|frame| ui::draw(frame, &model, &theme))?;
+            terminal.draw(|frame| ui::draw(frame, &model, &theme, &board_path))?;
 
             if let Some(action) = runtime.poll_external() {
                 let effects = update(&mut model, action, Local::now());

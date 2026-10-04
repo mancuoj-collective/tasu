@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use ratatui::{
     Frame,
     layout::{Constraint, Flex, Layout, Rect},
@@ -9,11 +11,17 @@ use crate::app::{Mode, Model};
 
 use super::{components, scroll_offset, theme::Theme};
 
-pub fn draw(f: &mut Frame, model: &Model, theme: &Theme) {
+/// Compact block-letter `tasu`, shown at the top of help.
+const HELP_ART: [&str; 2] = [
+    "\u{2580}\u{2588}\u{2580}  \u{2584}\u{2580}\u{2588}  \u{2584}\u{2580}  \u{2588} \u{2588}",
+    " \u{2588}   \u{2588}\u{2580}\u{2588}  \u{2580}\u{2584}  \u{2588}\u{2584}\u{2588}",
+];
+
+pub fn draw(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path) {
     match model.ui.mode {
         Mode::Add | Mode::Edit => input_modal(f, model, theme),
         Mode::Completed => completed_modal(f, model, theme),
-        Mode::Help => help_modal(f, theme),
+        Mode::Help => help_modal(f, theme, data_path),
         Mode::Normal => {}
     }
 }
@@ -23,9 +31,9 @@ fn input_modal(f: &mut Frame, model: &Model, theme: &Theme) {
     f.render_widget(Clear, area);
 
     let title = if model.ui.mode == Mode::Add {
-        " 记录 "
+        " add "
     } else {
-        " 编辑 "
+        " edit "
     };
     let block = Block::bordered()
         .border_style(theme.accent())
@@ -54,7 +62,7 @@ fn completed_modal(f: &mut Frame, model: &Model, theme: &Theme) {
     let block = Block::bordered()
         .border_style(theme.accent())
         .padding(Padding::horizontal(1))
-        .title(Span::styled(" 已完成 ", theme.accent()));
+        .title(Span::styled(" completed ", theme.accent()));
     let inner = block.inner(area);
     f.render_widget(block, area);
 
@@ -63,7 +71,7 @@ fn completed_modal(f: &mut Frame, model: &Model, theme: &Theme) {
 
     if model.ui.done_filter.is_empty() {
         f.render_widget(
-            Paragraph::new("输入以搜索").style(theme.disabled()),
+            Paragraph::new("type to search").style(theme.disabled()),
             filter_area,
         );
     } else {
@@ -74,10 +82,7 @@ fn completed_modal(f: &mut Frame, model: &Model, theme: &Theme) {
     }
 
     if done.is_empty() {
-        f.render_widget(
-            Paragraph::new("没有匹配的完成项").style(theme.muted()),
-            list_area,
-        );
+        f.render_widget(Paragraph::new("no matches").style(theme.muted()), list_area);
         return;
     }
 
@@ -102,40 +107,63 @@ fn completed_modal(f: &mut Frame, model: &Model, theme: &Theme) {
     f.render_widget(Paragraph::new(lines), list_area);
 }
 
-fn help_modal(f: &mut Frame, theme: &Theme) {
-    let area = centered(f.area(), 44, 14);
-    f.render_widget(Clear, area);
+fn help_modal(f: &mut Frame, theme: &Theme, data_path: &Path) {
+    let (key_style, label_style) = theme.key_hint();
+    let entries = [
+        ("j / k", "move"),
+        ("g / G", "top / bottom"),
+        ("space", "done"),
+        ("a", "add (to today)"),
+        ("e", "edit title"),
+        ("t", "move to today"),
+        ("[ / ]", "bucket up / down"),
+        ("x", "archive"),
+        ("l", "expand / fold later"),
+        ("c", "completed"),
+        ("q / esc", "quit"),
+    ];
 
+    let mut lines: Vec<Line> = HELP_ART
+        .iter()
+        .map(|row| Line::from(Span::styled((*row).to_string(), theme.accent())))
+        .collect();
+    lines.push(Line::default());
+    lines.push(Line::from(vec![
+        Span::styled("data  ", key_style),
+        Span::styled(
+            truncate_start(&data_path.display().to_string(), 40),
+            label_style,
+        ),
+    ]));
+    lines.push(Line::default());
+    for (key, label) in entries {
+        lines.push(Line::from(vec![
+            Span::styled(format!("{key:<8}"), key_style),
+            Span::styled(label.to_string(), label_style),
+        ]));
+    }
+
+    let height = (lines.len() as u16 + 2).min(f.area().height);
+    let area = centered(f.area(), 48, height);
+    f.render_widget(Clear, area);
     let block = Block::bordered()
         .border_style(theme.accent())
         .padding(Padding::horizontal(1))
-        .title(Span::styled(" 帮助 ", theme.accent()));
-
-    let (key_style, label_style) = theme.key_hint();
-    let entries = [
-        ("j / k", "移动光标"),
-        ("g / G", "跳到顶 / 底"),
-        ("space", "完成"),
-        ("a", "记录（进今天）"),
-        ("e", "编辑标题"),
-        ("t", "提到今天"),
-        ("[ / ]", "升 / 降一级"),
-        ("x", "归档"),
-        ("l", "展开 / 折叠 以后"),
-        ("c", "已完成"),
-        ("q / esc", "退出"),
-    ];
-    let lines: Vec<Line> = entries
-        .iter()
-        .map(|(key, label)| {
-            Line::from(vec![
-                Span::styled(format!("{key:<8}"), key_style),
-                Span::styled((*label).to_string(), label_style),
-            ])
-        })
-        .collect();
-
+        .title(Span::styled(" help ", theme.accent()));
     f.render_widget(Paragraph::new(lines).block(block), area);
+}
+
+/// Keep the tail of a long path (the meaningful part) and mark the cut.
+fn truncate_start(text: &str, max: usize) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() <= max {
+        return text.to_string();
+    }
+    if max <= 1 {
+        return "\u{2026}".to_string();
+    }
+    let tail: String = chars[chars.len() - (max - 1)..].iter().collect();
+    format!("\u{2026}{tail}")
 }
 
 fn centered(area: Rect, width: u16, height: u16) -> Rect {

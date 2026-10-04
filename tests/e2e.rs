@@ -38,7 +38,14 @@ fn type_str(model: &mut Model, text: &str, now: DateTime<Local>) {
 fn render(model: &Model, width: u16, height: u16) -> String {
     let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
     terminal
-        .draw(|frame| ui::draw(frame, model, &ui::theme::Theme::DARK))
+        .draw(|frame| {
+            ui::draw(
+                frame,
+                model,
+                &ui::theme::Theme::DARK,
+                Path::new("/tmp/tasu/todos.json"),
+            )
+        })
         .unwrap();
 
     let buffer = terminal.backend().buffer();

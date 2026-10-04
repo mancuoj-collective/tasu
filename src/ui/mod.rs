@@ -4,6 +4,8 @@ pub mod modal;
 pub mod sections;
 pub mod theme;
 
+use std::path::Path;
+
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Margin},
@@ -28,21 +30,12 @@ pub(crate) fn scroll_offset(cursor: usize, total: usize, height: usize) -> usize
         .min(total.saturating_sub(height))
 }
 
-pub fn draw(f: &mut Frame, model: &Model, theme: &Theme) {
+pub fn draw(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path) {
     f.render_widget(Block::new().style(theme.root()), f.area());
 
     let body = f.area().inner(Margin::new(1, 0));
-    let [header, list, footer_area] = Layout::vertical([
-        Constraint::Length(1),
-        Constraint::Min(1),
-        Constraint::Length(1),
-    ])
-    .areas(body);
-
-    f.render_widget(
-        Paragraph::new(Line::from(Span::styled("tasu", theme.accent()))),
-        header,
-    );
+    let [list, footer_area] =
+        Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).areas(body);
 
     if list.width >= KANBAN_MIN_WIDTH {
         kanban::draw(f, model, list, theme);
@@ -50,7 +43,7 @@ pub fn draw(f: &mut Frame, model: &Model, theme: &Theme) {
         sections::draw(f, model, list, theme);
     }
     footer(f, model, theme, footer_area);
-    modal::draw(f, model, theme);
+    modal::draw(f, model, theme, data_path);
 }
 
 fn footer(f: &mut Frame, model: &Model, theme: &Theme, area: ratatui::layout::Rect) {
@@ -80,20 +73,18 @@ fn hint_line(model: &Model, theme: &Theme) -> Line<'static> {
     let (key_style, label_style) = theme.key_hint();
     let hints: &[(&str, &str)] = match model.ui.mode {
         Mode::Normal => &[
-            ("q", "退出"),
-            ("j/k", "移动"),
-            ("space", "完成"),
-            ("a", "记录"),
-            ("t", "今天"),
-            ("[/]", "升降"),
-            ("x", "归档"),
-            ("l", "折叠"),
-            ("c", "已完成"),
-            ("?", "帮助"),
+            ("q", "quit"),
+            ("j/k", "move"),
+            ("space", "done"),
+            ("a", "add"),
+            ("[/]", "bucket"),
+            ("x", "archive"),
+            ("c", "history"),
+            ("?", "help"),
         ],
-        Mode::Add | Mode::Edit => &[("enter", "保存"), ("esc", "取消")],
-        Mode::Completed => &[("输入", "搜索"), ("enter", "撤销"), ("esc", "返回")],
-        Mode::Help => &[("任意键", "关闭")],
+        Mode::Add | Mode::Edit => &[("enter", "save"), ("esc", "cancel")],
+        Mode::Completed => &[("type", "search"), ("enter", "restore"), ("esc", "back")],
+        Mode::Help => &[("any key", "close")],
     };
 
     let mut spans = Vec::new();

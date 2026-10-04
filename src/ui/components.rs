@@ -1,12 +1,14 @@
 use chrono::{DateTime, Datelike, Local, NaiveDate};
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
+use unicode_width::UnicodeWidthStr;
 
 use crate::domain::{Bucket, Task, TaskState};
 
 use super::theme::Theme;
 
-/// A task row: marker, title, and — for stale open tasks — how long it has been
-/// carried. The badge turns to the warning color at three days.
+/// A task row: indent, marker, title, and — for stale open tasks — how long it
+/// has been carried. The badge turns to the warning color at three days.
 pub fn task_line(task: &Task, theme: &Theme, now: DateTime<Local>) -> Line<'static> {
     let (mark, mark_style) = match task.state {
         TaskState::Done => ("\u{2713}", theme.success()),
@@ -19,6 +21,7 @@ pub fn task_line(task: &Task, theme: &Theme, now: DateTime<Local>) -> Line<'stat
     };
 
     let mut spans = vec![
+        Span::raw("  "),
         Span::styled(format!("{mark} "), mark_style),
         Span::styled(task.title.clone(), title_style),
     ];
@@ -31,39 +34,64 @@ pub fn task_line(task: &Task, theme: &Theme, now: DateTime<Local>) -> Line<'stat
             } else {
                 theme.muted()
             };
-            spans.push(Span::styled(format!("  \u{b7} 顺延 {days} 天"), style));
+            spans.push(Span::styled(format!("  \u{b7} {days}d"), style));
         }
     }
 
     Line::from(spans)
 }
 
-pub fn header_line(bucket: Bucket, theme: &Theme, now: DateTime<Local>) -> Line<'static> {
-    match bucket {
-        Bucket::Today => Line::from(Span::styled("TODAY", theme.today())),
-        Bucket::Later => Line::from(Span::styled("LATER", theme.accent())),
+/// Two lines that open a section: a label with its count, then a full-width
+/// rule. The rule is what makes the buckets legible at a glance.
+pub fn header_lines(
+    bucket: Bucket,
+    theme: &Theme,
+    now: DateTime<Local>,
+    width: u16,
+    count: usize,
+) -> [Line<'static>; 2] {
+    let count_span = Span::styled(format!("  \u{b7} {count}"), theme.muted());
+    let title = match bucket {
+        Bucket::Today => Line::from(vec![Span::styled("TODAY", theme.today()), count_span]),
+        Bucket::Later => Line::from(vec![Span::styled("LATER", theme.accent()), count_span]),
         Bucket::Week => Line::from(vec![
-            Span::styled("WEEK  ", theme.accent()),
-            Span::styled(week_meta(now), theme.muted()),
+            Span::styled("WEEK", theme.accent()),
+            Span::styled(format!("  {}", week_meta(now)), theme.muted()),
+            count_span,
         ]),
-    }
+    };
+    let rule = Line::from(Span::styled(
+        "\u{2500}".repeat(width as usize),
+        theme.disabled(),
+    ));
+    [title, rule]
 }
 
-/// The collapsed tail of `Later`: `⋯ 更早的 12 条（l 展开）`.
+/// The collapsed tail of `Later`: `⋯ 12 more (l to expand)`.
 pub fn fold_line(hidden: usize, theme: &Theme) -> Line<'static> {
     Line::from(Span::styled(
-        format!("\u{22ef} 更早的 {hidden} 条（l 展开）"),
+        format!("  \u{22ef} {hidden} more (l to expand)"),
         theme.muted(),
     ))
 }
 
-/// `40 · 今年还剩 13 周`.
+/// Extend a line to the full width with styled blanks, so a highlighted row
+/// reads as one continuous bar instead of stopping at the last character.
+pub fn pad_line(mut line: Line<'static>, width: u16, style: Style) -> Line<'static> {
+    let used: usize = line.spans.iter().map(|span| span.content.width()).sum();
+    let padding = (width as usize).saturating_sub(used);
+    if padding > 0 {
+        line.spans.push(Span::styled(" ".repeat(padding), style));
+    }
+    line
+}
+
+/// `40/53`: ISO week number out of the total weeks in the year.
 fn week_meta(now: DateTime<Local>) -> String {
     let date = now.date_naive();
-    let current = date.iso_week();
+    let current = date.iso_week().week();
     let last = NaiveDate::from_ymd_opt(date.year(), 12, 28)
-        .map(|d| d.iso_week().week())
-        .unwrap_or(current.week());
-    let remaining = last.saturating_sub(current.week());
-    format!("{} · 今年还剩 {} 周", current.week(), remaining)
+        .map(|day| day.iso_week().week())
+        .unwrap_or(current);
+    format!("{current}/{last}")
 }

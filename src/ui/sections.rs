@@ -5,44 +5,50 @@ use ratatui::{
     widgets::Paragraph,
 };
 
-use crate::app::{Model, Row};
+use crate::app::Model;
 
 use super::{components, scroll_offset, theme::Theme};
 
-/// Vertical three-section layout: `TODAY` / `WEEK` / `LATER`, separated by a
-/// blank line, scrolled so the cursor stays visible. Structure comes from
-/// headers and spacing, not boxes.
+/// Vertical three-section layout: `TODAY` / `WEEK` / `LATER`. Each section is a
+/// labeled rule line followed by its tasks, separated by a blank line, and
+/// scrolled so the cursor stays visible.
 pub fn draw(f: &mut Frame, model: &Model, area: Rect, theme: &Theme) {
     if model.selectable_len() == 0 {
-        let hint = Line::from(Span::styled("按 a 记一件事", theme.muted()));
+        let hint = Line::from(Span::styled("press a to add something", theme.muted()));
         f.render_widget(Paragraph::new(hint).centered(), center_row(area));
         return;
     }
 
-    let rows = model.rows();
-    let mut lines: Vec<Line> = Vec::with_capacity(rows.len());
+    let mut lines: Vec<Line> = Vec::new();
     let mut selectable = 0usize;
     let mut selected_line = 0usize;
 
-    for row in &rows {
-        if matches!(row, Row::Header(_)) && !lines.is_empty() {
+    for (position, bucket) in Model::BUCKETS.iter().enumerate() {
+        let (indices, hidden) = model.bucket_view(*bucket);
+        if position > 0 {
             lines.push(Line::default());
         }
-        match row {
-            Row::Header(bucket) => lines.push(components::header_line(*bucket, theme, model.now)),
-            Row::Fold(hidden) => lines.push(components::fold_line(*hidden, theme)),
-            Row::Task(index) => {
-                let Some(task) = model.board.task(*index) else {
-                    continue;
-                };
-                let mut line = components::task_line(task, theme, model.now);
-                if selectable == model.ui.cursor {
-                    selected_line = lines.len();
-                    line = line.style(theme.highlight());
-                }
-                lines.push(line);
-                selectable += 1;
+        let [title, rule] =
+            components::header_lines(*bucket, theme, model.now, area.width, indices.len());
+        lines.push(title);
+        lines.push(rule);
+
+        for &index in &indices {
+            let Some(task) = model.board.task(index) else {
+                continue;
+            };
+            let mut line = components::task_line(task, theme, model.now);
+            if selectable == model.ui.cursor {
+                selected_line = lines.len();
+                line = components::pad_line(line, area.width, theme.highlight());
+                line = line.style(theme.highlight());
             }
+            lines.push(line);
+            selectable += 1;
+        }
+
+        if hidden > 0 {
+            lines.push(components::fold_line(hidden, theme));
         }
     }
 
