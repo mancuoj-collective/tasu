@@ -1,0 +1,274 @@
+use std::time::Duration;
+
+use chrono::{DateTime, Local};
+use crossterm::event::{Event, KeyCode, KeyEvent};
+use tui_input::backend::crossterm::EventHandler;
+
+use crate::domain::settle;
+
+use super::action::{Action, Effect};
+use super::model::{Mode, Model};
+
+/// The toast lingers this long before a `Tick` clears it.
+const TOAST_TTL: Duration = Duration::from_secs(2);
+
+/// Turn an action into state changes and a list of effects. Pure with respect
+/// to I/O: the caller owns the clock, the disk and the terminal.
+pub fn update(model: &mut Model, action: Action, now: DateTime<Local>) -> Vec<Effect> {
+    model.now = now;
+    match action {
+        Action::Tick => tick(model, now),
+        Action::Reload(board) => {
+            model.board = board;
+            settle(&mut model.board, now);
+            model.clamp_cursor();
+            Vec::new()
+        }
+        Action::Key(key) => match model.ui.mode {
+            Mode::Normal => normal(model, key, now),
+            Mode::Add | Mode::Edit => editing(model, key, now),
+            Mode::Completed => completed(model, key, now),
+            Mode::Help => {
+                model.ui.mode = Mode::Normal;
+                Vec::new()
+            }
+        },
+    }
+}
+
+fn tick(model: &mut Model, now: DateTime<Local>) -> Vec<Effect> {
+    if let Some(toast) = &model.ui.toast
+        && now
+            .signed_duration_since(toast.born)
+            .to_std()
+            .unwrap_or_default()
+            > TOAST_TTL
+    {
+        model.ui.toast = None;
+    }
+    if settle(&mut model.board, now) {
+        model.clamp_cursor();
+        vec![Effect::Save]
+    } else {
+        Vec::new()
+    }
+}
+
+fn normal(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effect> {
+    let mut effects = Vec::new();
+    match key.code {
+        KeyCode::Esc | KeyCode::Char('q') => return vec![Effect::Quit],
+        KeyCode::Char('j') | KeyCode::Down => model.cursor_down(),
+        KeyCode::Char('k') | KeyCode::Up => model.cursor_up(),
+        KeyCode::Char('g') | KeyCode::Home => model.cursor_first(),
+        KeyCode::Char('G') | KeyCode::End => model.cursor_last(),
+        KeyCode::Char(' ') | KeyCode::Enter => {
+            if let Some(index) = model.selected()
+                && model.board.complete(index, now)
+            {
+                model.clamp_cursor();
+                effects.push(Effect::Save);
+            }
+        }
+        KeyCode::Char('a') => {
+            model.ui.input.reset();
+            model.ui.mode = Mode::Add;
+        }
+        KeyCode::Char('e') => {
+            if let Some(index) = model.selected()
+                && let Some(task) = model.board.task(index)
+            {
+                model.ui.input = tui_input::Input::new(task.title.clone());
+                model.ui.mode = Mode::Edit;
+            }
+        }
+        KeyCode::Char('t') => {
+            if selected_mutates(model, |board, index| board.pin_today(index, now)) {
+                effects.push(Effect::Save);
+            }
+        }
+        KeyCode::Char(']') => {
+            if selected_mutates(model, |board, index| board.move_bucket(index, 1, now)) {
+                effects.push(Effect::Save);
+            }
+        }
+        KeyCode::Char('[') => {
+            if selected_mutates(model, |board, index| board.move_bucket(index, -1, now)) {
+                effects.push(Effect::Save);
+            }
+        }
+        KeyCode::Char('x') => {
+            if selected_mutates(model, |board, index| board.archive(index, now)) {
+                effects.push(Effect::Save);
+            }
+        }
+        KeyCode::Char('c') => {
+            model.ui.mode = Mode::Completed;
+            model.ui.done_cursor = 0;
+        }
+        KeyCode::Char('?') => model.ui.mode = Mode::Help,
+        _ => {}
+    }
+    effects
+}
+
+/// Apply `change` to the selected task, clamping the cursor if the row vanished.
+fn selected_mutates(
+    model: &mut Model,
+    change: impl FnOnce(&mut crate::domain::Board, usize) -> bool,
+) -> bool {
+    let Some(index) = model.selected() else {
+        return false;
+    };
+    if change(&mut model.board, index) {
+        model.clamp_cursor();
+        true
+    } else {
+        false
+    }
+}
+
+fn editing(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effect> {
+    match key.code {
+        KeyCode::Enter => {
+            let title = model.ui.input.value().trim().to_string();
+            if title.is_empty() {
+                return Vec::new();
+            }
+            match model.ui.mode {
+                Mode::Add => {
+                    model.board.add(title, now);
+                    model.ui.cursor = 0;
+                    model.set_toast("已存入 今天");
+                }
+                Mode::Edit => {
+                    if let Some(index) = model.selected() {
+                        model.board.rename(index, title);
+                    }
+                }
+                _ => {}
+            }
+            model.ui.input.reset();
+            model.ui.mode = Mode::Normal;
+            model.clamp_cursor();
+            vec![Effect::Save]
+        }
+        KeyCode::Esc => {
+            model.ui.input.reset();
+            model.ui.mode = Mode::Normal;
+            Vec::new()
+        }
+        _ => {
+            model.ui.input.handle_event(&Event::Key(key));
+            Vec::new()
+        }
+    }
+}
+
+fn completed(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effect> {
+    let done = model.board.done();
+    match key.code {
+        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('c') => {
+            model.ui.mode = Mode::Normal;
+            Vec::new()
+        }
+        KeyCode::Char('j') | KeyCode::Down => {
+            if model.ui.done_cursor + 1 < done.len() {
+                model.ui.done_cursor += 1;
+            }
+            Vec::new()
+        }
+        KeyCode::Char('k') | KeyCode::Up => {
+            model.ui.done_cursor = model.ui.done_cursor.saturating_sub(1);
+            Vec::new()
+        }
+        KeyCode::Enter | KeyCode::Char('u') => {
+            let Some(&index) = done.get(model.ui.done_cursor) else {
+                return Vec::new();
+            };
+            if !model.board.restore(index, now) {
+                return Vec::new();
+            }
+            model.ui.mode = Mode::Normal;
+            model.clamp_cursor();
+            vec![Effect::Save]
+        }
+        _ => Vec::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    use super::*;
+    use crate::domain::{Bucket, test_time::at};
+
+    fn press(code: KeyCode) -> Action {
+        Action::Key(KeyEvent::new(code, KeyModifiers::NONE))
+    }
+
+    fn model() -> Model {
+        Model::new(crate::domain::Board::new(), at(2026, 10, 5))
+    }
+
+    fn typ(model: &mut Model, action: Action) {
+        update(model, action, at(2026, 10, 5));
+    }
+
+    #[test]
+    fn add_records_into_today_and_persists() {
+        let mut model = model();
+        typ(&mut model, press(KeyCode::Char('a')));
+        for c in "学 GPUI".chars() {
+            typ(&mut model, press(KeyCode::Char(c)));
+        }
+        let effects = update(&mut model, press(KeyCode::Enter), at(2026, 10, 5));
+
+        assert_eq!(effects, vec![Effect::Save]);
+        assert_eq!(model.board.task(0).unwrap().title, "学 GPUI");
+        assert_eq!(model.board.task(0).unwrap().bucket, Bucket::Today);
+        assert!(model.ui.toast.is_some());
+    }
+
+    #[test]
+    fn completing_hides_the_task_from_the_list() {
+        let mut model = model();
+        model.board.add("done me", at(2026, 10, 5));
+        let effects = update(&mut model, press(KeyCode::Char(' ')), at(2026, 10, 5));
+        assert_eq!(effects, vec![Effect::Save]);
+        assert_eq!(model.selectable_len(), 0);
+    }
+
+    #[test]
+    fn promote_and_demote_move_between_buckets() {
+        let mut model = model();
+        model.board.add("move me", at(2026, 10, 5));
+        update(&mut model, press(KeyCode::Char(']')), at(2026, 10, 5));
+        assert_eq!(model.board.task(0).unwrap().bucket, Bucket::Week);
+        update(&mut model, press(KeyCode::Char('t')), at(2026, 10, 5));
+        assert_eq!(model.board.task(0).unwrap().bucket, Bucket::Today);
+    }
+
+    #[test]
+    fn quit_is_requested_by_effect() {
+        let mut model = model();
+        let effects = update(&mut model, press(KeyCode::Char('q')), at(2026, 10, 5));
+        assert_eq!(effects, vec![Effect::Quit]);
+    }
+
+    #[test]
+    fn tick_settles_and_saves_only_when_something_moved() {
+        let mut model = model();
+        model.board.add("stale", at(2026, 10, 5));
+        assert!(
+            update(&mut model, Action::Tick, at(2026, 10, 5)).is_empty(),
+            "same day: no movement"
+        );
+        assert_eq!(
+            update(&mut model, Action::Tick, at(2026, 10, 6)),
+            vec![Effect::Save]
+        );
+        assert_eq!(model.board.task(0).unwrap().bucket, Bucket::Week);
+    }
+}
