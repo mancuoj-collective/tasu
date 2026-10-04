@@ -1,11 +1,13 @@
 [package]
 name = "tasu"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.88"
-description = "A terminal todo list manager built with ratatui"
+description = "A terminal todo list that ages"
 license = "Apache-2.0"
 repository = "https://github.com/mancuoj-collective/tasu"
+homepage = "https://github.com/mancuoj-collective/tasu"
+documentation = "https://docs.rs/tasu"
 readme = "README.md"
 keywords = ["tui", "todo", "ratatui", "terminal", "cli"]
 categories = ["command-line-utilities"]

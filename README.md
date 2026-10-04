@@ -1,5 +1,9 @@
 # tasu
 
+[![Crates.io](https://img.shields.io/crates/v/tasu.svg)](https://crates.io/crates/tasu)
+[![CI](https://github.com/mancuoj-collective/tasu/actions/workflows/ci.yml/badge.svg)](https://github.com/mancuoj-collective/tasu/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 A terminal todo list that ages.
 
 Tasks you record go into **today**. Whatever you don't finish sinks — today's

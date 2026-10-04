@@ -88,3 +88,14 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - name: cargo test --locked
         run: cargo test --locked --all-features --all-targets
+  package:
+    name: package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+      - name: Verify the crate packages and builds
+        run: cargo package --locked
