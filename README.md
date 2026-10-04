@@ -26,17 +26,31 @@ TODAY
 
 ## Install
 
-Prebuilt binaries (no Rust needed):
+Prebuilt binaries, no Rust needed.
+
+**macOS / Linux**
 
 ```bash
-brew install mancuoj/tap/tasu    # macOS / Linux
+brew install mancuoj/tap/tasu
 ```
+
+or:
 
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/mancuoj-collective/tasu/releases/latest/download/tasu-installer.sh | sh
 ```
 
-With Cargo:
+**Windows (x86_64)** — in PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/mancuoj-collective/tasu/releases/latest/download/tasu-installer.ps1 | iex"
+```
+
+This puts `tasu.exe` in `%USERPROFILE%\.cargo\bin` and adds it to your PATH; open a new terminal afterwards. Or download
+[`tasu-x86_64-pc-windows-msvc.zip`](https://github.com/mancuoj-collective/tasu/releases/latest/download/tasu-x86_64-pc-windows-msvc.zip)
+and put `tasu.exe` on your PATH.
+
+**With Cargo**
 
 ```bash
 cargo install tasu
