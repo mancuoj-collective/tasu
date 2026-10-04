@@ -126,9 +126,13 @@ impl Runtime {
     /// Kick off the startup pull, marking sync as in progress.
     fn start_sync(&mut self) {
         if let Some(sync) = &self.sync {
-            sync.pull();
-            self.in_flight += 1;
-            self.sync_status = SyncStatus::Syncing;
+            match sync.pull() {
+                Ok(()) => {
+                    self.in_flight += 1;
+                    self.sync_status = SyncStatus::Syncing;
+                }
+                Err(_) => self.sync_status = SyncStatus::Failed,
+            }
         }
     }
 
@@ -182,15 +186,19 @@ impl Runtime {
                 // After a failure, pull first so a rejected non-fast-forward
                 // push can recover instead of retrying forever.
                 if self.needs_pull {
-                    sync.pull();
-                    self.in_flight += 1;
+                    if sync.pull().is_ok() {
+                        self.in_flight += 1;
+                    }
                     self.needs_pull = false;
                 }
-                sync.commit_push();
-                self.in_flight += 1;
-                self.dirty = false;
-                self.retry_at = None;
-                self.sync_status = SyncStatus::Syncing;
+                if sync.commit_push().is_ok() {
+                    self.in_flight += 1;
+                    self.dirty = false;
+                    self.retry_at = None;
+                    self.sync_status = SyncStatus::Syncing;
+                } else {
+                    self.sync_status = SyncStatus::Failed;
+                }
             }
         }
 

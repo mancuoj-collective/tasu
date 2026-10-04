@@ -59,13 +59,17 @@ impl Sync {
 
     /// Fetch the latest remote state; the changed file is picked up by the
     /// mtime watcher, which reloads the board.
-    pub fn pull(&self) {
-        let _ = self.jobs.send(Job::Pull);
+    pub fn pull(&self) -> Result<(), String> {
+        self.jobs
+            .send(Job::Pull)
+            .map_err(|_| "sync worker stopped".to_string())
     }
 
     /// Stage, commit and push. Debounced by the caller.
-    pub fn commit_push(&self) {
-        let _ = self.jobs.send(Job::CommitPush);
+    pub fn commit_push(&self) -> Result<(), String> {
+        self.jobs
+            .send(Job::CommitPush)
+            .map_err(|_| "sync worker stopped".to_string())
     }
 
     pub fn poll(&self) -> Option<Result<(), String>> {
