@@ -97,20 +97,54 @@ fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), String> {
     std::fs::create_dir_all(repo).map_err(|err| err.to_string())?;
 
     if let Some(url) = remote {
-        // Prefer cloning when the data directory is still empty: this is how a
-        // second machine adopts the existing history.
+        // An empty directory is the second machine: clone the history.
         let empty = std::fs::read_dir(repo)
             .map(|mut entries| entries.next().is_none())
             .unwrap_or(true);
         if empty && clone(url, repo).is_ok() {
             return Ok(());
         }
+
+        // Existing local data (first machine, or a remote that already has a
+        // README): init, commit the local board, then merge the remote's
+        // unrelated history, preferring local content on conflicts. This keeps
+        // remote-only files instead of deleting them on the next `add -A`.
+        git(repo, &["init", "-q"])?;
+        let _ = git(repo, &["remote", "add", "origin", url]);
+        let _ = git(repo, &["add", "-A"]);
+        let _ = git(
+            repo,
+            &[
+                "-c",
+                "user.name=tasu",
+                "-c",
+                "user.email=tasu@localhost",
+                "commit",
+                "--quiet",
+                "-m",
+                "tasu: local",
+            ],
+        );
+        if git(repo, &["fetch", "--quiet", "origin"]).is_ok() {
+            let _ = git(repo, &["remote", "set-head", "origin", "--auto"]);
+            let _ = git(
+                repo,
+                &[
+                    "merge",
+                    "--allow-unrelated-histories",
+                    "-X",
+                    "ours",
+                    "--quiet",
+                    "-m",
+                    "tasu: merge",
+                    "origin/HEAD",
+                ],
+            );
+        }
+        return Ok(());
     }
 
     git(repo, &["init", "-q"])?;
-    if let Some(url) = remote {
-        let _ = git(repo, &["remote", "add", "origin", url]);
-    }
     Ok(())
 }
 
@@ -240,6 +274,56 @@ mod tests {
             second.join("todos.json").exists(),
             "did not clone the board"
         );
+    }
+
+    #[test]
+    fn grafts_onto_a_remote_that_already_has_history() {
+        let dir = tempfile::tempdir().unwrap();
+        let remote = bare_remote(dir.path());
+
+        // Seed the remote with a README commit, like GitHub's "add a README".
+        let seed = dir.path().join("seed");
+        std::fs::create_dir_all(&seed).unwrap();
+        std::fs::write(seed.join("README.md"), "# tasu data\n").unwrap();
+        git(&seed, &["init", "-q"]).unwrap();
+        git(&seed, &["add", "-A"]).unwrap();
+        git(
+            &seed,
+            &[
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@t",
+                "commit",
+                "-q",
+                "-m",
+                "seed",
+            ],
+        )
+        .unwrap();
+        git(&seed, &["remote", "add", "origin", remote.as_str()]).unwrap();
+        git(&seed, &["push", "-q", "-u", "origin", "HEAD"]).unwrap();
+
+        // First machine with existing local data and no repository yet.
+        let data = dir.path().join("data");
+        std::fs::create_dir_all(&data).unwrap();
+        std::fs::write(data.join("todos.json"), "{\"version\":1,\"tasks\":[]}").unwrap();
+
+        ensure_repo(&data, Some(&remote)).unwrap();
+        commit_push(&data, Some(&remote)).unwrap();
+
+        let tree = Command::new("git")
+            .arg("--git-dir")
+            .arg(&remote)
+            .args(["ls-tree", "-r", "--name-only", "HEAD"])
+            .output()
+            .unwrap();
+        let files = String::from_utf8_lossy(&tree.stdout);
+        assert!(
+            files.contains("README.md"),
+            "remote history was lost: {files}"
+        );
+        assert!(files.contains("todos.json"), "local board was not pushed");
     }
 
     #[test]

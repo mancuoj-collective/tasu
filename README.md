@@ -93,13 +93,16 @@ never invokes git.
 ## Syncing between machines (optional)
 
 Sync is plain git against a single repository, so a private repo, a Gist or a
-self-hosted server all work the same. Create an **empty private** repository and
-point tasu at it:
+self-hosted server all work the same. Create a **private** repository and point
+tasu at it:
 
 ```bash
 tasu remote git@github.com:you/tasu-data.git   # writes it to the config file
 tasu                                            # next start clones/syncs
 ```
+
+The repository does not have to be empty: if it already has commits (say a
+README), tasu merges the two histories on first sync and keeps both.
 
 `tasu remote` with no argument prints the current remote, and
 `tasu remote --clear` turns syncing off. The data directory and sync remote are
