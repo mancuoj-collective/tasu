@@ -60,10 +60,21 @@ impl FileConfig {
         let Some(path) = Config::config_file() else {
             return Self::default();
         };
-        let Ok(text) = std::fs::read_to_string(path) else {
-            return Self::default();
+        let text = match std::fs::read_to_string(&path) {
+            Ok(text) => text,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Self::default(),
+            Err(err) => {
+                eprintln!("tasu: could not read {}: {err}", path.display());
+                return Self::default();
+            }
         };
-        serde_json::from_str(&text).unwrap_or_default()
+        match serde_json::from_str(&text) {
+            Ok(file) => file,
+            Err(err) => {
+                eprintln!("tasu: ignoring malformed {}: {err}", path.display());
+                Self::default()
+            }
+        }
     }
 
     fn write(&self) -> std::io::Result<PathBuf> {

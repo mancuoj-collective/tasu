@@ -74,8 +74,8 @@ impl Sync {
 
     /// Best-effort push on exit, run on the calling thread so it is not lost
     /// when the process ends.
-    pub fn flush(&self) {
-        let _ = commit_now(&self.repo, self.remote.as_deref());
+    pub fn flush(&self) -> Result<(), String> {
+        commit_now(&self.repo, self.remote.as_deref())
     }
 }
 
@@ -152,7 +152,7 @@ fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), String> {
 
     // Replay the local board and commit it on top (or as the root commit).
     if let Some(bytes) = board {
-        let _ = std::fs::write(repo.join("todos.json"), bytes);
+        std::fs::write(repo.join("todos.json"), bytes).map_err(|err| err.to_string())?;
     }
     ensure_gitignore(repo);
     let _ = git(repo, &["add", "-A"]);

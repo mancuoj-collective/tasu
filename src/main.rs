@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 use std::time::{Duration, Instant, SystemTime};
 
 use anyhow::Result;
@@ -44,8 +46,10 @@ fn run_tui(config: Config) -> Result<()> {
 
     let now = Local::now();
     let mut board = runtime.store.load();
-    if settle(&mut board, now) {
-        let _ = runtime.store.save(&board);
+    if settle(&mut board, now)
+        && let Err(err) = runtime.store.save(&board)
+    {
+        eprintln!("tasu: could not save the board: {err}");
     }
     runtime.sync_mtime();
     let mut model = Model::new(board, now);
@@ -72,7 +76,9 @@ fn run_tui(config: Config) -> Result<()> {
         }
         Ok(())
     });
-    runtime.flush();
+    if let Err(err) = runtime.flush() {
+        eprintln!("tasu: final push failed: {err}");
+    }
     result
 }
 
@@ -145,7 +151,9 @@ impl Runtime {
                 }
                 Effect::Quit => {
                     model.should_quit = true;
-                    let _ = self.store.save(&model.board);
+                    if let Err(err) = self.store.save(&model.board) {
+                        eprintln!("tasu: could not save the board: {err}");
+                    }
                 }
             }
         }
@@ -195,9 +203,10 @@ impl Runtime {
         None
     }
 
-    fn flush(&mut self) {
-        if let Some(sync) = &self.sync {
-            sync.flush();
+    fn flush(&mut self) -> Result<(), String> {
+        match &self.sync {
+            Some(sync) => sync.flush(),
+            None => Ok(()),
         }
     }
 }

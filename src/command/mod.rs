@@ -19,7 +19,9 @@ pub fn add(config: &Config, words: &[String]) -> Result<()> {
 
     // Best-effort pull before reading, so a machine that only ever uses the
     // CLI still converges with the remote.
-    let _ = sync::pull_now(&config.data_dir, config.remote.as_deref());
+    if let Err(err) = sync::pull_now(&config.data_dir, config.remote.as_deref()) {
+        eprintln!("tasu: pull failed: {err}");
+    }
 
     let now = Local::now();
     let mut board = store.load();
@@ -27,7 +29,9 @@ pub fn add(config: &Config, words: &[String]) -> Result<()> {
     board.add(title, now);
     store.save(&board)?;
 
-    let _ = sync::commit_now(&config.data_dir, config.remote.as_deref());
+    if let Err(err) = sync::commit_now(&config.data_dir, config.remote.as_deref()) {
+        eprintln!("tasu: push failed: {err}");
+    }
     Ok(())
 }
 

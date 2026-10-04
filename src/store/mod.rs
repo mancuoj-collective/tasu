@@ -81,7 +81,9 @@ impl Store {
         let backup = self
             .path
             .with_file_name(format!("{file_name}.corrupt-{seconds}"));
-        let _ = fs::rename(&self.path, backup);
+        if let Err(err) = fs::rename(&self.path, &backup) {
+            eprintln!("tasu: could not back up {}: {err}", self.path.display());
+        }
     }
 }
 
