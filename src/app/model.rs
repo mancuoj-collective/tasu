@@ -12,6 +12,13 @@ pub enum Mode {
     Help,
 }
 
+/// Which list the history modal shows. Both are restorable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HistoryView {
+    Done,
+    Dropped,
+}
+
 /// A transient message shown after capturing, without stealing focus.
 #[derive(Debug, Clone)]
 pub struct Toast {
@@ -28,6 +35,7 @@ pub struct UiState {
     pub toast: Option<Toast>,
     pub done_cursor: usize,
     pub done_filter: Input,
+    pub history_view: HistoryView,
     pub later_expanded: bool,
 }
 
@@ -40,6 +48,7 @@ impl Default for UiState {
             toast: None,
             done_cursor: 0,
             done_filter: Input::default(),
+            history_view: HistoryView::Done,
             later_expanded: false,
         }
     }
@@ -202,11 +211,18 @@ impl Model {
         }
     }
 
-    /// Completed tasks matching the current search filter (case-insensitive).
-    pub fn done_filtered(&self) -> Vec<usize> {
+    /// Unfiltered tasks for the current history view.
+    pub fn history_source(&self) -> Vec<usize> {
+        match self.ui.history_view {
+            HistoryView::Done => self.board.done(),
+            HistoryView::Dropped => self.board.archived(),
+        }
+    }
+
+    /// Tasks for the current history view matching the search (case-insensitive).
+    pub fn history_items(&self) -> Vec<usize> {
         let needle = self.ui.done_filter.value().to_lowercase();
-        self.board
-            .done()
+        self.history_source()
             .into_iter()
             .filter(|&index| {
                 needle.is_empty()

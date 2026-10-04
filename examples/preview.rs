@@ -67,18 +67,33 @@ fn main() {
     println!("\n=== help (84x26) ===");
     print(&help, 84, 26);
 
-    let mut completed = Model::new(
+    let mut history = Model::new(
         Board::from_tasks(vec![
             done("shipped the store", 6),
             done("read chapter five", 5),
-            done("wrote e2e tests", 4),
-            done("setup the repo", 1),
+            dropped("that side project", 3),
+            dropped("rewrite in rust", 2),
         ]),
         now,
     );
-    completed.ui.mode = Mode::Completed;
-    println!("\n=== completed (84x16) ===");
-    print(&completed, 84, 16);
+    history.ui.mode = Mode::Completed;
+    println!("\n=== history · done (84x18) ===");
+    print(&history, 84, 18);
+    history.ui.history_view = tasu::app::HistoryView::Dropped;
+    println!("\n=== history · dropped (84x18) ===");
+    print(&history, 84, 18);
+}
+
+fn dropped(title: &str, day: u32) -> Task {
+    Task {
+        title: title.to_string(),
+        state: TaskState::Archived,
+        bucket: Bucket::Later,
+        bucket_since: dt(day),
+        created_at: dt(day),
+        completed_at: None,
+        archived_at: Some(dt(day)),
+    }
 }
 
 fn print(model: &Model, width: u16, height: u16) {

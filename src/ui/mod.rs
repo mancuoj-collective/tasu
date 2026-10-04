@@ -58,46 +58,21 @@ fn footer(f: &mut Frame, model: &Model, theme: &Theme, area: ratatui::layout::Re
     } else {
         toast.chars().count() as u16 + 2
     };
-    let show_help = model.ui.mode == Mode::Normal;
-    let help_width: u16 = if show_help { 6 } else { 0 };
-    let right_width = toast_width + help_width;
-    let gap = if right_width > 0 { 2 } else { 0 };
+    let gap = if toast_width > 0 { 2 } else { 0 };
 
     let [left, _gap, right] = Layout::horizontal([
         Constraint::Min(1),
         Constraint::Length(gap),
-        Constraint::Length(right_width.min(area.width)),
+        Constraint::Length(toast_width.min(area.width)),
     ])
     .areas(area);
 
-    // Left hints may be truncated on narrow terminals. A fixed gap keeps them
-    // from ever touching the right cluster.
     f.render_widget(Paragraph::new(hint_line(model, theme)), left);
-
-    if right_width > 0 {
-        let [toast_area, help_area] = Layout::horizontal([
-            Constraint::Length(toast_width),
-            Constraint::Length(help_width),
-        ])
-        .areas(right);
-
-        if !toast.is_empty() {
-            f.render_widget(
-                Paragraph::new(Span::styled(format!(" {toast} "), theme.success())),
-                toast_area,
-            );
-        }
-        if show_help {
-            let (key_style, label_style) = theme.key_hint();
-            f.render_widget(
-                Paragraph::new(Line::from(vec![
-                    Span::styled("?", key_style),
-                    Span::raw(" "),
-                    Span::styled("help", label_style),
-                ])),
-                help_area,
-            );
-        }
+    if !toast.is_empty() {
+        f.render_widget(
+            Paragraph::new(Span::styled(format!(" {toast} "), theme.success())),
+            right,
+        );
     }
 }
 
@@ -106,17 +81,13 @@ fn hint_line(model: &Model, theme: &Theme) -> Line<'static> {
     let hints: &[(&str, &str)] = match model.ui.mode {
         Mode::Normal => &[
             ("q", "quit"),
-            ("j/k", "move"),
-            ("h/l", "section"),
-            ("space", "done"),
             ("a", "add"),
             ("[/]", "bucket"),
-            ("x", "archive"),
-            ("z", "fold"),
-            ("c", "history"),
+            ("?", "help"),
         ],
         Mode::Add | Mode::Edit => &[("enter", "save"), ("esc", "cancel")],
         Mode::Completed => &[
+            ("tab", "done/dropped"),
             ("enter", "restore"),
             ("\u{2191}\u{2193}", "move"),
             ("esc", "back"),

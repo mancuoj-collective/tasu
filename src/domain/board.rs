@@ -169,6 +169,19 @@ impl Board {
         indices.sort_by(|&a, &b| self.tasks[b].completed_at.cmp(&self.tasks[a].completed_at));
         indices
     }
+
+    /// Archived (dropped) tasks, most recently archived first.
+    pub fn archived(&self) -> Vec<usize> {
+        let mut indices: Vec<usize> = self
+            .tasks
+            .iter()
+            .enumerate()
+            .filter(|(_, task)| task.state == TaskState::Archived)
+            .map(|(index, _)| index)
+            .collect();
+        indices.sort_by(|&a, &b| self.tasks[b].archived_at.cmp(&self.tasks[a].archived_at));
+        indices
+    }
 }
 
 #[cfg(test)]

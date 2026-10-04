@@ -7,10 +7,10 @@ use tui_input::backend::crossterm::EventHandler;
 use crate::domain::settle;
 
 use super::action::{Action, Effect};
-use super::model::{Mode, Model};
+use super::model::{HistoryView, Mode, Model};
 
 /// The toast lingers this long before a `Tick` clears it.
-const TOAST_TTL: Duration = Duration::from_secs(2);
+const TOAST_TTL: Duration = Duration::from_secs(5);
 
 /// Turn an action into state changes and a list of effects. Pure with respect
 /// to I/O: the caller owns the clock, the disk and the terminal.
@@ -108,6 +108,7 @@ fn normal(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effect>
             model.ui.mode = Mode::Completed;
             model.ui.done_cursor = 0;
             model.ui.done_filter.reset();
+            model.ui.history_view = HistoryView::Done;
         }
         KeyCode::Char('z') => {
             model.ui.later_expanded = !model.ui.later_expanded;
@@ -183,8 +184,16 @@ fn completed(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effe
             }
             Vec::new()
         }
+        KeyCode::Tab => {
+            model.ui.history_view = match model.ui.history_view {
+                HistoryView::Done => HistoryView::Dropped,
+                HistoryView::Dropped => HistoryView::Done,
+            };
+            model.ui.done_cursor = 0;
+            Vec::new()
+        }
         KeyCode::Down => {
-            if model.ui.done_cursor + 1 < model.done_filtered().len() {
+            if model.ui.done_cursor + 1 < model.history_items().len() {
                 model.ui.done_cursor += 1;
             }
             Vec::new()
@@ -194,10 +203,14 @@ fn completed(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effe
             Vec::new()
         }
         KeyCode::Enter => {
-            let Some(&index) = model.done_filtered().get(model.ui.done_cursor) else {
+            let Some(&index) = model.history_items().get(model.ui.done_cursor) else {
                 return Vec::new();
             };
-            if !model.board.restore(index, now) {
+            let restored = match model.ui.history_view {
+                HistoryView::Done => model.board.restore(index, now),
+                HistoryView::Dropped => model.board.unarchive(index, now),
+            };
+            if !restored {
                 return Vec::new();
             }
             model.ui.mode = Mode::Normal;
@@ -330,14 +343,32 @@ mod tests {
         model.board.complete(1, at(2026, 10, 5));
 
         update(&mut model, press(KeyCode::Char('c')), at(2026, 10, 5));
-        assert_eq!(model.done_filtered().len(), 2);
+        assert_eq!(model.history_items().len(), 2);
         for c in "gpui".chars() {
             update(&mut model, press(KeyCode::Char(c)), at(2026, 10, 5));
         }
-        assert_eq!(model.done_filtered().len(), 1);
+        assert_eq!(model.history_items().len(), 1);
 
         let effects = update(&mut model, press(KeyCode::Enter), at(2026, 10, 5));
         assert_eq!(effects, vec![Effect::Save]);
         assert_eq!(model.board.task(1).unwrap().state, TaskState::Open);
+    }
+
+    #[test]
+    fn dropped_view_lists_and_restores_archived_tasks() {
+        use crate::domain::TaskState;
+        let mut model = model();
+        model.board.add("abandoned", at(2026, 10, 5));
+        model.board.archive(0, at(2026, 10, 5));
+
+        update(&mut model, press(KeyCode::Char('c')), at(2026, 10, 5));
+        assert!(model.history_items().is_empty(), "done view is empty");
+
+        update(&mut model, press(KeyCode::Tab), at(2026, 10, 5));
+        assert_eq!(model.history_items().len(), 1);
+
+        let effects = update(&mut model, press(KeyCode::Enter), at(2026, 10, 5));
+        assert_eq!(effects, vec![Effect::Save]);
+        assert_eq!(model.board.task(0).unwrap().state, TaskState::Open);
     }
 }

@@ -11,12 +11,13 @@ use super::theme::Theme;
 pub fn task_line(task: &Task, theme: &Theme) -> Line<'static> {
     let (mark, mark_style) = match task.state {
         TaskState::Done => ("\u{2713}", theme.success()),
-        _ => ("\u{25cb}", theme.muted()),
+        TaskState::Archived => ("\u{2717}", theme.muted()),
+        TaskState::Open => ("\u{25cb}", theme.muted()),
     };
-    let title_style = if task.state == TaskState::Open {
-        theme.text()
-    } else {
-        theme.disabled().crossed_out()
+    let title_style = match task.state {
+        TaskState::Open => theme.text(),
+        TaskState::Done => theme.disabled().crossed_out(),
+        TaskState::Archived => theme.disabled(),
     };
 
     Line::from(vec![

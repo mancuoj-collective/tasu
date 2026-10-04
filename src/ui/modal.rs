@@ -3,11 +3,12 @@ use std::path::Path;
 use ratatui::{
     Frame,
     layout::{Constraint, Flex, Layout, Rect},
+    style::Style,
     text::{Line, Span},
     widgets::{Block, Clear, Padding, Paragraph},
 };
 
-use crate::app::{Mode, Model};
+use crate::app::{HistoryView, Mode, Model};
 
 use super::{components, scroll_offset, theme::Theme};
 
@@ -56,25 +57,31 @@ fn input_modal(f: &mut Frame, model: &Model, theme: &Theme) {
 }
 
 fn completed_modal(f: &mut Frame, model: &Model, theme: &Theme) {
-    let done = model.done_filtered();
+    let items = model.history_items();
     // Sized by the unfiltered total so the box does not jump while typing.
-    let total = model.board.done().len();
-    let height = (total.min(12) as u16 + 5).clamp(8, 20);
+    let total = model.history_source().len();
+    let height = (total.min(12) as u16 + 6).clamp(9, 21);
     let area = centered(f.area(), 60, height);
     f.render_widget(Clear, area);
 
     let block = Block::bordered()
         .border_style(theme.accent())
         .padding(Padding::horizontal(1))
-        .title(Span::styled(" completed ", theme.accent()));
+        .title(Span::styled(" history ", theme.accent()));
     let inner = block.inner(area);
     f.render_widget(block, area);
 
-    let [search_area, list_area] =
-        Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).areas(inner);
+    let [tabs_area, search_area, list_area] = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Length(3),
+        Constraint::Min(1),
+    ])
+    .areas(inner);
+
+    f.render_widget(Paragraph::new(history_tabs(model, theme)), tabs_area);
     search_box(f, model, theme, search_area);
 
-    if done.is_empty() {
+    if items.is_empty() {
         f.render_widget(
             Paragraph::new("\u{2205}").style(theme.muted()).centered(),
             list_area,
@@ -83,8 +90,8 @@ fn completed_modal(f: &mut Frame, model: &Model, theme: &Theme) {
     }
 
     let height = list_area.height as usize;
-    let offset = scroll_offset(model.ui.done_cursor, done.len(), height);
-    let lines: Vec<Line> = done
+    let offset = scroll_offset(model.ui.done_cursor, items.len(), height);
+    let lines: Vec<Line> = items
         .iter()
         .enumerate()
         .skip(offset)
@@ -104,6 +111,22 @@ fn completed_modal(f: &mut Frame, model: &Model, theme: &Theme) {
     f.render_widget(Paragraph::new(lines), list_area);
 }
 
+fn history_tabs(model: &Model, theme: &Theme) -> Line<'static> {
+    let tab = |label: &'static str, active: bool| {
+        let style = if active {
+            Style::new().fg(theme.accent).underlined()
+        } else {
+            theme.muted()
+        };
+        Span::styled(format!(" {label} "), style)
+    };
+    Line::from(vec![
+        tab("DONE", model.ui.history_view == HistoryView::Done),
+        Span::raw(" "),
+        tab("DROPPED", model.ui.history_view == HistoryView::Dropped),
+    ])
+}
+
 /// A bordered search field with a real cursor, fixed above the scrolling list.
 fn search_box(f: &mut Frame, model: &Model, theme: &Theme, area: Rect) {
     let block = Block::bordered()
@@ -113,7 +136,7 @@ fn search_box(f: &mut Frame, model: &Model, theme: &Theme, area: Rect) {
 
     let input = &model.ui.done_filter;
     let text = if input.value().is_empty() {
-        Paragraph::new("search").style(theme.disabled())
+        Paragraph::new("search").style(theme.muted())
     } else {
         Paragraph::new(input.value()).style(theme.text())
     };
@@ -135,9 +158,10 @@ fn help_modal(f: &mut Frame, theme: &Theme, data_path: &Path) {
         ("e", "edit title"),
         ("t", "move to today"),
         ("[ / ]", "send to previous / next bucket"),
-        ("x", "archive"),
+        ("x", "drop (archive)"),
         ("z", "expand / fold later"),
-        ("c", "completed"),
+        ("c", "history"),
+        ("tab", "history: done / dropped"),
         ("q / esc", "quit"),
     ];
 
