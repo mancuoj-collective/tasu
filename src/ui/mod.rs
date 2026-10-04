@@ -24,10 +24,6 @@ const KANBAN_MIN_WIDTH: u16 = 100;
 /// Below either bound the normal UI is unusable, so we ask for a resize.
 const MIN_WIDTH: u16 = 40;
 const MIN_HEIGHT: u16 = 8;
-/// Spinner frames for the footer sync indicator.
-const SPINNER: [&str; 8] = [
-    "\u{280b}", "\u{2819}", "\u{2839}", "\u{2838}", "\u{283c}", "\u{2834}", "\u{2826}", "\u{2827}",
-];
 
 /// Keep the cursor inside a `height`-row window starting at the returned offset.
 pub(crate) fn scroll_offset(cursor: usize, total: usize, height: usize) -> usize {
@@ -95,21 +91,20 @@ fn footer(f: &mut Frame, model: &Model, theme: &Theme, area: ratatui::layout::Re
     }
 }
 
-/// A spinner while a sync is in flight, or a warning if the last one failed.
-/// Idle and local-only states show nothing.
+/// A small dot: blinking accent while a sync is in flight, steady warning if
+/// the last one failed. Idle and local-only show nothing.
 fn status_line(model: &Model, theme: &Theme) -> Option<Line<'static>> {
     match model.ui.sync {
         SyncStatus::Syncing => {
-            let frame = SPINNER[(model.ui.tick / 2) as usize % SPINNER.len()];
-            Some(Line::from(vec![
-                Span::styled(format!(" {frame} "), theme.accent()),
-                Span::styled("syncing ", theme.muted()),
-            ]))
+            let on = (model.ui.tick / 3).is_multiple_of(2);
+            let span = if on {
+                Span::styled("\u{25cf}", theme.accent())
+            } else {
+                Span::raw(" ")
+            };
+            Some(Line::from(span))
         }
-        SyncStatus::Failed => Some(Line::from(Span::styled(
-            " \u{26a0} sync failed ",
-            theme.warn(),
-        ))),
+        SyncStatus::Failed => Some(Line::from(Span::styled("\u{25cf}", theme.warn()))),
         SyncStatus::Local | SyncStatus::Idle => None,
     }
 }

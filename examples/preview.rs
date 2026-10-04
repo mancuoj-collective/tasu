@@ -106,7 +106,7 @@ fn main() {
 
     let mut status = Model::new(board(), now);
     status.ui.sync = tasu::app::SyncStatus::Syncing;
-    status.ui.tick = 3;
+    status.ui.tick = 6;
     println!("\n=== syncing (84x12) ===");
     print(&status, 84, 12);
     status.ui.sync = tasu::app::SyncStatus::Failed;
