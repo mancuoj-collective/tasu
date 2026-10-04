@@ -112,7 +112,8 @@ reachable and that credentials work; over HTTPS this uses the token your git
 credential helper already stores. If the check fails, it prints how to fix it.
 
 The repository does not have to be empty: if it already has commits (say a
-README), tasu merges the two histories on first sync and keeps both.
+README), tasu adopts that history on first sync and pushes the local board on
+top, keeping both.
 
 `tasu remote` with no argument prints the current remote, and
 `tasu remote --clear` turns syncing off. The data directory and sync remote are
