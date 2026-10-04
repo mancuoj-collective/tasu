@@ -150,12 +150,11 @@ fn settle(board: &mut Board, now: DateTime<Local>) {
 
 ## UI 契约
 
-- `ui::draw(f, &Model)`：容器 → 头部 → 主体 → 底部 → 浮层（modal / toast）。**只读 `Model`**。
+- `ui::draw(f, &Model, &Theme, &Path)`：容器 → 主体 → 底部 → 浮层（modal / toast）。**只读 `Model`**。终端小于 40×8 时只渲染居中的放大提示。
 - 布局阈值 `const KANBAN_MIN_WIDTH: u16`：`width >= 阈值` 走 `kanban`（三列），否则 `sections`（纵向三段）。
-- 头部：`TODAY` 计数 + `WEEK <iso> · 今年还剩 <n> 周`。
-- 颜色只做信号：选中行、`today`、顺延计数（`>= 3` 警示色）、完成/归档态。
-- Toast：捕获后一闪 `已存入 今天 · 1`，约 2s 自动消失，不打断光标。
-- `later` 折叠：默认只显示最近 N 条，其余折叠为 `更早的 <n> 条`。
+- 段头：`TODAY` / `THIS WEEK <iso>/<总周数>` / `LATER`，各为「标签行 + 全宽分隔线」。
+- 颜色只做信号：选中行、`TODAY`、完成/放弃态。
+- Toast：捕获后一闪 `saved to today`，约 3s 自动消失，不打断光标。
 
 ## CLI
 
@@ -186,7 +185,7 @@ E2E 优先（ratatui `TestBackend` + 临时目录 + 本地裸仓库）：
 
 - 按键 → 屏幕内容 / `todos.json` / git 历史。
 - 时间边界：日切降级、ISO 周切降级（含跨年第 1 周）、`settle` 幂等、完成冻结不老化。
-- 跨桶移动、撤销回原桶原位置、归档找回、`later` 折叠。
+- 跨桶移动、撤销回原桶原位置、放弃项恢复、历史 modal 的 `DONE`/`DROPPED` 视图。
 - 同步：无 remote 静默、离线 push 不阻塞退出。
 
 > 遵循：若要隔离测试某系统，先写"它可能怎么失败"，再写代码。领域隔离测试只用于时间边界这类硬骨头，其余一律 E2E。

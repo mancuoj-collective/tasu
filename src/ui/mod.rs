@@ -8,10 +8,9 @@ use std::path::Path;
 
 use ratatui::{
     Frame,
-    layout::{Constraint, Layout, Margin, Rect},
-    style::Style,
+    layout::{Constraint, Layout, Margin},
     text::{Line, Span},
-    widgets::{Block, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState},
+    widgets::{Block, Paragraph},
 };
 
 use crate::app::{Mode, Model};
@@ -32,31 +31,6 @@ pub(crate) fn scroll_offset(cursor: usize, total: usize, height: usize) -> usize
     cursor
         .saturating_sub(height - 1)
         .min(total.saturating_sub(height))
-}
-
-/// A thin track-and-thumb bar, drawn only when the content overflows.
-pub(crate) fn scrollbar(
-    f: &mut Frame,
-    area: Rect,
-    total: usize,
-    offset: usize,
-    viewport: usize,
-    theme: &Theme,
-) {
-    if viewport == 0 || total <= viewport {
-        return;
-    }
-    let mut state = ScrollbarState::new(total)
-        .position(offset)
-        .viewport_content_length(viewport);
-    let bar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-        .begin_symbol(None)
-        .end_symbol(None)
-        .track_symbol(Some("\u{2502}"))
-        .thumb_symbol("\u{2503}")
-        .track_style(theme.disabled())
-        .thumb_style(Style::new().fg(theme.accent));
-    f.render_stateful_widget(bar, area, &mut state);
 }
 
 pub fn draw(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path) {

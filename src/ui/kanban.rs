@@ -8,7 +8,7 @@ use ratatui::{
 use crate::app::Model;
 use crate::domain::Bucket;
 
-use super::{components, scroll_offset, scrollbar, theme::Theme};
+use super::{components, scroll_offset, theme::Theme};
 
 /// Wide layout: the three buckets side by side, separated by vertical rules.
 /// Task titles are read across, so this only kicks in when there is genuinely
@@ -29,8 +29,8 @@ pub fn draw(f: &mut Frame, model: &Model, area: Rect, theme: &Theme) {
         (week, Bucket::Week),
         (later, Bucket::Later),
     ] {
-        let (indices, hidden) = model.bucket_view(bucket);
-        draw_column(f, model, rect, bucket, &indices, hidden, base, theme);
+        let indices = model.board.open_in(bucket);
+        draw_column(f, model, rect, bucket, &indices, base, theme);
         base += indices.len();
     }
 
@@ -39,31 +39,19 @@ pub fn draw(f: &mut Frame, model: &Model, area: Rect, theme: &Theme) {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn draw_column(
     f: &mut Frame,
     model: &Model,
     area: Rect,
     bucket: Bucket,
     indices: &[usize],
-    hidden: usize,
     base: usize,
     theme: &Theme,
 ) {
-    let body_height = area.height.saturating_sub(2) as usize;
-    let overflow = indices.len() > body_height && area.width > 1;
-    let width = area.width.saturating_sub(u16::from(overflow));
-    let (text_area, bar_area) = if overflow {
-        let [text, bar] =
-            Layout::horizontal([Constraint::Min(1), Constraint::Length(1)]).areas(area);
-        (text, Some(bar))
-    } else {
-        (area, None)
-    };
-
-    let [title, rule] = components::header_lines(bucket, theme, model.now, width);
+    let [title, rule] = components::header_lines(bucket, theme, model.now, area.width);
     let mut lines: Vec<Line> = vec![title, rule];
 
+    let body_height = area.height.saturating_sub(2) as usize;
     let local_selected = model
         .ui
         .cursor
@@ -77,28 +65,15 @@ fn draw_column(
         let Some(task) = model.board.task(index) else {
             continue;
         };
-        let mut line = components::task_line(task, theme, width);
+        let mut line = components::task_line(task, theme, area.width);
         if Some(position) == local_selected {
-            line = components::pad_line(line, width, theme.highlight());
+            line = components::pad_line(line, area.width, theme.highlight());
             line = line.style(theme.highlight());
         }
         lines.push(line);
     }
 
-    if hidden > 0 {
-        lines.push(components::fold_line(hidden, theme));
-    }
-
-    f.render_widget(Paragraph::new(lines), text_area);
-
-    if let Some(bar) = bar_area {
-        let body = Rect {
-            y: area.y + 2,
-            height: body_height as u16,
-            ..bar
-        };
-        scrollbar(f, body, indices.len(), offset, body_height, theme);
-    }
+    f.render_widget(Paragraph::new(lines), area);
 }
 
 fn draw_divider(f: &mut Frame, area: Rect, theme: &Theme) {

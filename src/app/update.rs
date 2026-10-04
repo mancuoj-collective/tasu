@@ -110,10 +110,6 @@ fn normal(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effect>
             model.ui.done_filter.reset();
             model.ui.history_view = HistoryView::Done;
         }
-        KeyCode::Char('z') => {
-            model.ui.later_expanded = !model.ui.later_expanded;
-            model.clamp_cursor();
-        }
         KeyCode::Char('?') => model.ui.mode = Mode::Help,
         _ => {}
     }
@@ -313,24 +309,6 @@ mod tests {
         assert_eq!(model.selected(), Some(1), "l should jump to Later");
         update(&mut model, press(KeyCode::Char('h')), at(2026, 10, 5));
         assert_eq!(model.selected(), Some(0), "h should jump back to Today");
-    }
-
-    #[test]
-    fn later_collapses_then_expands() {
-        use crate::app::Row;
-        let mut model = model();
-        for i in 0..7 {
-            model.board.add(format!("task {i}"), at(2026, 10, 5));
-        }
-        for i in 0..7 {
-            model.board.move_bucket(i, 2, at(2026, 10, 5));
-        }
-
-        assert_eq!(model.selectable_len(), Model::LATER_VISIBLE);
-        assert!(model.rows().iter().any(|row| matches!(row, Row::Fold(2))));
-
-        update(&mut model, press(KeyCode::Char('z')), at(2026, 10, 5));
-        assert_eq!(model.selectable_len(), 7);
     }
 
     #[test]

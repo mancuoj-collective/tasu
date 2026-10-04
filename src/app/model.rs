@@ -36,7 +36,6 @@ pub struct UiState {
     pub done_cursor: usize,
     pub done_filter: Input,
     pub history_view: HistoryView,
-    pub later_expanded: bool,
 }
 
 impl Default for UiState {
@@ -49,17 +48,15 @@ impl Default for UiState {
             done_cursor: 0,
             done_filter: Input::default(),
             history_view: HistoryView::Done,
-            later_expanded: false,
         }
     }
 }
 
-/// A rendered row: a bucket header, a task, or the folded tail of `Later`.
+/// A rendered row: a bucket header or a task.
 #[derive(Debug, Clone, Copy)]
 pub enum Row {
     Header(Bucket),
     Task(usize),
-    Fold(usize),
 }
 
 #[derive(Debug)]
@@ -82,33 +79,12 @@ impl Model {
 
     pub const BUCKETS: [Bucket; 3] = [Bucket::Today, Bucket::Week, Bucket::Later];
 
-    /// Collapsed `Later` shows at most this many recent tasks.
-    pub const LATER_VISIBLE: usize = 5;
-
-    /// Visible task indices for a bucket, plus how many older `Later` tasks are
-    /// folded away. `rows` and the kanban both build from this so they agree.
-    pub fn bucket_view(&self, bucket: Bucket) -> (Vec<usize>, usize) {
-        let mut indices = self.board.open_in(bucket);
-        if bucket == Bucket::Later && !self.ui.later_expanded && indices.len() > Self::LATER_VISIBLE
-        {
-            let hidden = indices.len() - Self::LATER_VISIBLE;
-            indices.truncate(Self::LATER_VISIBLE);
-            (indices, hidden)
-        } else {
-            (indices, 0)
-        }
-    }
-
     /// Display rows: each bucket header followed by its tasks (newest first).
     pub fn rows(&self) -> Vec<Row> {
         let mut rows = Vec::new();
         for bucket in Self::BUCKETS {
             rows.push(Row::Header(bucket));
-            let (indices, hidden) = self.bucket_view(bucket);
-            rows.extend(indices.into_iter().map(Row::Task));
-            if hidden > 0 {
-                rows.push(Row::Fold(hidden));
-            }
+            rows.extend(self.board.open_in(bucket).into_iter().map(Row::Task));
         }
         rows
     }
@@ -175,11 +151,11 @@ impl Model {
         };
         let mut target = position as i32 + delta;
         while (0..Self::BUCKETS.len() as i32).contains(&target) {
-            let indices = self.bucket_view(Self::BUCKETS[target as usize]).0;
+            let indices = self.board.open_in(Self::BUCKETS[target as usize]);
             if !indices.is_empty() {
                 let base: usize = Self::BUCKETS[..target as usize]
                     .iter()
-                    .map(|bucket| self.bucket_view(*bucket).0.len())
+                    .map(|bucket| self.board.open_in(*bucket).len())
                     .sum();
                 self.ui.cursor = base + local.min(indices.len() - 1);
                 return;
@@ -192,7 +168,7 @@ impl Model {
     fn cursor_bucket_position(&self) -> Option<(usize, usize)> {
         let mut seen = 0;
         for (position, bucket) in Self::BUCKETS.iter().enumerate() {
-            for local in 0..self.bucket_view(*bucket).0.len() {
+            for local in 0..self.board.open_in(*bucket).len() {
                 if seen == self.ui.cursor {
                     return Some((position, local));
                 }

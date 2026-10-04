@@ -159,7 +159,6 @@ fn help_modal(f: &mut Frame, theme: &Theme, data_path: &Path) {
         ("t", "move to today"),
         ("[ / ]", "send to previous / next bucket"),
         ("x", "drop (archive)"),
-        ("z", "expand / fold later"),
         ("c", "history"),
         ("tab", "history: done / dropped"),
         ("q / esc", "quit"),

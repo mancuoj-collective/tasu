@@ -76,14 +76,6 @@ pub fn header_lines(
     [title, rule]
 }
 
-/// The collapsed tail of `Later`: `⋯ 12 more (z to expand)`.
-pub fn fold_line(hidden: usize, theme: &Theme) -> Line<'static> {
-    Line::from(Span::styled(
-        format!("  \u{22ef} {hidden} more (z to expand)"),
-        theme.muted(),
-    ))
-}
-
 /// Extend a line to the full width with styled blanks, so a highlighted row
 /// reads as one continuous bar instead of stopping at the last character.
 pub fn pad_line(mut line: Line<'static>, width: u16, style: Style) -> Line<'static> {

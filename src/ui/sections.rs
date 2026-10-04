@@ -1,17 +1,17 @@
 use ratatui::{
     Frame,
-    layout::{Constraint, Layout, Rect},
+    layout::Rect,
     text::{Line, Span},
     widgets::Paragraph,
 };
 
 use crate::app::Model;
 
-use super::{components, scroll_offset, scrollbar, theme::Theme};
+use super::{components, scroll_offset, theme::Theme};
 
 /// Vertical three-section layout: `TODAY` / `THIS WEEK` / `LATER`. Each section
 /// is a labeled rule line followed by its tasks, separated by a blank line, and
-/// scrolled so the cursor stays visible. A thin scrollbar appears on overflow.
+/// scrolled so the cursor stays visible.
 pub fn draw(f: &mut Frame, model: &Model, area: Rect, theme: &Theme) {
     if model.selectable_len() == 0 {
         let hint = Line::from(Span::styled("press a to add something", theme.muted()));
@@ -19,16 +19,13 @@ pub fn draw(f: &mut Frame, model: &Model, area: Rect, theme: &Theme) {
         return;
     }
 
-    let height = area.height as usize;
-    let overflow = line_count(model) > height && area.width > 1;
-    let width = area.width.saturating_sub(u16::from(overflow));
-
+    let width = area.width;
     let mut lines: Vec<Line> = Vec::new();
     let mut selectable = 0usize;
     let mut selected_line = 0usize;
 
     for (position, bucket) in Model::BUCKETS.iter().enumerate() {
-        let (indices, hidden) = model.bucket_view(*bucket);
+        let indices = model.board.open_in(*bucket);
         if position > 0 {
             lines.push(Line::default());
         }
@@ -49,43 +46,12 @@ pub fn draw(f: &mut Frame, model: &Model, area: Rect, theme: &Theme) {
             lines.push(line);
             selectable += 1;
         }
-
-        if hidden > 0 {
-            lines.push(components::fold_line(hidden, theme));
-        }
     }
 
+    let height = area.height as usize;
     let offset = scroll_offset(selected_line, lines.len(), height);
     let visible: Vec<Line> = lines.into_iter().skip(offset).take(height).collect();
-
-    let (text_area, bar_area) = if overflow {
-        let [text, bar] =
-            Layout::horizontal([Constraint::Min(1), Constraint::Length(1)]).areas(area);
-        (text, Some(bar))
-    } else {
-        (area, None)
-    };
-
-    f.render_widget(Paragraph::new(visible), text_area);
-    if let Some(bar) = bar_area {
-        scrollbar(f, bar, line_count(model), offset, height, theme);
-    }
-}
-
-/// Number of display lines the sections will occupy, for overflow detection.
-fn line_count(model: &Model) -> usize {
-    let mut count = 0;
-    for (position, bucket) in Model::BUCKETS.iter().enumerate() {
-        let (indices, hidden) = model.bucket_view(*bucket);
-        if position > 0 {
-            count += 1;
-        }
-        count += 2 + indices.len();
-        if hidden > 0 {
-            count += 1;
-        }
-    }
-    count
+    f.render_widget(Paragraph::new(visible), area);
 }
 
 fn center_row(area: Rect) -> Rect {
