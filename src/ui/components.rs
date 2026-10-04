@@ -49,6 +49,14 @@ pub fn header_line(bucket: Bucket, theme: &Theme, now: DateTime<Local>) -> Line<
     }
 }
 
+/// The collapsed tail of `Later`: `⋯ 更早的 12 条（l 展开）`.
+pub fn fold_line(hidden: usize, theme: &Theme) -> Line<'static> {
+    Line::from(Span::styled(
+        format!("\u{22ef} 更早的 {hidden} 条（l 展开）"),
+        theme.muted(),
+    ))
+}
+
 /// `40 · 今年还剩 13 周`.
 fn week_meta(now: DateTime<Local>) -> String {
     let date = now.date_naive();

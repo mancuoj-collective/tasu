@@ -2,9 +2,12 @@ use std::time::{Duration, Instant, SystemTime};
 
 use anyhow::Result;
 use chrono::Local;
+use clap::Parser;
 use crossterm::event;
 
 use tasu::app::{Action, Effect, Model, update};
+use tasu::cli::{Cli, Command};
+use tasu::command;
 use tasu::config::Config;
 use tasu::domain::settle;
 use tasu::store::Store;
@@ -20,7 +23,15 @@ const DEBOUNCE: Duration = Duration::from_secs(3);
 const RETRY: Duration = Duration::from_secs(30);
 
 fn main() -> Result<()> {
+    let cli = Cli::parse();
     let config = Config::load();
+    match cli.command {
+        Some(Command::Add { title }) => command::add(&config, &title),
+        None => run_tui(config),
+    }
+}
+
+fn run_tui(config: Config) -> Result<()> {
     let mut runtime = Runtime::new(&config);
 
     let now = Local::now();

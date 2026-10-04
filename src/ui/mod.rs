@@ -1,4 +1,5 @@
 pub mod components;
+pub mod kanban;
 pub mod modal;
 pub mod sections;
 pub mod theme;
@@ -13,6 +14,9 @@ use ratatui::{
 use crate::app::{Mode, Model};
 
 use theme::Theme;
+
+/// At or above this width, the three buckets become side-by-side columns.
+const KANBAN_MIN_WIDTH: u16 = 100;
 
 /// Keep the cursor inside a `height`-row window starting at the returned offset.
 pub(crate) fn scroll_offset(cursor: usize, total: usize, height: usize) -> usize {
@@ -40,7 +44,11 @@ pub fn draw(f: &mut Frame, model: &Model, theme: &Theme) {
         header,
     );
 
-    sections::draw(f, model, list, theme);
+    if list.width >= KANBAN_MIN_WIDTH {
+        kanban::draw(f, model, list, theme);
+    } else {
+        sections::draw(f, model, list, theme);
+    }
     footer(f, model, theme, footer_area);
     modal::draw(f, model, theme);
 }
@@ -79,11 +87,12 @@ fn hint_line(model: &Model, theme: &Theme) -> Line<'static> {
             ("t", "今天"),
             ("[/]", "升降"),
             ("x", "归档"),
+            ("l", "折叠"),
             ("c", "已完成"),
             ("?", "帮助"),
         ],
         Mode::Add | Mode::Edit => &[("enter", "保存"), ("esc", "取消")],
-        Mode::Completed => &[("enter", "撤销"), ("j/k", "移动"), ("esc", "关闭")],
+        Mode::Completed => &[("输入", "搜索"), ("enter", "撤销"), ("esc", "返回")],
         Mode::Help => &[("任意键", "关闭")],
     };
 

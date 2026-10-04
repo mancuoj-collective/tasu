@@ -69,9 +69,14 @@ impl Sync {
     /// Best-effort push on exit, run on the calling thread so it is not lost
     /// when the process ends.
     pub fn flush(&self) {
-        let _ = ensure_repo(&self.repo, self.remote.as_deref());
-        let _ = commit_push(&self.repo, self.remote.as_deref());
+        let _ = commit_now(&self.repo, self.remote.as_deref());
     }
+}
+
+/// One synchronous commit+push, for one-shot commands and process exit.
+pub fn commit_now(repo: &Path, remote: Option<&str>) -> Result<(), String> {
+    ensure_repo(repo, remote)?;
+    commit_push(repo, remote)
 }
 
 fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), String> {

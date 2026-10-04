@@ -46,8 +46,8 @@ fn input_modal(f: &mut Frame, model: &Model, theme: &Theme) {
 }
 
 fn completed_modal(f: &mut Frame, model: &Model, theme: &Theme) {
-    let done = model.board.done();
-    let height = (done.len() as u16 + 3).clamp(3, 20);
+    let done = model.done_filtered();
+    let height = (done.len() as u16 + 4).clamp(4, 22);
     let area = centered(f.area(), 60, height);
     f.render_widget(Clear, area);
 
@@ -58,12 +58,30 @@ fn completed_modal(f: &mut Frame, model: &Model, theme: &Theme) {
     let inner = block.inner(area);
     f.render_widget(block, area);
 
+    let [filter_area, list_area] =
+        Layout::vertical([Constraint::Length(1), Constraint::Min(1)]).areas(inner);
+
+    if model.ui.done_filter.is_empty() {
+        f.render_widget(
+            Paragraph::new("输入以搜索").style(theme.disabled()),
+            filter_area,
+        );
+    } else {
+        f.render_widget(
+            Paragraph::new(format!("/{}", model.ui.done_filter)).style(theme.accent()),
+            filter_area,
+        );
+    }
+
     if done.is_empty() {
-        f.render_widget(Paragraph::new("还没有完成的事").style(theme.muted()), inner);
+        f.render_widget(
+            Paragraph::new("没有匹配的完成项").style(theme.muted()),
+            list_area,
+        );
         return;
     }
 
-    let height = inner.height as usize;
+    let height = list_area.height as usize;
     let offset = scroll_offset(model.ui.done_cursor, done.len(), height);
     let lines: Vec<Line> = done
         .iter()
@@ -81,7 +99,7 @@ fn completed_modal(f: &mut Frame, model: &Model, theme: &Theme) {
             line
         })
         .collect();
-    f.render_widget(Paragraph::new(lines), inner);
+    f.render_widget(Paragraph::new(lines), list_area);
 }
 
 fn help_modal(f: &mut Frame, theme: &Theme) {
@@ -103,6 +121,7 @@ fn help_modal(f: &mut Frame, theme: &Theme) {
         ("t", "提到今天"),
         ("[ / ]", "升 / 降一级"),
         ("x", "归档"),
+        ("l", "展开 / 折叠 以后"),
         ("c", "已完成"),
         ("q / esc", "退出"),
     ];

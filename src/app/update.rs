@@ -105,6 +105,11 @@ fn normal(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effect>
         KeyCode::Char('c') => {
             model.ui.mode = Mode::Completed;
             model.ui.done_cursor = 0;
+            model.ui.done_filter.clear();
+        }
+        KeyCode::Char('l') => {
+            model.ui.later_expanded = !model.ui.later_expanded;
+            model.clamp_cursor();
         }
         KeyCode::Char('?') => model.ui.mode = Mode::Help,
         _ => {}
@@ -166,14 +171,18 @@ fn editing(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effect
 }
 
 fn completed(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effect> {
-    let done = model.board.done();
     match key.code {
-        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('c') => {
-            model.ui.mode = Mode::Normal;
+        KeyCode::Esc => {
+            if model.ui.done_filter.is_empty() {
+                model.ui.mode = Mode::Normal;
+            } else {
+                model.ui.done_filter.clear();
+                model.ui.done_cursor = 0;
+            }
             Vec::new()
         }
         KeyCode::Char('j') | KeyCode::Down => {
-            if model.ui.done_cursor + 1 < done.len() {
+            if model.ui.done_cursor + 1 < model.done_filtered().len() {
                 model.ui.done_cursor += 1;
             }
             Vec::new()
@@ -182,14 +191,25 @@ fn completed(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effe
             model.ui.done_cursor = model.ui.done_cursor.saturating_sub(1);
             Vec::new()
         }
-        KeyCode::Enter | KeyCode::Char('u') => {
-            let Some(&index) = done.get(model.ui.done_cursor) else {
+        KeyCode::Backspace => {
+            model.ui.done_filter.pop();
+            model.ui.done_cursor = 0;
+            Vec::new()
+        }
+        KeyCode::Char(c) if !c.is_control() => {
+            model.ui.done_filter.push(c);
+            model.ui.done_cursor = 0;
+            Vec::new()
+        }
+        KeyCode::Enter => {
+            let Some(&index) = model.done_filtered().get(model.ui.done_cursor) else {
                 return Vec::new();
             };
             if !model.board.restore(index, now) {
                 return Vec::new();
             }
             model.ui.mode = Mode::Normal;
+            model.ui.done_filter.clear();
             model.clamp_cursor();
             vec![Effect::Save]
         }
@@ -270,5 +290,44 @@ mod tests {
             vec![Effect::Save]
         );
         assert_eq!(model.board.task(0).unwrap().bucket, Bucket::Week);
+    }
+
+    #[test]
+    fn later_collapses_then_expands() {
+        use crate::app::Row;
+        let mut model = model();
+        for i in 0..7 {
+            model.board.add(format!("task {i}"), at(2026, 10, 5));
+        }
+        for i in 0..7 {
+            model.board.move_bucket(i, 2, at(2026, 10, 5));
+        }
+
+        assert_eq!(model.selectable_len(), Model::LATER_VISIBLE);
+        assert!(model.rows().iter().any(|row| matches!(row, Row::Fold(2))));
+
+        update(&mut model, press(KeyCode::Char('l')), at(2026, 10, 5));
+        assert_eq!(model.selectable_len(), 7);
+    }
+
+    #[test]
+    fn completed_search_filters_then_restores() {
+        use crate::domain::TaskState;
+        let mut model = model();
+        model.board.add("买猫粮", at(2026, 10, 5));
+        model.board.add("学 GPUI", at(2026, 10, 5));
+        model.board.complete(0, at(2026, 10, 5));
+        model.board.complete(1, at(2026, 10, 5));
+
+        update(&mut model, press(KeyCode::Char('c')), at(2026, 10, 5));
+        assert_eq!(model.done_filtered().len(), 2);
+        for c in "gpui".chars() {
+            update(&mut model, press(KeyCode::Char(c)), at(2026, 10, 5));
+        }
+        assert_eq!(model.done_filtered().len(), 1);
+
+        let effects = update(&mut model, press(KeyCode::Enter), at(2026, 10, 5));
+        assert_eq!(effects, vec![Effect::Save]);
+        assert_eq!(model.board.task(1).unwrap().state, TaskState::Open);
     }
 }

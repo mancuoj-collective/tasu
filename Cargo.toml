@@ -14,6 +14,7 @@ authors = ["mancuoj <mancuoj@gmail.com>"]
 [dependencies]
 anyhow = "1.0.104"
 chrono = { version = "0.4.42", features = ["serde"] }
+clap = { version = "4.5.53", features = ["derive"] }
 crossterm = "0.29.0"
 dirs = "7.0.0"
 ratatui = "0.30.2"

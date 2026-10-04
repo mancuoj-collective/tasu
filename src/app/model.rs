@@ -27,6 +27,8 @@ pub struct UiState {
     pub input: Input,
     pub toast: Option<Toast>,
     pub done_cursor: usize,
+    pub done_filter: String,
+    pub later_expanded: bool,
 }
 
 impl Default for UiState {
@@ -37,15 +39,18 @@ impl Default for UiState {
             input: Input::default(),
             toast: None,
             done_cursor: 0,
+            done_filter: String::new(),
+            later_expanded: false,
         }
     }
 }
 
-/// A rendered row: a bucket header or a task, in display order.
+/// A rendered row: a bucket header, a task, or the folded tail of `Later`.
 #[derive(Debug, Clone, Copy)]
 pub enum Row {
     Header(Bucket),
     Task(usize),
+    Fold(usize),
 }
 
 #[derive(Debug)]
@@ -68,13 +73,32 @@ impl Model {
 
     pub const BUCKETS: [Bucket; 3] = [Bucket::Today, Bucket::Week, Bucket::Later];
 
+    /// Collapsed `Later` shows at most this many recent tasks.
+    pub const LATER_VISIBLE: usize = 5;
+
+    /// Visible task indices for a bucket, plus how many older `Later` tasks are
+    /// folded away. `rows` and the kanban both build from this so they agree.
+    pub fn bucket_view(&self, bucket: Bucket) -> (Vec<usize>, usize) {
+        let mut indices = self.board.open_in(bucket);
+        if bucket == Bucket::Later && !self.ui.later_expanded && indices.len() > Self::LATER_VISIBLE
+        {
+            let hidden = indices.len() - Self::LATER_VISIBLE;
+            indices.truncate(Self::LATER_VISIBLE);
+            (indices, hidden)
+        } else {
+            (indices, 0)
+        }
+    }
+
     /// Display rows: each bucket header followed by its tasks (newest first).
     pub fn rows(&self) -> Vec<Row> {
         let mut rows = Vec::new();
         for bucket in Self::BUCKETS {
             rows.push(Row::Header(bucket));
-            for index in self.board.open_in(bucket) {
-                rows.push(Row::Task(index));
+            let (indices, hidden) = self.bucket_view(bucket);
+            rows.extend(indices.into_iter().map(Row::Task));
+            if hidden > 0 {
+                rows.push(Row::Fold(hidden));
             }
         }
         rows
@@ -140,6 +164,22 @@ impl Model {
         } else if self.ui.cursor >= len {
             self.ui.cursor = len - 1;
         }
+    }
+
+    /// Completed tasks matching the current search filter (case-insensitive).
+    pub fn done_filtered(&self) -> Vec<usize> {
+        let needle = self.ui.done_filter.to_lowercase();
+        self.board
+            .done()
+            .into_iter()
+            .filter(|&index| {
+                needle.is_empty()
+                    || self
+                        .board
+                        .task(index)
+                        .is_some_and(|task| task.title.to_lowercase().contains(&needle))
+            })
+            .collect()
     }
 
     pub fn set_toast(&mut self, text: impl Into<String>) {
