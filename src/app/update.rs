@@ -105,7 +105,7 @@ fn normal(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effect>
         KeyCode::Char('c') => {
             model.ui.mode = Mode::Completed;
             model.ui.done_cursor = 0;
-            model.ui.done_filter.clear();
+            model.ui.done_filter.reset();
         }
         KeyCode::Char('l') => {
             model.ui.later_expanded = !model.ui.later_expanded;
@@ -173,32 +173,22 @@ fn editing(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effect
 fn completed(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effect> {
     match key.code {
         KeyCode::Esc => {
-            if model.ui.done_filter.is_empty() {
+            if model.ui.done_filter.value().is_empty() {
                 model.ui.mode = Mode::Normal;
             } else {
-                model.ui.done_filter.clear();
+                model.ui.done_filter.reset();
                 model.ui.done_cursor = 0;
             }
             Vec::new()
         }
-        KeyCode::Char('j') | KeyCode::Down => {
+        KeyCode::Down => {
             if model.ui.done_cursor + 1 < model.done_filtered().len() {
                 model.ui.done_cursor += 1;
             }
             Vec::new()
         }
-        KeyCode::Char('k') | KeyCode::Up => {
+        KeyCode::Up => {
             model.ui.done_cursor = model.ui.done_cursor.saturating_sub(1);
-            Vec::new()
-        }
-        KeyCode::Backspace => {
-            model.ui.done_filter.pop();
-            model.ui.done_cursor = 0;
-            Vec::new()
-        }
-        KeyCode::Char(c) if !c.is_control() => {
-            model.ui.done_filter.push(c);
-            model.ui.done_cursor = 0;
             Vec::new()
         }
         KeyCode::Enter => {
@@ -209,11 +199,16 @@ fn completed(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effe
                 return Vec::new();
             }
             model.ui.mode = Mode::Normal;
-            model.ui.done_filter.clear();
+            model.ui.done_filter.reset();
             model.clamp_cursor();
             vec![Effect::Save]
         }
-        _ => Vec::new(),
+        // Everything else edits the search field; typing filters the list.
+        _ => {
+            model.ui.done_filter.handle_event(&Event::Key(key));
+            model.ui.done_cursor = 0;
+            Vec::new()
+        }
     }
 }
 

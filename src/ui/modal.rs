@@ -60,7 +60,9 @@ fn input_modal(f: &mut Frame, model: &Model, theme: &Theme) {
 
 fn completed_modal(f: &mut Frame, model: &Model, theme: &Theme) {
     let done = model.done_filtered();
-    let height = (done.len() as u16 + 4).clamp(4, 22);
+    // Sized by the unfiltered total so the box does not jump while typing.
+    let total = model.board.done().len();
+    let height = (total.min(12) as u16 + 5).clamp(8, 20);
     let area = centered(f.area(), 60, height);
     f.render_widget(Clear, area);
 
@@ -71,20 +73,9 @@ fn completed_modal(f: &mut Frame, model: &Model, theme: &Theme) {
     let inner = block.inner(area);
     f.render_widget(block, area);
 
-    let [filter_area, list_area] =
-        Layout::vertical([Constraint::Length(1), Constraint::Min(1)]).areas(inner);
-
-    if model.ui.done_filter.is_empty() {
-        f.render_widget(
-            Paragraph::new("type to search").style(theme.disabled()),
-            filter_area,
-        );
-    } else {
-        f.render_widget(
-            Paragraph::new(format!("/{}", model.ui.done_filter)).style(theme.accent()),
-            filter_area,
-        );
-    }
+    let [search_area, list_area] =
+        Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).areas(inner);
+    search_box(f, model, theme, search_area);
 
     if done.is_empty() {
         f.render_widget(Paragraph::new("no matches").style(theme.muted()), list_area);
@@ -102,7 +93,7 @@ fn completed_modal(f: &mut Frame, model: &Model, theme: &Theme) {
             let Some(task) = model.board.task(index) else {
                 return Line::default();
             };
-            let mut line = components::task_line(task, theme, model.now);
+            let mut line = components::task_line(task, theme);
             if position == model.ui.done_cursor {
                 line = line.style(theme.highlight());
             }
@@ -110,6 +101,26 @@ fn completed_modal(f: &mut Frame, model: &Model, theme: &Theme) {
         })
         .collect();
     f.render_widget(Paragraph::new(lines), list_area);
+}
+
+/// A bordered search field with a real cursor, fixed above the scrolling list.
+fn search_box(f: &mut Frame, model: &Model, theme: &Theme, area: Rect) {
+    let block = Block::bordered()
+        .border_style(theme.disabled())
+        .padding(Padding::horizontal(1));
+    let inner = block.inner(area);
+
+    let input = &model.ui.done_filter;
+    let text = if input.value().is_empty() {
+        Paragraph::new("search").style(theme.disabled())
+    } else {
+        Paragraph::new(input.value()).style(theme.text())
+    };
+    let scroll = input.visual_scroll(inner.width as usize);
+    f.render_widget(text.scroll((0, scroll as u16)).block(block), area);
+
+    let x = inner.x + (input.visual_cursor().max(scroll) - scroll) as u16;
+    f.set_cursor_position((x, inner.y));
 }
 
 fn help_modal(f: &mut Frame, theme: &Theme, data_path: &Path) {
@@ -121,7 +132,7 @@ fn help_modal(f: &mut Frame, theme: &Theme, data_path: &Path) {
         ("a", "add (to today)"),
         ("e", "edit title"),
         ("t", "move to today"),
-        ("[ / ]", "bucket up / down"),
+        ("[ / ]", "bucket closer / farther"),
         ("x", "archive"),
         ("l", "expand / fold later"),
         ("c", "completed"),

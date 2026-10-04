@@ -27,7 +27,7 @@ pub struct UiState {
     pub input: Input,
     pub toast: Option<Toast>,
     pub done_cursor: usize,
-    pub done_filter: String,
+    pub done_filter: Input,
     pub later_expanded: bool,
 }
 
@@ -39,7 +39,7 @@ impl Default for UiState {
             input: Input::default(),
             toast: None,
             done_cursor: 0,
-            done_filter: String::new(),
+            done_filter: Input::default(),
             later_expanded: false,
         }
     }
@@ -168,7 +168,7 @@ impl Model {
 
     /// Completed tasks matching the current search filter (case-insensitive).
     pub fn done_filtered(&self) -> Vec<usize> {
-        let needle = self.ui.done_filter.to_lowercase();
+        let needle = self.ui.done_filter.value().to_lowercase();
         self.board
             .done()
             .into_iter()

@@ -3,7 +3,7 @@
 
 use chrono::{DateTime, Local, TimeZone};
 use ratatui::{Terminal, backend::TestBackend};
-use tasu::app::Model;
+use tasu::app::{Mode, Model};
 use tasu::domain::{Board, Bucket, Task, TaskState};
 use tasu::ui;
 
@@ -14,7 +14,7 @@ fn dt(day: u32) -> DateTime<Local> {
         .unwrap()
 }
 
-fn task(title: &str, bucket: Bucket, since: DateTime<Local>) -> Task {
+fn open(title: &str, bucket: Bucket, since: DateTime<Local>) -> Task {
     Task {
         title: title.to_string(),
         state: TaskState::Open,
@@ -26,19 +26,35 @@ fn task(title: &str, bucket: Bucket, since: DateTime<Local>) -> Task {
     }
 }
 
-fn main() {
-    let now = dt(8);
+fn done(title: &str, day: u32) -> Task {
+    Task {
+        title: title.to_string(),
+        state: TaskState::Done,
+        bucket: Bucket::Today,
+        bucket_since: dt(day),
+        created_at: dt(day),
+        completed_at: Some(dt(day)),
+        archived_at: None,
+    }
+}
+
+fn board() -> Board {
     let mut tasks = vec![
-        task("Nand2Tetris ch6", Bucket::Today, dt(8)),
-        task("learn GPUI events", Bucket::Today, dt(8)),
-        task("refactor tasu store", Bucket::Week, dt(4)),
-        task("write the README", Bucket::Week, dt(6)),
+        open("Nand2Tetris ch6", Bucket::Today, dt(8)),
+        open("learn GPUI events", Bucket::Today, dt(8)),
+        open("refactor tasu store", Bucket::Week, dt(4)),
+        open("write the README", Bucket::Week, dt(6)),
     ];
     for day in 1..=7 {
-        tasks.push(task(&format!("someday idea {day}"), Bucket::Later, dt(day)));
+        tasks.push(open(&format!("someday idea {day}"), Bucket::Later, dt(day)));
     }
-    let model = Model::new(Board::from_tasks(tasks), now);
+    Board::from_tasks(tasks)
+}
 
+fn main() {
+    let now = dt(8);
+
+    let model = Model::new(board(), now);
     println!("\n=== narrow (84x20) ===");
     print(&model, 84, 20);
     println!("\n=== wide (120x20) ===");
@@ -46,10 +62,23 @@ fn main() {
     println!("\n=== tiny (60x14) ===");
     print(&model, 60, 14);
 
-    let mut help = model;
-    help.ui.mode = tasu::app::Mode::Help;
-    println!("\n=== help (84x24) ===");
-    print(&help, 84, 24);
+    let mut help = Model::new(board(), now);
+    help.ui.mode = Mode::Help;
+    println!("\n=== help (84x26) ===");
+    print(&help, 84, 26);
+
+    let mut completed = Model::new(
+        Board::from_tasks(vec![
+            done("shipped the store", 6),
+            done("read chapter five", 5),
+            done("wrote e2e tests", 4),
+            done("setup the repo", 1),
+        ]),
+        now,
+    );
+    completed.ui.mode = Mode::Completed;
+    println!("\n=== completed (84x16) ===");
+    print(&completed, 84, 16);
 }
 
 fn print(model: &Model, width: u16, height: u16) {

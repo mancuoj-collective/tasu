@@ -36,7 +36,7 @@ pub fn draw(f: &mut Frame, model: &Model, area: Rect, theme: &Theme) {
             let Some(task) = model.board.task(index) else {
                 continue;
             };
-            let mut line = components::task_line(task, theme, model.now);
+            let mut line = components::task_line(task, theme);
             if selectable == model.ui.cursor {
                 selected_line = lines.len();
                 line = components::pad_line(line, area.width, theme.highlight());
