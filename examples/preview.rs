@@ -125,7 +125,7 @@ fn print(model: &Model, width: u16, height: u16) {
                 frame,
                 model,
                 &ui::theme::Theme::DARK,
-                std::path::Path::new("/tmp/tasu/todos.json"),
+                std::path::Path::new("/Users/mancuoj/Library/Application Support/tasu/todos.json"),
             )
         })
         .unwrap();

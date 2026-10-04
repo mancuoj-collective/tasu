@@ -10,6 +10,8 @@ use ratatui::{
 
 use crate::app::{HistoryView, Mode, Model};
 
+use unicode_width::UnicodeWidthStr;
+
 use super::{components, scroll_offset, theme::Theme};
 
 /// Compact block-letter `tasu`, shown at the top of help. Three rows keeps it
@@ -194,9 +196,11 @@ fn help_modal(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path) {
     }
 
     lines.push(Line::default());
-    let data = format!("data  {}", data_path.display());
-    let data = truncate_start(&data, inner);
-    let data_pad = inner.saturating_sub(data.chars().count()) / 2;
+    let label = "data";
+    let available = inner.saturating_sub(label.chars().count() + 2);
+    let path = truncate_middle(&display_path(data_path), available);
+    let data = format!("{label}  {path}");
+    let data_pad = inner.saturating_sub(data.width()) / 2;
     lines.push(Line::from(Span::styled(
         format!("{}{data}", " ".repeat(data_pad)),
         label_style,
@@ -221,17 +225,58 @@ fn help_modal(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path) {
     f.render_widget(Paragraph::new(visible).block(block), area);
 }
 
-/// Keep the tail of a long path (the meaningful part) and mark the cut.
-fn truncate_start(text: &str, max: usize) -> String {
-    let chars: Vec<char> = text.chars().collect();
-    if chars.len() <= max {
+/// Abbreviate the home directory to `~`.
+fn display_path(path: &Path) -> String {
+    let text = path.display().to_string();
+    if let Some(home) = dirs::home_dir() {
+        let home = home.display().to_string();
+        if let Some(rest) = text.strip_prefix(&home) {
+            return format!("~{rest}");
+        }
+    }
+    text
+}
+
+/// Keep the head and the tail (usually the filename), eliding the middle, so a
+/// long path stays readable and never exceeds `max` columns.
+fn truncate_middle(text: &str, max: usize) -> String {
+    use unicode_width::UnicodeWidthChar;
+
+    if text.width() <= max {
         return text.to_string();
     }
     if max <= 1 {
         return "\u{2026}".to_string();
     }
-    let tail: String = chars[chars.len() - (max - 1)..].iter().collect();
-    format!("\u{2026}{tail}")
+
+    let budget = max - 1;
+    let head_budget = budget / 2;
+    let tail_budget = budget - head_budget;
+
+    let mut head = String::new();
+    let mut used = 0;
+    for ch in text.chars() {
+        let width = ch.width().unwrap_or(0);
+        if used + width > head_budget {
+            break;
+        }
+        used += width;
+        head.push(ch);
+    }
+
+    let mut tail: Vec<char> = Vec::new();
+    let mut used = 0;
+    for ch in text.chars().rev() {
+        let width = ch.width().unwrap_or(0);
+        if used + width > tail_budget {
+            break;
+        }
+        used += width;
+        tail.push(ch);
+    }
+    tail.reverse();
+
+    format!("{head}\u{2026}{}", tail.into_iter().collect::<String>())
 }
 
 fn centered(area: Rect, width: u16, height: u16) -> Rect {
@@ -246,4 +291,25 @@ fn centered(area: Rect, width: u16, height: u16) -> Rect {
         .flex(Flex::Center)
         .areas(area);
     area
+}
+
+#[cfg(test)]
+mod tests {
+    use super::truncate_middle;
+    use unicode_width::UnicodeWidthStr;
+
+    #[test]
+    fn short_paths_pass_through() {
+        assert_eq!(truncate_middle("a/b/c", 20), "a/b/c");
+    }
+
+    #[test]
+    fn long_paths_elide_the_middle() {
+        let path = "/Users/mancuoj/Library/Application Support/tasu/todos.json";
+        let out = truncate_middle(path, 24);
+        assert!(out.contains('\u{2026}'));
+        assert!(out.starts_with('/'), "keeps the head: {out}");
+        assert!(out.ends_with("todos.json"), "keeps the tail: {out}");
+        assert!(out.width() <= 24);
+    }
 }
