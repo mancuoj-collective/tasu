@@ -82,6 +82,19 @@ fn main() {
     history.ui.history_view = tasu::app::HistoryView::Dropped;
     println!("\n=== history · dropped (84x18) ===");
     print(&history, 84, 18);
+
+    let mut long = Model::new(board(), now);
+    long.board.add(
+        "an extremely long task title that will definitely run past the right edge of the pane and keep going",
+        now,
+    );
+    for i in 0..20 {
+        long.board.add(format!("backlog item number {i}"), now);
+    }
+    println!("\n=== long title + long list (84x20) ===");
+    print(&long, 84, 20);
+    println!("\n=== long title, wide (120x20) ===");
+    print(&long, 120, 20);
 }
 
 fn dropped(title: &str, day: u32) -> Task {

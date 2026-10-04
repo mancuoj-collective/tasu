@@ -67,7 +67,7 @@ fn draw_column(
         let Some(task) = model.board.task(index) else {
             continue;
         };
-        let mut line = components::task_line(task, theme);
+        let mut line = components::task_line(task, theme, area.width);
         if Some(position) == local_selected {
             line = components::pad_line(line, area.width, theme.highlight());
             line = line.style(theme.highlight());

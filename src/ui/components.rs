@@ -1,14 +1,15 @@
 use chrono::{DateTime, Datelike, Local, NaiveDate};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
-use unicode_width::UnicodeWidthStr;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::domain::{Bucket, Task, TaskState};
 
 use super::theme::Theme;
 
-/// A task row: indent, marker, title.
-pub fn task_line(task: &Task, theme: &Theme) -> Line<'static> {
+/// A task row: indent, marker, title. The title is truncated with an ellipsis
+/// so the row (and its selection bar) always fits the available width.
+pub fn task_line(task: &Task, theme: &Theme, width: u16) -> Line<'static> {
     let (mark, mark_style) = match task.state {
         TaskState::Done => ("\u{2713}", theme.success()),
         TaskState::Archived => ("\u{2717}", theme.muted()),
@@ -20,11 +21,37 @@ pub fn task_line(task: &Task, theme: &Theme) -> Line<'static> {
         TaskState::Archived => theme.disabled(),
     };
 
+    // "  " + mark + " "
+    let available = (width as usize).saturating_sub(4);
+    let title = truncate(&task.title, available);
+
     Line::from(vec![
         Span::raw("  "),
         Span::styled(format!("{mark} "), mark_style),
-        Span::styled(task.title.clone(), title_style),
+        Span::styled(title, title_style),
     ])
+}
+
+/// Cut `text` to at most `max` display columns, marking the cut with `…`.
+fn truncate(text: &str, max: usize) -> String {
+    if text.width() <= max {
+        return text.to_string();
+    }
+    if max <= 1 {
+        return "\u{2026}".to_string();
+    }
+    let mut out = String::new();
+    let mut used = 0;
+    for ch in text.chars() {
+        let width = ch.width().unwrap_or(0);
+        if used + width > max - 1 {
+            break;
+        }
+        used += width;
+        out.push(ch);
+    }
+    out.push('\u{2026}');
+    out
 }
 
 /// Two lines that open a section: a label (with the ISO week for `THIS WEEK`),
@@ -77,4 +104,33 @@ fn week_meta(now: DateTime<Local>) -> String {
         .map(|day| day.iso_week().week())
         .unwrap_or(current);
     format!("{current}/{last}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::truncate;
+    use unicode_width::UnicodeWidthStr;
+
+    #[test]
+    fn short_text_is_untouched() {
+        assert_eq!(truncate("hello", 10), "hello");
+    }
+
+    #[test]
+    fn long_text_is_cut_with_an_ellipsis() {
+        assert_eq!(truncate("hello world", 5), "hell\u{2026}");
+        assert_eq!(truncate("你好世界", 5), "你好\u{2026}");
+    }
+
+    #[test]
+    fn truncation_never_exceeds_the_budget() {
+        for text in ["hello world", "你好世界", "a b c d e f"] {
+            for max in 1..=8 {
+                assert!(
+                    truncate(text, max).width() <= max,
+                    "truncate({text:?}, {max}) overflowed"
+                );
+            }
+        }
+    }
 }

@@ -100,7 +100,7 @@ fn completed_modal(f: &mut Frame, model: &Model, theme: &Theme) {
             let Some(task) = model.board.task(index) else {
                 return Line::default();
             };
-            let mut line = components::task_line(task, theme);
+            let mut line = components::task_line(task, theme, list_area.width);
             if position == model.ui.done_cursor {
                 line = components::pad_line(line, list_area.width, theme.highlight());
                 line = line.style(theme.highlight());
