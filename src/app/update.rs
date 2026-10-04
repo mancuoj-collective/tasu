@@ -43,6 +43,7 @@ pub fn update(model: &mut Model, action: Action, now: DateTime<Local>) -> Vec<Ef
 }
 
 fn tick(model: &mut Model, now: DateTime<Local>) -> Vec<Effect> {
+    model.ui.tick = model.ui.tick.wrapping_add(1);
     if let Some(toast) = &model.ui.toast
         && now
             .signed_duration_since(toast.born)

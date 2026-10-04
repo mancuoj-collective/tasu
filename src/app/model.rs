@@ -21,6 +21,19 @@ pub enum HistoryView {
     Dropped,
 }
 
+/// Background sync status, shown in the footer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SyncStatus {
+    /// No remote configured.
+    Local,
+    /// Remote configured, nothing running.
+    Idle,
+    /// A pull or push is in flight.
+    Syncing,
+    /// The last sync failed and will be retried.
+    Failed,
+}
+
 /// A transient message shown after capturing, without stealing focus.
 #[derive(Debug, Clone)]
 pub struct Toast {
@@ -38,6 +51,10 @@ pub struct UiState {
     pub done_cursor: usize,
     pub done_filter: Input,
     pub history_view: HistoryView,
+    /// Background sync status, refreshed from the runtime each frame.
+    pub sync: SyncStatus,
+    /// Tick counter, used to animate the syncing spinner.
+    pub tick: u64,
     /// Scroll offset of the help overlay. Written back, clamped, by the modal
     /// after each render, so key handling always starts from a valid value.
     pub help_scroll: Cell<usize>,
@@ -53,6 +70,8 @@ impl Default for UiState {
             done_cursor: 0,
             done_filter: Input::default(),
             history_view: HistoryView::Done,
+            sync: SyncStatus::Local,
+            tick: 0,
             help_scroll: Cell::new(0),
         }
     }

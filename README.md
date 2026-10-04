@@ -122,6 +122,8 @@ How it behaves inside the app:
 
 - pulls when it starts;
 - after each change, commits and pushes a few seconds later (debounced);
+- shows a spinner in the footer while a sync is running, and a `sync failed`
+  warning if it cannot reach the remote;
 - pushes once more on exit;
 - if the network is down or the push fails, stays quiet and retries later.
 

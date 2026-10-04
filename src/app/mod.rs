@@ -3,5 +3,5 @@ pub mod model;
 pub mod update;
 
 pub use action::{Action, Effect};
-pub use model::{HistoryView, Mode, Model, Row};
+pub use model::{HistoryView, Mode, Model, Row, SyncStatus};
 pub use update::update;

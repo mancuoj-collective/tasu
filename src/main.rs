@@ -5,7 +5,7 @@ use chrono::Local;
 use clap::Parser;
 use crossterm::event;
 
-use tasu::app::{Action, Effect, Model, update};
+use tasu::app::{Action, Effect, Model, SyncStatus, update};
 use tasu::cli::{Cli, Command};
 use tasu::command;
 use tasu::config::Config;
@@ -51,13 +51,12 @@ fn run_tui(config: Config) -> Result<()> {
     let theme = Theme::detect();
 
     // Fetch remote state in the background; the mtime watcher reloads it.
-    if let Some(sync) = &runtime.sync {
-        sync.pull();
-    }
+    runtime.start_sync();
 
     // Restore the terminal first; the final push must not freeze the UI.
     let result = ratatui::run(|terminal| {
         while !model.should_quit {
+            model.ui.sync = runtime.sync_status;
             terminal
                 .draw(|frame| ui::draw(frame, &model, &theme, &board_path, remote.as_deref()))?;
 
@@ -86,21 +85,38 @@ struct Runtime {
     last_change: Instant,
     in_flight: bool,
     retry_at: Option<Instant>,
+    sync_status: SyncStatus,
 }
 
 impl Runtime {
     fn new(config: &Config) -> Self {
+        let sync = config
+            .remote
+            .as_ref()
+            .map(|remote| Sync::new(config.data_dir.clone(), Some(remote.clone())));
+        let sync_status = if sync.is_some() {
+            SyncStatus::Idle
+        } else {
+            SyncStatus::Local
+        };
         Self {
             store: Store::new(config.board_path()),
-            sync: config
-                .remote
-                .as_ref()
-                .map(|remote| Sync::new(config.data_dir.clone(), Some(remote.clone()))),
+            sync,
             last_mtime: None,
             dirty: false,
             last_change: Instant::now(),
             in_flight: false,
             retry_at: None,
+            sync_status,
+        }
+    }
+
+    /// Kick off the startup pull, marking sync as in progress.
+    fn start_sync(&mut self) {
+        if let Some(sync) = &self.sync {
+            sync.pull();
+            self.in_flight = true;
+            self.sync_status = SyncStatus::Syncing;
         }
     }
 
@@ -135,6 +151,9 @@ impl Runtime {
                 if result.is_err() {
                     self.dirty = true;
                     self.retry_at = Some(Instant::now() + RETRY);
+                    self.sync_status = SyncStatus::Failed;
+                } else {
+                    self.sync_status = SyncStatus::Idle;
                 }
             }
             if self.dirty
@@ -146,6 +165,7 @@ impl Runtime {
                 self.in_flight = true;
                 self.dirty = false;
                 self.retry_at = None;
+                self.sync_status = SyncStatus::Syncing;
             }
         }
 

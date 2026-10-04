@@ -13,7 +13,9 @@ use ratatui::{
     widgets::{Block, Paragraph},
 };
 
-use crate::app::{Mode, Model};
+use crate::app::{Mode, Model, SyncStatus};
+
+use unicode_width::UnicodeWidthStr;
 
 use theme::Theme;
 
@@ -22,6 +24,10 @@ const KANBAN_MIN_WIDTH: u16 = 100;
 /// Below either bound the normal UI is unusable, so we ask for a resize.
 const MIN_WIDTH: u16 = 40;
 const MIN_HEIGHT: u16 = 8;
+/// Spinner frames for the footer sync indicator.
+const SPINNER: [&str; 8] = [
+    "\u{280b}", "\u{2819}", "\u{2839}", "\u{2838}", "\u{283c}", "\u{2834}", "\u{2826}", "\u{2827}",
+];
 
 /// Keep the cursor inside a `height`-row window starting at the returned offset.
 pub(crate) fn scroll_offset(cursor: usize, total: usize, height: usize) -> usize {
@@ -71,33 +77,56 @@ fn too_small(f: &mut Frame, theme: &Theme) {
 }
 
 fn footer(f: &mut Frame, model: &Model, theme: &Theme, area: ratatui::layout::Rect) {
-    let toast = model
-        .ui
-        .toast
-        .as_ref()
-        .map(|toast| toast.text.clone())
-        .unwrap_or_default();
-    let toast_width = if toast.is_empty() {
-        0
-    } else {
-        toast.chars().count() as u16 + 2
-    };
-    let gap = if toast_width > 0 { 2 } else { 0 };
+    // Right side shows sync progress/failure when relevant, else the toast.
+    let right = status_line(model, theme).or_else(|| toast_line(model, theme));
+    let right_width = right.as_ref().map(line_width).unwrap_or(0);
+    let gap = if right_width > 0 { 2 } else { 0 };
 
-    let [left, _gap, right] = Layout::horizontal([
+    let [left, _gap, right_area] = Layout::horizontal([
         Constraint::Min(1),
         Constraint::Length(gap),
-        Constraint::Length(toast_width.min(area.width)),
+        Constraint::Length(right_width.min(area.width)),
     ])
     .areas(area);
 
     f.render_widget(Paragraph::new(hint_line(model, theme)), left);
-    if !toast.is_empty() {
-        f.render_widget(
-            Paragraph::new(Span::styled(format!(" {toast} "), theme.success())),
-            right,
-        );
+    if let Some(line) = right {
+        f.render_widget(Paragraph::new(line), right_area);
     }
+}
+
+/// A spinner while a sync is in flight, or a warning if the last one failed.
+/// Idle and local-only states show nothing.
+fn status_line(model: &Model, theme: &Theme) -> Option<Line<'static>> {
+    match model.ui.sync {
+        SyncStatus::Syncing => {
+            let frame = SPINNER[(model.ui.tick / 2) as usize % SPINNER.len()];
+            Some(Line::from(vec![
+                Span::styled(format!(" {frame} "), theme.accent()),
+                Span::styled("syncing ", theme.muted()),
+            ]))
+        }
+        SyncStatus::Failed => Some(Line::from(Span::styled(
+            " \u{26a0} sync failed ",
+            theme.warn(),
+        ))),
+        SyncStatus::Local | SyncStatus::Idle => None,
+    }
+}
+
+fn toast_line(model: &Model, theme: &Theme) -> Option<Line<'static>> {
+    model
+        .ui
+        .toast
+        .as_ref()
+        .map(|toast| Line::from(Span::styled(format!(" {} ", toast.text), theme.success())))
+}
+
+fn line_width(line: &Line) -> u16 {
+    line.spans
+        .iter()
+        .map(|span| span.content.width())
+        .sum::<usize>() as u16
 }
 
 fn hint_line(model: &Model, theme: &Theme) -> Line<'static> {

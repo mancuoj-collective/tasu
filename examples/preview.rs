@@ -103,6 +103,15 @@ fn main() {
     print(&long, 120, 20);
     println!("\n=== too small (30x6) ===");
     print(&long, 30, 6);
+
+    let mut status = Model::new(board(), now);
+    status.ui.sync = tasu::app::SyncStatus::Syncing;
+    status.ui.tick = 3;
+    println!("\n=== syncing (84x12) ===");
+    print(&status, 84, 12);
+    status.ui.sync = tasu::app::SyncStatus::Failed;
+    println!("\n=== sync failed (84x12) ===");
+    print(&status, 84, 12);
 }
 
 fn dropped(title: &str, day: u32) -> Task {
