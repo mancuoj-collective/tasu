@@ -19,7 +19,7 @@ pub enum Command {
     Config,
     /// Show, set or clear the git sync remote.
     Remote {
-        /// Remote URL to sync with, e.g. git@github.com:you/tasu-data.git.
+        /// Remote URL, local path, or a GitHub `owner/repo` shorthand.
         url: Option<String>,
         /// Disable syncing.
         #[arg(long)]

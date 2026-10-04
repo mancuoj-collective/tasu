@@ -97,9 +97,14 @@ self-hosted server all work the same. Create a **private** repository and point
 tasu at it:
 
 ```bash
-tasu remote git@github.com:you/tasu-data.git   # writes it to the config file
-tasu                                            # next start clones/syncs
+tasu remote you/tasu-data      # GitHub shorthand → https://github.com/you/tasu-data.git
+tasu                            # next start clones/syncs
 ```
+
+`tasu remote` accepts a full URL, an SSH address (`git@…`), a local path, or a
+GitHub `owner/repo` shorthand. After setting it, tasu checks that the remote is
+reachable and that credentials work; over HTTPS this uses the token your git
+credential helper already stores. If the check fails, it prints how to fix it.
 
 The repository does not have to be empty: if it already has commits (say a
 README), tasu merges the two histories on first sync and keeps both.

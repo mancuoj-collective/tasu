@@ -86,6 +86,16 @@ pub fn pull_now(repo: &Path, remote: Option<&str>) -> Result<(), String> {
     pull(repo, remote)
 }
 
+/// Check that a remote is reachable and that credentials work, without asking
+/// for input. Empty repositories count as reachable.
+pub fn probe_remote(url: &str) -> Result<(), String> {
+    let output = Command::new("git")
+        .args(["ls-remote", url])
+        .output()
+        .map_err(|err| err.to_string())?;
+    check(output)
+}
+
 fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), String> {
     if repo.join(".git").exists() {
         if let Some(url) = remote {
