@@ -43,6 +43,8 @@ fn main() {
     print(&model, 84, 20);
     println!("\n=== wide (120x20) ===");
     print(&model, 120, 20);
+    println!("\n=== tiny (60x14) ===");
+    print(&model, 60, 14);
 
     let mut help = model;
     help.ui.mode = tasu::app::Mode::Help;
