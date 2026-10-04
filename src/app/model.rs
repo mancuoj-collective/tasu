@@ -1,3 +1,5 @@
+use std::cell::Cell;
+
 use chrono::{DateTime, Local};
 use tui_input::Input;
 
@@ -36,7 +38,9 @@ pub struct UiState {
     pub done_cursor: usize,
     pub done_filter: Input,
     pub history_view: HistoryView,
-    pub help_scroll: usize,
+    /// Scroll offset of the help overlay. Written back, clamped, by the modal
+    /// after each render, so key handling always starts from a valid value.
+    pub help_scroll: Cell<usize>,
 }
 
 impl Default for UiState {
@@ -49,7 +53,7 @@ impl Default for UiState {
             done_cursor: 0,
             done_filter: Input::default(),
             history_view: HistoryView::Done,
-            help_scroll: 0,
+            help_scroll: Cell::new(0),
         }
     }
 }

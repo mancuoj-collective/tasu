@@ -8,7 +8,7 @@ use chrono::{DateTime, Local, TimeZone};
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 
-use tasu::app::{Action, Effect, Model, update};
+use tasu::app::{Action, Effect, Mode, Model, update};
 use tasu::command;
 use tasu::config::Config;
 use tasu::domain::Board;
@@ -159,6 +159,29 @@ fn cli_add_syncs_to_a_remote_and_back() {
     assert!(
         board.tasks().iter().any(|task| task.title == "Nand2Tetris"),
         "remote board missing the task"
+    );
+}
+
+#[test]
+fn help_scroll_moves_back_up_from_the_bottom() {
+    let mut model = Model::new(Board::new(), dt(5));
+    model.ui.mode = Mode::Help;
+
+    // Scroll to the bottom on a short terminal, rendering after each press so
+    // the modal clamps the offset.
+    for _ in 0..30 {
+        update(&mut model, press(crossterm::event::KeyCode::Down), dt(5));
+        render(&model, 60, 12);
+    }
+    let bottom = model.ui.help_scroll.get();
+    assert!(bottom > 0, "help should have scrolled");
+
+    update(&mut model, press(crossterm::event::KeyCode::Up), dt(5));
+    render(&model, 60, 12);
+    assert_eq!(
+        model.ui.help_scroll.get(),
+        bottom - 1,
+        "up should move back"
     );
 }
 

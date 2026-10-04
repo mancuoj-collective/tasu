@@ -212,10 +212,10 @@ fn help_modal(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path) {
     f.render_widget(Clear, area);
 
     let inner_height = height.saturating_sub(4) as usize;
-    let offset = model
-        .ui
-        .help_scroll
-        .min(lines.len().saturating_sub(inner_height));
+    let max_offset = lines.len().saturating_sub(inner_height);
+    let offset = model.ui.help_scroll.get().min(max_offset);
+    // Write the clamped offset back so the next key press starts from here.
+    model.ui.help_scroll.set(offset);
     let visible: Vec<Line> = lines.into_iter().skip(offset).collect();
     f.render_widget(Paragraph::new(visible).block(block), area);
 }
