@@ -112,7 +112,7 @@ fn hint_line(model: &Model, theme: &Theme) -> Line<'static> {
         ],
         Mode::Add | Mode::Edit => &[("enter", "save"), ("esc", "cancel")],
         Mode::Completed => &[
-            ("tab", "done/dropped"),
+            ("\u{2190}\u{2192}", "switch"),
             ("enter", "restore"),
             ("\u{2191}\u{2193}", "move"),
             ("esc", "back"),

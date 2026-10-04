@@ -82,6 +82,9 @@ fn main() {
     history.ui.history_view = tasu::app::HistoryView::Dropped;
     println!("\n=== history · dropped (84x18) ===");
     print(&history, 84, 18);
+    history.ui.done_filter = tui_input::Input::new("nomatch".to_string());
+    println!("\n=== history · empty (84x18) ===");
+    print(&history, 84, 18);
 
     let mut long = Model::new(board(), now);
     long.board.add(

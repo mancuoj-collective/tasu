@@ -58,16 +58,14 @@ fn input_modal(f: &mut Frame, model: &Model, theme: &Theme) {
 
 fn completed_modal(f: &mut Frame, model: &Model, theme: &Theme) {
     let items = model.history_items();
-    // Sized by the unfiltered total so the box does not jump while typing.
-    let total = model.history_source().len();
-    let height = (total.min(12) as u16 + 6).clamp(9, 21);
+    // A fixed default height so switching tabs never resizes the box.
+    let height = 18u16.min(f.area().height);
     let area = centered(f.area(), 60, height);
     f.render_widget(Clear, area);
 
     let block = Block::bordered()
         .border_style(theme.accent())
-        .padding(Padding::horizontal(1))
-        .title(Span::styled(" history ", theme.accent()));
+        .padding(Padding::horizontal(1));
     let inner = block.inner(area);
     f.render_widget(block, area);
 
@@ -83,7 +81,9 @@ fn completed_modal(f: &mut Frame, model: &Model, theme: &Theme) {
 
     if items.is_empty() {
         f.render_widget(
-            Paragraph::new("\u{2205}").style(theme.muted()).centered(),
+            Paragraph::new("\u{00af}\\_(._.)_/\u{00af}")
+                .style(theme.muted())
+                .centered(),
             list_area,
         );
         return;
@@ -114,7 +114,7 @@ fn completed_modal(f: &mut Frame, model: &Model, theme: &Theme) {
 fn history_tabs(model: &Model, theme: &Theme) -> Line<'static> {
     let tab = |label: &'static str, active: bool| {
         let style = if active {
-            Style::new().fg(theme.accent).underlined()
+            Style::new().bg(theme.accent).fg(theme.sel_bg).bold()
         } else {
             theme.muted()
         };
@@ -160,7 +160,7 @@ fn help_modal(f: &mut Frame, theme: &Theme, data_path: &Path) {
         ("[ / ]", "send to previous / next bucket"),
         ("x", "drop (archive)"),
         ("c", "history"),
-        ("tab", "history: done / dropped"),
+        ("tab", "history: done / dropped (or \u{2190}\u{2192})"),
         ("q / esc", "quit"),
     ];
 

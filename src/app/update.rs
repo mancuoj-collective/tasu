@@ -180,7 +180,7 @@ fn completed(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effe
             }
             Vec::new()
         }
-        KeyCode::Tab => {
+        KeyCode::Tab | KeyCode::Left | KeyCode::Right => {
             model.ui.history_view = match model.ui.history_view {
                 HistoryView::Done => HistoryView::Dropped,
                 HistoryView::Dropped => HistoryView::Done,
