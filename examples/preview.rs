@@ -95,6 +95,8 @@ fn main() {
     print(&long, 84, 20);
     println!("\n=== long title, wide (120x20) ===");
     print(&long, 120, 20);
+    println!("\n=== too small (30x6) ===");
+    print(&long, 30, 6);
 }
 
 fn dropped(title: &str, day: u32) -> Task {

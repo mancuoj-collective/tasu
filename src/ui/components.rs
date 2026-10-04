@@ -21,12 +21,11 @@ pub fn task_line(task: &Task, theme: &Theme, width: u16) -> Line<'static> {
         TaskState::Archived => theme.disabled(),
     };
 
-    // "  " + mark + " "
-    let available = (width as usize).saturating_sub(4);
+    // mark + " "
+    let available = (width as usize).saturating_sub(2);
     let title = truncate(&task.title, available);
 
     Line::from(vec![
-        Span::raw("  "),
         Span::styled(format!("{mark} "), mark_style),
         Span::styled(title, title_style),
     ])
@@ -77,10 +76,10 @@ pub fn header_lines(
     [title, rule]
 }
 
-/// The collapsed tail of `Later`: `⋯ 12 more (l to expand)`.
+/// The collapsed tail of `Later`: `⋯ 12 more (z to expand)`.
 pub fn fold_line(hidden: usize, theme: &Theme) -> Line<'static> {
     Line::from(Span::styled(
-        format!("  \u{22ef} {hidden} more (l to expand)"),
+        format!("  \u{22ef} {hidden} more (z to expand)"),
         theme.muted(),
     ))
 }

@@ -8,9 +8,10 @@ use std::path::Path;
 
 use ratatui::{
     Frame,
-    layout::{Constraint, Layout, Margin},
+    layout::{Constraint, Layout, Margin, Rect},
+    style::Style,
     text::{Line, Span},
-    widgets::{Block, Paragraph},
+    widgets::{Block, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState},
 };
 
 use crate::app::{Mode, Model};
@@ -19,6 +20,9 @@ use theme::Theme;
 
 /// At or above this width, the three buckets become side-by-side columns.
 const KANBAN_MIN_WIDTH: u16 = 100;
+/// Below either bound the normal UI is unusable, so we ask for a resize.
+const MIN_WIDTH: u16 = 40;
+const MIN_HEIGHT: u16 = 8;
 
 /// Keep the cursor inside a `height`-row window starting at the returned offset.
 pub(crate) fn scroll_offset(cursor: usize, total: usize, height: usize) -> usize {
@@ -30,8 +34,38 @@ pub(crate) fn scroll_offset(cursor: usize, total: usize, height: usize) -> usize
         .min(total.saturating_sub(height))
 }
 
+/// A thin track-and-thumb bar, drawn only when the content overflows.
+pub(crate) fn scrollbar(
+    f: &mut Frame,
+    area: Rect,
+    total: usize,
+    offset: usize,
+    viewport: usize,
+    theme: &Theme,
+) {
+    if viewport == 0 || total <= viewport {
+        return;
+    }
+    let mut state = ScrollbarState::new(total)
+        .position(offset)
+        .viewport_content_length(viewport);
+    let bar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+        .begin_symbol(None)
+        .end_symbol(None)
+        .track_symbol(Some("\u{2502}"))
+        .thumb_symbol("\u{2503}")
+        .track_style(theme.disabled())
+        .thumb_style(Style::new().fg(theme.accent));
+    f.render_stateful_widget(bar, area, &mut state);
+}
+
 pub fn draw(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path) {
     f.render_widget(Block::new().style(theme.root()), f.area());
+
+    if f.area().width < MIN_WIDTH || f.area().height < MIN_HEIGHT {
+        too_small(f, theme);
+        return;
+    }
 
     let body = f.area().inner(Margin::new(1, 0));
     let [list, footer_area] =
@@ -44,6 +78,22 @@ pub fn draw(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path) {
     }
     footer(f, model, theme, footer_area);
     modal::draw(f, model, theme, data_path);
+}
+
+fn too_small(f: &mut Frame, theme: &Theme) {
+    let area = f.area();
+    let [middle] = Layout::vertical([Constraint::Length(3)])
+        .flex(ratatui::layout::Flex::Center)
+        .areas(area);
+    let lines = [
+        Line::from(Span::styled("terminal too small", theme.accent())),
+        Line::from(Span::styled(
+            format!("enlarge to at least {MIN_WIDTH}x{MIN_HEIGHT}"),
+            theme.muted(),
+        )),
+        Line::from(Span::styled("q to quit", theme.muted())),
+    ];
+    f.render_widget(Paragraph::new(lines.to_vec()).centered(), middle);
 }
 
 fn footer(f: &mut Frame, model: &Model, theme: &Theme, area: ratatui::layout::Rect) {
