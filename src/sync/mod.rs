@@ -102,67 +102,80 @@ pub fn probe_remote(url: &str) -> Result<(), String> {
 
 fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), String> {
     if repo.join(".git").exists() {
+        ensure_gitignore(repo);
         if let Some(url) = remote {
             let _ = git(repo, &["remote", "add", "origin", url]);
         }
         return Ok(());
     }
 
+    // Without a remote tasu is purely local and never shells out to git.
+    let Some(url) = remote else {
+        return Ok(());
+    };
+
     std::fs::create_dir_all(repo).map_err(|err| err.to_string())?;
 
-    if let Some(url) = remote {
-        // An empty directory is the second machine: clone the history.
-        let empty = std::fs::read_dir(repo)
-            .map(|mut entries| entries.next().is_none())
-            .unwrap_or(true);
-        if empty && clone(url, repo).is_ok() {
-            return Ok(());
-        }
-
-        // Existing local data (first machine, or a remote that already has a
-        // README). We keep the local board aside, adopt the remote's history,
-        // then replay the board on top and push. No unrelated-history merge,
-        // which proved unreliable across git builds.
-        let board = std::fs::read(repo.join("todos.json")).ok();
-
-        git(repo, &["init", "-q"])?;
-        let _ = git(repo, &["remote", "add", "origin", url]);
-
-        // Fetch the remote's current tip into a private ref, independent of
-        // remote-tracking branches (which are not always created), then adopt
-        // its tree as the base.
-        if git(
-            repo,
-            &["fetch", "--quiet", "origin", "+HEAD:refs/tasu/remote"],
-        )
-        .is_ok()
-        {
-            let _ = git(repo, &["reset", "--hard", "refs/tasu/remote"]);
-        }
-
-        // Replay the local board and commit it on top (or as the root commit).
-        if let Some(bytes) = board {
-            let _ = std::fs::write(repo.join("todos.json"), bytes);
-        }
-        let _ = git(repo, &["add", "-A"]);
-        let _ = git(
-            repo,
-            &[
-                "-c",
-                "user.name=tasu",
-                "-c",
-                "user.email=tasu@localhost",
-                "commit",
-                "--quiet",
-                "-m",
-                "tasu: local",
-            ],
-        );
+    // An empty directory is the second machine: clone the history.
+    let empty = std::fs::read_dir(repo)
+        .map(|mut entries| entries.next().is_none())
+        .unwrap_or(true);
+    if empty && clone(url, repo).is_ok() {
+        ensure_gitignore(repo);
         return Ok(());
     }
 
+    // Existing local data (first machine, or a remote that already has a
+    // README). We keep the local board aside, adopt the remote's history, then
+    // replay the board on top and push. No unrelated-history merge, which proved
+    // unreliable across git builds.
+    let board = std::fs::read(repo.join("todos.json")).ok();
+
     git(repo, &["init", "-q"])?;
+    let _ = git(repo, &["remote", "add", "origin", url]);
+
+    // Fetch the remote's current tip into a private ref, independent of
+    // remote-tracking branches (which are not always created), then adopt its
+    // tree as the base.
+    if git(
+        repo,
+        &["fetch", "--quiet", "origin", "+HEAD:refs/tasu/remote"],
+    )
+    .is_ok()
+    {
+        let _ = git(repo, &["reset", "--hard", "refs/tasu/remote"]);
+    }
+
+    // Replay the local board and commit it on top (or as the root commit).
+    if let Some(bytes) = board {
+        let _ = std::fs::write(repo.join("todos.json"), bytes);
+    }
+    ensure_gitignore(repo);
+    let _ = git(repo, &["add", "-A"]);
+    let _ = git(
+        repo,
+        &[
+            "-c",
+            "user.name=tasu",
+            "-c",
+            "user.email=tasu@localhost",
+            "commit",
+            "--quiet",
+            "-m",
+            "tasu: local",
+        ],
+    );
     Ok(())
+}
+
+/// Keep machine-local files out of the synced repository. On macOS and Windows
+/// the config directory equals the data directory, so `config.json` would
+/// otherwise be committed and pushed.
+fn ensure_gitignore(repo: &Path) {
+    let path = repo.join(".gitignore");
+    if !path.exists() {
+        let _ = std::fs::write(&path, "config.json\n*.tmp\n*.corrupt-*\n");
+    }
 }
 
 fn clone(url: &str, repo: &Path) -> Result<(), String> {
@@ -180,6 +193,10 @@ fn pull(repo: &Path, remote: Option<&str>) -> Result<(), String> {
 }
 
 fn commit_push(repo: &Path, remote: Option<&str>) -> Result<(), String> {
+    if remote.is_none() {
+        return Ok(());
+    }
+    ensure_gitignore(repo);
     git(repo, &["add", "-A"])?;
     match git(
         repo,
@@ -198,10 +215,8 @@ fn commit_push(repo: &Path, remote: Option<&str>) -> Result<(), String> {
         Err(message) if message.contains("nothing to commit") => {}
         Err(message) => return Err(message),
     }
-    if remote.is_some() {
-        let mut cmd = git_cmd(repo, &["push", "--quiet", "-u", "origin", "HEAD"]);
-        run_bounded(&mut cmd, PUSH_TIMEOUT)?;
-    }
+    let mut cmd = git_cmd(repo, &["push", "--quiet", "-u", "origin", "HEAD"]);
+    run_bounded(&mut cmd, PUSH_TIMEOUT)?;
     Ok(())
 }
 
@@ -393,6 +408,36 @@ mod tests {
 
         ensure_repo(&data, None).unwrap();
         commit_push(&data, None).unwrap();
-        assert!(data.join(".git").exists());
+        assert!(
+            !data.join(".git").exists(),
+            "local-only must not create a repository"
+        );
+    }
+
+    #[test]
+    fn config_file_is_not_synced() {
+        let dir = tempfile::tempdir().unwrap();
+        let remote = bare_remote(dir.path());
+        let data = dir.path().join("data");
+        std::fs::create_dir_all(&data).unwrap();
+        std::fs::write(data.join("todos.json"), "{\"version\":1,\"tasks\":[]}").unwrap();
+        // On macOS/Windows the config lives in the data directory.
+        std::fs::write(data.join("config.json"), "{\"remote\":\"x\"}").unwrap();
+
+        ensure_repo(&data, Some(&remote)).unwrap();
+        commit_push(&data, Some(&remote)).unwrap();
+
+        let tree = Command::new("git")
+            .arg("--git-dir")
+            .arg(&remote)
+            .args(["ls-tree", "-r", "--name-only", "HEAD"])
+            .output()
+            .unwrap();
+        let files = String::from_utf8_lossy(&tree.stdout);
+        assert!(files.contains("todos.json"), "board missing: {files}");
+        assert!(
+            !files.contains("config.json"),
+            "machine-local config must not be synced: {files}"
+        );
     }
 }
