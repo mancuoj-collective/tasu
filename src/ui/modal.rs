@@ -11,15 +11,12 @@ use crate::app::{Mode, Model};
 
 use super::{components, scroll_offset, theme::Theme};
 
-/// Block-letter `tasu` (ANSI Shadow), shown at the top of help. The `s` glyph
-/// is unambiguous here, unlike the compact half-block version it replaces.
-const HELP_ART: [&str; 6] = [
-    " ████████╗ █████╗ ███████╗██╗   ██╗",
-    " ╚══██╔══╝██╔══██╗██╔════╝██║   ██║",
-    "    ██║   ███████║███████╗██║   ██║",
-    "    ██║   ██╔══██║╚════██║██║   ██║",
-    "    ██║   ██║  ██║███████║╚██████╔╝",
-    "    ╚═╝   ╚═╝  ╚═╝╚══════╝ ╚═════╝ ",
+/// Compact block-letter `tasu`, shown at the top of help. Three rows keeps it
+/// from dominating the modal while the `s` stays legible.
+const HELP_ART: [&str; 3] = [
+    "\u{2580}\u{2588}\u{2580} \u{2584}\u{2580}\u{2588} \u{2584}\u{2580}\u{2580} \u{2588} \u{2588}",
+    " \u{2588}  \u{2588}\u{2580}\u{2588} \u{2580}\u{2580}\u{2584} \u{2588} \u{2588}",
+    " \u{2580}  \u{2580} \u{2580} \u{2584}\u{2584}\u{2580} \u{2580}\u{2584}\u{2580}",
 ];
 
 pub fn draw(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path) {
@@ -78,7 +75,10 @@ fn completed_modal(f: &mut Frame, model: &Model, theme: &Theme) {
     search_box(f, model, theme, search_area);
 
     if done.is_empty() {
-        f.render_widget(Paragraph::new("no matches").style(theme.muted()), list_area);
+        f.render_widget(
+            Paragraph::new("\u{2205}").style(theme.muted()).centered(),
+            list_area,
+        );
         return;
     }
 
@@ -95,6 +95,7 @@ fn completed_modal(f: &mut Frame, model: &Model, theme: &Theme) {
             };
             let mut line = components::task_line(task, theme);
             if position == model.ui.done_cursor {
+                line = components::pad_line(line, list_area.width, theme.highlight());
                 line = line.style(theme.highlight());
             }
             line
@@ -145,21 +146,19 @@ fn help_modal(f: &mut Frame, theme: &Theme, data_path: &Path) {
     let inner = width.saturating_sub(4) as usize;
 
     let mut lines: Vec<Line> = Vec::new();
+    // Center the logo by its widest row so the letters stay aligned.
+    let art_width = HELP_ART
+        .iter()
+        .map(|row| row.chars().count())
+        .max()
+        .unwrap_or(0);
+    let art_pad = inner.saturating_sub(art_width) / 2;
     for row in HELP_ART {
-        let pad = inner.saturating_sub(row.chars().count()) / 2;
         lines.push(Line::from(Span::styled(
-            format!("{}{row}", " ".repeat(pad)),
+            format!("{}{row}", " ".repeat(art_pad)),
             theme.accent(),
         )));
     }
-    lines.push(Line::default());
-    lines.push(Line::from(vec![
-        Span::styled("data  ", key_style),
-        Span::styled(
-            truncate_start(&data_path.display().to_string(), inner.saturating_sub(6)),
-            label_style,
-        ),
-    ]));
     lines.push(Line::default());
 
     let label_width = inner.saturating_sub(10);
@@ -169,6 +168,15 @@ fn help_modal(f: &mut Frame, theme: &Theme, data_path: &Path) {
             Span::styled(format!("{label:>label_width$}"), label_style),
         ]));
     }
+
+    lines.push(Line::default());
+    let data = format!("data  {}", data_path.display());
+    let data = truncate_start(&data, inner);
+    let data_pad = inner.saturating_sub(data.chars().count()) / 2;
+    lines.push(Line::from(Span::styled(
+        format!("{}{data}", " ".repeat(data_pad)),
+        label_style,
+    )));
 
     let height = (lines.len() as u16 + 2).min(full.height);
     let area = centered(full, width, height);
