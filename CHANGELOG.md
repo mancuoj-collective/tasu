@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Sync no longer creates a machine-dependent branch (e.g. `master` on Windows):
+  tasu adopts the remote's default branch, or uses `main`, on every machine.
+- `tasu remote <url>` now probes the remote **before** saving it. An
+  unreachable, missing or unauthorized repository is not persisted, and any
+  previously set remote is cleared instead of being retried forever.
+- `pull` names the branch explicitly, so a freshly adopted repository without an
+  upstream no longer fails with "no tracking information".
+
 ## [0.4.0] - 2026-10-05
 
 ### Added

@@ -74,23 +74,26 @@ pub fn remote(config: &Config, spec: Option<&str>, clear: bool) -> Result<()> {
         println!("sync disabled");
     } else if let Some(spec) = spec {
         let url = normalize_remote(spec);
+        // Verify the remote before committing it to the config. Persisting an
+        // unreachable or unauthorized URL would leave every later run retrying
+        // a sync that can never succeed.
+        if let Err(err) = sync::probe_remote(&url) {
+            Config::set_remote(None)?;
+            eprintln!("could not reach {url}:\n  {err}");
+            eprintln!("sync left off (remote cleared)");
+            eprintln!(
+                "hint: over HTTPS git needs a stored token. On macOS a keychain \
+                 helper usually has one from previous clones; otherwise create a \
+                 personal access token and let the helper store it, or use an SSH \
+                 remote instead. Check the repository exists and that you can write \
+                 to it."
+            );
+            anyhow::bail!("remote not set: {url} is unreachable or unauthorized");
+        }
         let path = Config::set_remote(Some(&url))?;
         println!("sync remote set to {url}");
         println!("config written to {}", path.display());
-
-        match sync::probe_remote(&url) {
-            Ok(()) => println!("remote reachable, credentials OK"),
-            Err(err) => {
-                println!("could not reach the remote:");
-                println!("  {err}");
-                println!(
-                    "hint: over HTTPS git needs a stored token. On macOS a keychain \
-                     helper usually has one from previous clones; otherwise create a \
-                     personal access token and let the helper store it, or use an SSH \
-                     remote instead."
-                );
-            }
-        }
+        println!("remote reachable, credentials OK");
     } else {
         println!("{}", config.remote.as_deref().unwrap_or("none"));
     }

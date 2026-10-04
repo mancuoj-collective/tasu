@@ -174,10 +174,13 @@ fn settle(board: &mut Board, now: DateTime<Local>) {
 - 配置文件：平台配置目录 `/tasu/config.json`（`dirs::config_dir()`），字段可选：`data_dir`、`remote`。**配置与数据分离**，配置不进数据仓库，避免随同步漂移。
 - 优先级：环境变量 > 配置文件 > 默认值。
 - 设置了 `remote` 时：首次运行若数据目录不是 git 仓库，则 `git init` + `git remote add origin <remote>` + 首次 commit，之后走正常 pull/push。
+- `tasu remote <url>` 会**先探测再落盘**：`git ls-remote` 失败（仓库不存在、无凭据/无权限、网络不通）时**不写入 remote，并清空已有配置**，命令以非零码退出。避免把不可达的 remote 持久化，导致之后每次同步都在重试一个永远失败的操作。
 
 ## 同步
 
-Git 单写者模型（详见 `PRODUCT.md`）：`git -C <repo> pull --rebase --autostash`、`git add -A && git commit -m "tasu: <n> changes" && git push`。**未设置 remote / 非 git 仓库时整体静默降级为纯本地**，不产生任何 git 调用。所有失败静默留待下次重试。
+Git 单写者模型（详见 `PRODUCT.md`）：`git -C <repo> pull --rebase --autostash origin <branch>`、`git add -A && git commit -m "tasu: <n> changes" && git push origin HEAD:refs/heads/<branch>`。**未设置 remote / 非 git 仓库时整体静默降级为纯本地**，不产生任何 git 调用。所有失败静默留待下次重试。
+
+**分支约定**：所有机器固定在**同一个分支**上同步，绝不让本机 `init.defaultBranch`（Windows 上常是 `master`）泄漏进数据仓库。远端已有默认分支时采用其分支名（并把本地分支改名对齐），否则用 `main`；`push` 显式推到该分支名，`pull` 显式 `origin <branch>`（不依赖 upstream）。远端不可读时不做改名，避免瞬时故障改坏本地分支。
 
 ## 测试
 

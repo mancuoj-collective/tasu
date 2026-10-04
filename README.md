@@ -134,13 +134,23 @@ tasu                            # next start clones/syncs
 ```
 
 `tasu remote` accepts a full URL, an SSH address (`git@…`), a local path, or a
-GitHub `owner/repo` shorthand. After setting it, tasu checks that the remote is
-reachable and that credentials work; over HTTPS this uses the token your git
-credential helper already stores. If the check fails, it prints how to fix it.
+GitHub `owner/repo` shorthand. It checks that the remote is reachable and that
+credentials work **before** saving it; over HTTPS this uses the token your git
+credential helper already stores. If the check fails, the remote is **not**
+saved (and cleared if it was set before), so tasu never gets stuck retrying an
+unreachable repo — it prints the real git error and how to fix it.
 
 The repository does not have to be empty: if it already has commits (say a
 README), tasu adopts that history on first sync and pushes the local board on
 top, keeping both.
+
+### The sync branch
+
+All machines sync on **one branch**, so a Windows box whose git defaults to
+`master` cannot split your data across two branches. When the remote already
+has a default branch, tasu adopts its name (and renames the local branch to
+match); otherwise it uses **`main`**. A machine's `init.defaultBranch` setting
+never reaches the data repository.
 
 `tasu remote` with no argument prints the current remote, and
 `tasu remote --clear` turns syncing off. The data directory and sync remote are

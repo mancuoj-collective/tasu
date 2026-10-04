@@ -9,6 +9,11 @@ use std::time::{Duration, Instant};
 const NETWORK_TIMEOUT: Duration = Duration::from_secs(20);
 const PUSH_TIMEOUT: Duration = Duration::from_secs(8);
 
+/// Branch used when the remote has no branch to adopt. A fixed name keeps every
+/// machine on the same branch: the host's `init.defaultBranch` (often `master`
+/// on Windows) must never leak into the data repository.
+const DEFAULT_BRANCH: &str = "main";
+
 /// Git-backed sync for a single writer.
 ///
 /// The data directory *is* the repository working tree. All git work happens on
@@ -108,10 +113,13 @@ fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), String> {
     if repo.join(".git").exists() {
         ensure_gitignore(repo);
         if let Some(url) = remote {
-            // set-url works on an existing origin (unlike `remote add`, which
-            // silently fails and leaves a stale URL).
-            if git(repo, &["remote", "set-url", "origin", url]).is_err() {
-                let _ = git(repo, &["remote", "add", "origin", url]);
+            set_origin(repo, url);
+            // All machines must agree on one branch. Adopt the remote's default
+            // branch when it already has one; otherwise fall back to a fixed
+            // name. Only reconcile when the remote is actually readable, so a
+            // transient network failure never renames a healthy local branch.
+            if let Some(branch) = remote_default_branch(url) {
+                name_branch(repo, &branch);
             }
         }
         return Ok(());
@@ -130,6 +138,9 @@ fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), String> {
         .unwrap_or(true);
     if empty && clone(url, repo).is_ok() {
         ensure_gitignore(repo);
+        // The clone may have left an unborn HEAD when the remote's symbolic
+        // `HEAD` points at a branch that does not exist; settle onto a real one.
+        settle_head(repo, &target_branch(url));
         return Ok(());
     }
 
@@ -139,18 +150,32 @@ fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), String> {
     // unreliable across git builds.
     let board = std::fs::read(repo.join("todos.json")).ok();
 
+    // Name the branch before the first commit: `git init` alone would use the
+    // host's default (e.g. `master`), splitting the remote into two branches.
+    let branch = target_branch(url);
     git(repo, &["init", "-q"])?;
+    name_branch(repo, &branch);
     let _ = git(repo, &["remote", "add", "origin", url]);
 
     // Fetch the remote's current tip into a private ref, independent of
     // remote-tracking branches (which are not always created), then adopt its
     // tree as the base.
-    if git(
+    let fetched = git(
         repo,
-        &["fetch", "--quiet", "origin", "+HEAD:refs/tasu/remote"],
+        &[
+            "fetch",
+            "--quiet",
+            "origin",
+            &format!("+refs/heads/{branch}:refs/tasu/remote"),
+        ],
     )
     .is_ok()
-    {
+        || git(
+            repo,
+            &["fetch", "--quiet", "origin", "+HEAD:refs/tasu/remote"],
+        )
+        .is_ok();
+    if fetched {
         let _ = git(repo, &["reset", "--hard", "refs/tasu/remote"]);
     }
 
@@ -176,6 +201,128 @@ fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), String> {
     Ok(())
 }
 
+/// Point `origin` at `url`. `set-url` works on an existing origin, unlike
+/// `remote add`, which silently fails and leaves a stale URL.
+fn set_origin(repo: &Path, url: &str) {
+    if git(repo, &["remote", "set-url", "origin", url]).is_err() {
+        let _ = git(repo, &["remote", "add", "origin", url]);
+    }
+}
+
+/// The branch tasu syncs on: the remote's default branch when it already has
+/// one, otherwise [`DEFAULT_BRANCH`].
+fn target_branch(remote: &str) -> String {
+    remote_default_branch(remote).unwrap_or_else(|| DEFAULT_BRANCH.to_string())
+}
+
+/// The remote's default branch, read from its symbolic `HEAD`. `None` when the
+/// remote is empty, unreachable, or has an unusual layout.
+fn remote_default_branch(remote: &str) -> Option<String> {
+    let mut cmd = Command::new("git");
+    cmd.args(["ls-remote", "--symref", remote, "HEAD"]);
+    let output = run_output(&mut cmd, NETWORK_TIMEOUT).ok()?;
+    // "ref: refs/heads/main\tHEAD"
+    output.lines().find_map(|line| {
+        let name = line
+            .strip_prefix("ref:")?
+            .trim()
+            .strip_prefix("refs/heads/")?;
+        name.split_whitespace().next().map(str::to_string)
+    })
+}
+
+/// The current branch, or `None` on a detached HEAD or an error.
+fn current_branch(repo: &Path) -> Option<String> {
+    let output = git_cmd(repo, &["symbolic-ref", "--short", "-q", "HEAD"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    (!name.is_empty()).then_some(name)
+}
+
+/// Make sure a freshly cloned repository is on a real branch. When the clone
+/// checked something out, normalise the name; otherwise check out the remote
+/// branch we expected, or any branch it does have.
+fn settle_head(repo: &Path, target: &str) {
+    if git_ok(repo, &["rev-parse", "--verify", "--quiet", "HEAD"]) {
+        name_branch(repo, target);
+        return;
+    }
+    if git_ok(
+        repo,
+        &[
+            "show-ref",
+            "--verify",
+            "--quiet",
+            &format!("refs/remotes/origin/{target}"),
+        ],
+    ) {
+        let _ = git(repo, &["checkout", "--quiet", target]);
+    } else if let Some(branch) = first_remote_branch(repo) {
+        let _ = git(repo, &["checkout", "--quiet", &branch]);
+    } else {
+        name_branch(repo, target);
+    }
+}
+
+/// The first branch under `origin/`, for a remote whose symbolic `HEAD` is
+/// stale. `None` when the remote has no branches.
+fn first_remote_branch(repo: &Path) -> Option<String> {
+    let output = git_cmd(
+        repo,
+        &[
+            "for-each-ref",
+            "--format=%(refname:short)",
+            "refs/remotes/origin/",
+        ],
+    )
+    .output()
+    .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::trim)
+        .filter(|name| !name.is_empty() && *name != "origin/HEAD")
+        .filter_map(|name| name.strip_prefix("origin/"))
+        .map(str::to_string)
+        .next()
+}
+
+/// Rename the local branch to `target` (or name an unborn HEAD), so pushes land
+/// on the branch every machine agreed on. A no-op when already correct.
+fn name_branch(repo: &Path, target: &str) {
+    let Some(current) = current_branch(repo) else {
+        let _ = git(
+            repo,
+            &["symbolic-ref", "HEAD", &format!("refs/heads/{target}")],
+        );
+        return;
+    };
+    if current == target {
+        return;
+    }
+    if git_ok(repo, &["rev-parse", "--verify", "--quiet", "HEAD"]) {
+        // A born branch: `branch -m` moves the ref and HEAD together. If the
+        // target already exists locally we cannot rename, so switch instead.
+        if git(repo, &["branch", "-m", target]).is_ok() {
+            eprintln!("tasu: sync branch {current} renamed to {target}");
+        } else {
+            let _ = git(repo, &["checkout", "--quiet", target]);
+        }
+    } else {
+        // Unborn HEAD (fresh init or an empty clone): just point HEAD.
+        let _ = git(
+            repo,
+            &["symbolic-ref", "HEAD", &format!("refs/heads/{target}")],
+        );
+    }
+}
+
 /// Keep machine-local files out of the synced repository. On macOS and Windows
 /// the config directory equals the data directory, so `config.json` would
 /// otherwise be committed and pushed.
@@ -198,7 +345,27 @@ fn pull(repo: &Path, remote: Option<&str>) -> Result<(), String> {
     if remote.is_none() {
         return Ok(());
     }
-    let mut cmd = git_cmd(repo, &["pull", "--rebase", "--autostash", "--quiet"]);
+    // Nothing to pull until the first commit exists (fresh remote).
+    if !git_ok(repo, &["rev-parse", "--verify", "--quiet", "HEAD"]) {
+        return Ok(());
+    }
+    let Some(branch) = current_branch(repo) else {
+        return Ok(());
+    };
+    // Name the branch explicitly: a repo adopted from a remote has no upstream
+    // configured yet, and a bare `git pull` would fail with "no tracking
+    // information".
+    let mut cmd = git_cmd(
+        repo,
+        &[
+            "pull",
+            "--rebase",
+            "--autostash",
+            "--quiet",
+            "origin",
+            &branch,
+        ],
+    );
     match run_bounded(&mut cmd, NETWORK_TIMEOUT) {
         Ok(()) => Ok(()),
         Err(err) => {
@@ -233,7 +400,19 @@ fn commit_push(repo: &Path, remote: Option<&str>) -> Result<(), String> {
         Err(message) if message.contains("nothing to commit") => {}
         Err(message) => return Err(message),
     }
-    let mut cmd = git_cmd(repo, &["push", "--quiet", "-u", "origin", "HEAD"]);
+    // Push to the explicit branch name instead of a bare `HEAD`, so a stray
+    // local branch can never create a second branch on the remote.
+    let branch = current_branch(repo).unwrap_or_else(|| DEFAULT_BRANCH.to_string());
+    let mut cmd = git_cmd(
+        repo,
+        &[
+            "push",
+            "--quiet",
+            "-u",
+            "origin",
+            &format!("HEAD:refs/heads/{branch}"),
+        ],
+    );
     run_bounded(&mut cmd, PUSH_TIMEOUT)?;
     Ok(())
 }
@@ -249,6 +428,13 @@ fn git(repo: &Path, args: &[&str]) -> Result<(), String> {
         .output()
         .map_err(|err| err.to_string())?;
     check(output)
+}
+
+fn git_ok(repo: &Path, args: &[&str]) -> bool {
+    git_cmd(repo, args)
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
 }
 
 /// Run a command with a deadline, killing it if it overruns. Used for the
@@ -271,6 +457,51 @@ fn run_bounded(cmd: &mut Command, timeout: Duration) -> Result<(), String> {
                     let _ = stderr.read_to_string(&mut message);
                 }
                 let message = message.trim();
+                return Err(if message.is_empty() {
+                    "git command failed".to_string()
+                } else {
+                    message.to_string()
+                });
+            }
+            Ok(None) => {
+                if Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err("git command timed out".to_string());
+                }
+                thread::sleep(Duration::from_millis(50));
+            }
+            Err(err) => return Err(err.to_string()),
+        }
+    }
+}
+
+/// Like [`run_bounded`], but returns stdout so a caller can parse it. Only for
+/// small outputs (`ls-remote`), since stdout is read after the process exits.
+fn run_output(cmd: &mut Command, timeout: Duration) -> Result<String, String> {
+    let mut child = cmd
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|err| err.to_string())?;
+
+    let deadline = Instant::now() + timeout;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let mut stdout = String::new();
+                let mut stderr = String::new();
+                if let Some(mut out) = child.stdout.take() {
+                    let _ = out.read_to_string(&mut stdout);
+                }
+                if let Some(mut err) = child.stderr.take() {
+                    let _ = err.read_to_string(&mut stderr);
+                }
+                if status.success() {
+                    return Ok(stdout);
+                }
+                let message = stderr.trim();
                 return Err(if message.is_empty() {
                     "git command failed".to_string()
                 } else {
@@ -327,6 +558,49 @@ mod tests {
             .output()
             .unwrap();
         String::from_utf8_lossy(&output.stdout).into_owned()
+    }
+
+    /// Seed a bare remote with a commit on `branch` and point its `HEAD` there,
+    /// the way a hosting provider marks a default branch.
+    fn seeded_remote(dir: &Path, branch: &str) -> String {
+        let path = dir.join("remote.git");
+        assert!(
+            Command::new("git")
+                .args(["init", "--bare", "--quiet"])
+                .arg(&path)
+                .status()
+                .unwrap()
+                .success()
+        );
+        let url = path.to_string_lossy().into_owned();
+
+        let seed = dir.join("seed");
+        std::fs::create_dir_all(&seed).unwrap();
+        std::fs::write(seed.join("README.md"), "# tasu data\n").unwrap();
+        git(&seed, &["init", "-q", "-b", branch]).unwrap();
+        git(&seed, &["add", "-A"]).unwrap();
+        git(
+            &seed,
+            &[
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@t",
+                "commit",
+                "-q",
+                "-m",
+                "seed",
+            ],
+        )
+        .unwrap();
+        git(&seed, &["remote", "add", "origin", &url]).unwrap();
+        git(&seed, &["push", "-q", "origin", branch]).unwrap();
+        let _ = Command::new("git")
+            .arg("--git-dir")
+            .arg(&path)
+            .args(["symbolic-ref", "HEAD", &format!("refs/heads/{branch}")])
+            .status();
+        url
     }
 
     #[test]
@@ -415,6 +689,113 @@ mod tests {
             "remote history was lost: {files}"
         );
         assert!(files.contains("todos.json"), "local board was not pushed");
+    }
+
+    #[test]
+    fn graft_follows_the_remote_default_branch() {
+        let dir = tempfile::tempdir().unwrap();
+        let remote = seeded_remote(dir.path(), "trunk");
+
+        // First machine with local data but no repository yet. The host's
+        // `init.defaultBranch` must not decide the branch name.
+        let data = dir.path().join("data");
+        std::fs::create_dir_all(&data).unwrap();
+        std::fs::write(data.join("todos.json"), "{\"version\":1,\"tasks\":[]}").unwrap();
+
+        ensure_repo(&data, Some(&remote)).unwrap();
+        commit_push(&data, Some(&remote)).unwrap();
+
+        assert_eq!(current_branch(&data).as_deref(), Some("trunk"));
+        let refs = remote_refs(&remote);
+        assert!(refs.contains("refs/heads/trunk"), "expected trunk: {refs}");
+        assert!(!refs.contains("refs/heads/master"), "stray branch: {refs}");
+        assert!(!refs.contains("refs/heads/main"), "stray branch: {refs}");
+    }
+
+    #[test]
+    fn a_fresh_remote_gets_the_fixed_branch_not_the_host_default() {
+        let dir = tempfile::tempdir().unwrap();
+        // Empty remote: nothing to adopt, so tasu picks the fixed name.
+        let remote = bare_remote(dir.path());
+        let data = dir.path().join("data");
+        std::fs::create_dir_all(&data).unwrap();
+        std::fs::write(data.join("todos.json"), "{\"version\":1,\"tasks\":[]}").unwrap();
+
+        ensure_repo(&data, Some(&remote)).unwrap();
+        commit_push(&data, Some(&remote)).unwrap();
+
+        assert_eq!(current_branch(&data).as_deref(), Some("main"));
+        let refs = remote_refs(&remote);
+        assert!(refs.contains("refs/heads/main"), "expected main: {refs}");
+        assert!(!refs.contains("refs/heads/master"), "stray branch: {refs}");
+    }
+
+    #[test]
+    fn an_existing_repo_is_reconciled_with_the_remote_branch() {
+        let dir = tempfile::tempdir().unwrap();
+        // The remote lives on `main`, but this machine's repo was created under
+        // a git whose default branch was `master`.
+        let remote = seeded_remote(dir.path(), "main");
+        let data = dir.path().join("data");
+        std::fs::create_dir_all(&data).unwrap();
+        std::fs::write(data.join("todos.json"), "{\"version\":1,\"tasks\":[]}").unwrap();
+        git(&data, &["init", "-q"]).unwrap();
+        git(&data, &["add", "-A"]).unwrap();
+        git(
+            &data,
+            &[
+                "-c",
+                "user.name=tasu",
+                "-c",
+                "user.email=t@t",
+                "commit",
+                "-q",
+                "-m",
+                "local",
+            ],
+        )
+        .unwrap();
+        git(&data, &["remote", "add", "origin", &remote]).unwrap();
+
+        ensure_repo(&data, Some(&remote)).unwrap();
+
+        assert_eq!(current_branch(&data).as_deref(), Some("main"));
+    }
+
+    #[test]
+    fn an_unreachable_remote_does_not_rename_the_branch() {
+        let dir = tempfile::tempdir().unwrap();
+        let data = dir.path().join("data");
+        std::fs::create_dir_all(&data).unwrap();
+        std::fs::write(data.join("todos.json"), "{\"version\":1,\"tasks\":[]}").unwrap();
+        git(&data, &["init", "-q", "-b", "master"]).unwrap();
+        git(&data, &["add", "-A"]).unwrap();
+        git(
+            &data,
+            &[
+                "-c",
+                "user.name=tasu",
+                "-c",
+                "user.email=t@t",
+                "commit",
+                "-q",
+                "-m",
+                "local",
+            ],
+        )
+        .unwrap();
+
+        let missing = dir.path().join("nope.git");
+        ensure_repo(&data, Some(&missing.to_string_lossy())).unwrap();
+
+        assert_eq!(current_branch(&data).as_deref(), Some("master"));
+    }
+
+    #[test]
+    fn probe_remote_rejects_a_missing_repository() {
+        let dir = tempfile::tempdir().unwrap();
+        let missing = dir.path().join("nope.git");
+        assert!(probe_remote(&missing.to_string_lossy()).is_err());
     }
 
     #[test]
