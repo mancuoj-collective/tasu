@@ -26,7 +26,9 @@ pub fn task_line(task: &Task, theme: &Theme, now: DateTime<Local>) -> Line<'stat
         Span::styled(task.title.clone(), title_style),
     ];
 
-    if task.is_open() && task.bucket != Bucket::Later {
+    // The carry badge only makes sense on `Week`: `settle` guarantees a `Today`
+    // task is fresh, and `Later` is already old.
+    if task.is_open() && task.bucket == Bucket::Week {
         let days = (now.date_naive() - task.bucket_since.date_naive()).num_days();
         if days >= 1 {
             let style = if days >= 3 {
@@ -91,4 +93,36 @@ fn week_meta(now: DateTime<Local>) -> String {
         .map(|day| day.iso_week().week())
         .unwrap_or(current);
     format!("{current}/{last}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    fn dt(day: u32) -> DateTime<Local> {
+        Local
+            .with_ymd_and_hms(2026, 10, day, 9, 0, 0)
+            .single()
+            .unwrap()
+    }
+
+    fn text(line: &Line<'static>) -> String {
+        line.spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect()
+    }
+
+    #[test]
+    fn carry_badge_appears_only_on_week() {
+        let now = dt(8);
+
+        let today = Task::new("fresh", dt(7));
+        assert!(!text(&task_line(&today, &Theme::DARK, now)).contains("1d"));
+
+        let mut week = Task::new("slipped", dt(7));
+        week.bucket = Bucket::Week;
+        assert!(text(&task_line(&week, &Theme::DARK, now)).contains("1d"));
+    }
 }

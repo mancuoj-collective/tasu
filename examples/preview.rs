@@ -30,7 +30,7 @@ fn main() {
     let now = dt(8);
     let mut tasks = vec![
         task("Nand2Tetris ch6", Bucket::Today, dt(8)),
-        task("learn GPUI events", Bucket::Today, dt(7)),
+        task("learn GPUI events", Bucket::Today, dt(8)),
         task("refactor tasu store", Bucket::Week, dt(4)),
         task("write the README", Bucket::Week, dt(6)),
     ];
