@@ -50,8 +50,7 @@ fn draw_column(
     base: usize,
     theme: &Theme,
 ) {
-    let [title, rule] =
-        components::header_lines(bucket, theme, model.now, area.width, indices.len());
+    let [title, rule] = components::header_lines(bucket, theme, model.now, area.width);
     let mut lines: Vec<Line> = vec![title, rule];
 
     let body_height = area.height.saturating_sub(lines.len() as u16) as usize;

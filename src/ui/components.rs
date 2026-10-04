@@ -41,23 +41,20 @@ pub fn task_line(task: &Task, theme: &Theme, now: DateTime<Local>) -> Line<'stat
     Line::from(spans)
 }
 
-/// Two lines that open a section: a label with its count, then a full-width
-/// rule. The rule is what makes the buckets legible at a glance.
+/// Two lines that open a section: a label (with the ISO week for `WEEK`), then
+/// a full-width rule. The rule is what makes the buckets legible at a glance.
 pub fn header_lines(
     bucket: Bucket,
     theme: &Theme,
     now: DateTime<Local>,
     width: u16,
-    count: usize,
 ) -> [Line<'static>; 2] {
-    let count_span = Span::styled(format!("  \u{b7} {count}"), theme.muted());
     let title = match bucket {
-        Bucket::Today => Line::from(vec![Span::styled("TODAY", theme.today()), count_span]),
-        Bucket::Later => Line::from(vec![Span::styled("LATER", theme.accent()), count_span]),
+        Bucket::Today => Line::from(Span::styled("TODAY", theme.today())),
+        Bucket::Later => Line::from(Span::styled("LATER", theme.accent())),
         Bucket::Week => Line::from(vec![
             Span::styled("WEEK", theme.accent()),
             Span::styled(format!("  {}", week_meta(now)), theme.muted()),
-            count_span,
         ]),
     };
     let rule = Line::from(Span::styled(

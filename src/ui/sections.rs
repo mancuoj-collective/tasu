@@ -28,8 +28,7 @@ pub fn draw(f: &mut Frame, model: &Model, area: Rect, theme: &Theme) {
         if position > 0 {
             lines.push(Line::default());
         }
-        let [title, rule] =
-            components::header_lines(*bucket, theme, model.now, area.width, indices.len());
+        let [title, rule] = components::header_lines(*bucket, theme, model.now, area.width);
         lines.push(title);
         lines.push(rule);
 
