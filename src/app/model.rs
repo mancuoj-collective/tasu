@@ -53,6 +53,8 @@ pub struct UiState {
     pub history_view: HistoryView,
     /// Background sync status, refreshed from the runtime each frame.
     pub sync: SyncStatus,
+    /// Message from the last failed sync, shown in help.
+    pub sync_error: Option<String>,
     /// A fatal-ish error (e.g. the board could not be written) shown in the
     /// footer, so data loss is never silent.
     pub error: Option<String>,
@@ -74,6 +76,7 @@ impl Default for UiState {
             done_filter: Input::default(),
             history_view: HistoryView::Done,
             sync: SyncStatus::Local,
+            sync_error: None,
             error: None,
             tick: 0,
             help_scroll: Cell::new(0),

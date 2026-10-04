@@ -19,10 +19,16 @@ impl Config {
             .or(file.data_dir)
             .unwrap_or_else(default_data_dir);
 
-        let remote = std::env::var("TASU_REMOTE")
-            .ok()
-            .filter(|url| !url.trim().is_empty())
-            .or(file.remote);
+        let remote = match std::env::var("TASU_REMOTE") {
+            Ok(url) if !url.trim().is_empty() => Some(url),
+            Ok(_) => None,
+            Err(std::env::VarError::NotUnicode(_)) => {
+                eprintln!("tasu: ignoring non-UTF-8 TASU_REMOTE");
+                None
+            }
+            Err(std::env::VarError::NotPresent) => None,
+        }
+        .or(file.remote);
 
         Self { data_dir, remote }
     }

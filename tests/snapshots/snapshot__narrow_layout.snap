@@ -1,0 +1,24 @@
+---
+source: tests/snapshot.rs
+expression: "render(&model, 84, 20)"
+---
+ TODAY                                                                              
+ ────────────────────────────────────────────────────────────────────────────────── 
+  ○ Nand2Tetris chapter 6                                                           
+  ○ learn GPUI events                                                               
+                                                                                    
+ THIS WEEK  41/53                                                                   
+ ────────────────────────────────────────────────────────────────────────────────── 
+  ○ write the README                                                                
+                                                                                    
+ LATER                                                                              
+ ────────────────────────────────────────────────────────────────────────────────── 
+  ○ read the ratatui source                                                         
+                                                                                    
+                                                                                    
+                                                                                    
+                                                                                    
+                                                                                    
+                                                                                    
+                                                                                    
+ ? help  q quit  a add  c history  [/] bucket

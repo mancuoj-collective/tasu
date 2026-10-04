@@ -1,0 +1,24 @@
+---
+source: tests/snapshot.rs
+expression: "render(&model, 120, 20)"
+---
+ TODAY                                 │ THIS WEEK  41/53                       │ LATER                                 
+ ───────────────────────────────────── │ ────────────────────────────────────── │ ───────────────────────────────────── 
+  ○ Nand2Tetris chapter 6              │  ○ write the README                    │  ○ read the ratatui source            
+  ○ learn GPUI events                  │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+ ? help  q quit  a add  c history  [/] bucket

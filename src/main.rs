@@ -62,6 +62,7 @@ fn run_tui(config: Config) -> Result<()> {
     let result = ratatui::run(|terminal| {
         while !model.should_quit {
             model.ui.sync = runtime.sync_status;
+            model.ui.sync_error = runtime.sync_error.clone();
             terminal
                 .draw(|frame| ui::draw(frame, &model, &theme, &board_path, remote.as_deref()))?;
 
@@ -92,6 +93,8 @@ struct Runtime {
     last_change: Instant,
     retry_at: Option<Instant>,
     sync_status: SyncStatus,
+    /// Last sync error message, surfaced in help.
+    sync_error: Option<String>,
     /// Number of jobs the worker is still running.
     in_flight: usize,
     /// A previous sync failed; pull before the next push to recover a
@@ -118,6 +121,7 @@ impl Runtime {
             last_change: Instant::now(),
             retry_at: None,
             sync_status,
+            sync_error: None,
             in_flight: 0,
             needs_pull: false,
         }
@@ -131,7 +135,10 @@ impl Runtime {
                     self.in_flight += 1;
                     self.sync_status = SyncStatus::Syncing;
                 }
-                Err(_) => self.sync_status = SyncStatus::Failed,
+                Err(err) => {
+                    self.sync_status = SyncStatus::Failed;
+                    self.sync_error = Some(err);
+                }
             }
         }
     }
@@ -169,13 +176,18 @@ impl Runtime {
         if let Some(sync) = &self.sync {
             while let Some(result) = sync.poll() {
                 self.in_flight = self.in_flight.saturating_sub(1);
-                if result.is_err() {
-                    self.dirty = true;
-                    self.needs_pull = true;
-                    self.retry_at = Some(Instant::now() + RETRY);
-                    self.sync_status = SyncStatus::Failed;
-                } else {
-                    self.sync_status = SyncStatus::Idle;
+                match result {
+                    Ok(()) => {
+                        self.sync_status = SyncStatus::Idle;
+                        self.sync_error = None;
+                    }
+                    Err(err) => {
+                        self.dirty = true;
+                        self.needs_pull = true;
+                        self.retry_at = Some(Instant::now() + RETRY);
+                        self.sync_status = SyncStatus::Failed;
+                        self.sync_error = Some(err);
+                    }
                 }
             }
             if self.dirty
@@ -198,6 +210,7 @@ impl Runtime {
                     self.sync_status = SyncStatus::Syncing;
                 } else {
                     self.sync_status = SyncStatus::Failed;
+                    self.sync_error = Some("sync worker stopped".to_string());
                 }
             }
         }

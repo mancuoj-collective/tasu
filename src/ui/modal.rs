@@ -186,6 +186,17 @@ fn help_modal(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path, syn
             theme.accent(),
         )));
     }
+
+    // Keep the sync error at the top so it is visible even on short terminals.
+    if let Some(err) = &model.ui.sync_error {
+        let first = err.lines().next().unwrap_or(err);
+        let text = truncate_middle(&format!("!  {first}"), inner);
+        let pad = inner.saturating_sub(text.width()) / 2;
+        lines.push(Line::from(Span::styled(
+            format!("{}{text}", " ".repeat(pad)),
+            theme.warn(),
+        )));
+    }
     lines.push(Line::default());
 
     let label_width = inner.saturating_sub(10);

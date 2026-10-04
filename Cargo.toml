@@ -13,6 +13,12 @@ keywords = ["tui", "todo", "ratatui", "terminal", "cli"]
 categories = ["command-line-utilities"]
 authors = ["mancuoj <mancuoj@gmail.com>"]
 
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+
 [dependencies]
 anyhow = "1.0.104"
 chrono = { version = "0.4.42", features = ["serde"] }
@@ -27,6 +33,7 @@ tui-input = "0.15.4"
 unicode-width = "0.2.2"
 
 [dev-dependencies]
+insta = "1"
 tempfile = "3"
 
 # Read the optimization guideline for more details: https://ratatui.rs/recipes/apps/release-your-app/#optimizations

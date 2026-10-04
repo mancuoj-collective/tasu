@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 
+//! tasu's internals: the aging domain, persistence, git sync and the TUI.
+
 pub mod app;
 pub mod cli;
 pub mod command;

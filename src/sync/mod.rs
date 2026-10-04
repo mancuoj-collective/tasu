@@ -181,8 +181,10 @@ fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), String> {
 /// otherwise be committed and pushed.
 fn ensure_gitignore(repo: &Path) {
     let path = repo.join(".gitignore");
-    if !path.exists() {
-        let _ = std::fs::write(&path, "config.json\n*.tmp\n*.corrupt-*\n");
+    if !path.exists()
+        && let Err(err) = std::fs::write(&path, "config.json\n*.tmp\n*.corrupt-*\n")
+    {
+        eprintln!("tasu: could not write {}: {err}", path.display());
     }
 }
 
@@ -197,7 +199,15 @@ fn pull(repo: &Path, remote: Option<&str>) -> Result<(), String> {
         return Ok(());
     }
     let mut cmd = git_cmd(repo, &["pull", "--rebase", "--autostash", "--quiet"]);
-    run_bounded(&mut cmd, NETWORK_TIMEOUT)
+    match run_bounded(&mut cmd, NETWORK_TIMEOUT) {
+        Ok(()) => Ok(()),
+        Err(err) => {
+            // A conflicting rebase would otherwise leave the repo stuck
+            // mid-operation; abort back to a clean state and report.
+            let _ = git(repo, &["rebase", "--abort"]);
+            Err(err)
+        }
+    }
 }
 
 fn commit_push(repo: &Path, remote: Option<&str>) -> Result<(), String> {
