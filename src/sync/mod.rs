@@ -139,8 +139,9 @@ fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), String> {
                 "tasu: local",
             ],
         );
-        if git(repo, &["fetch", "--quiet", "origin"]).is_ok() {
-            let _ = git(repo, &["remote", "set-head", "origin", "--auto"]);
+        if git(repo, &["fetch", "--quiet", "origin"]).is_ok()
+            && let Some(target) = remote_branch(repo)
+        {
             let _ = git(
                 repo,
                 &[
@@ -151,7 +152,7 @@ fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), String> {
                     "--quiet",
                     "-m",
                     "tasu: merge",
-                    "origin/HEAD",
+                    &target,
                 ],
             );
         }
@@ -213,6 +214,46 @@ fn git(repo: &Path, args: &[&str]) -> Result<(), String> {
         .output()
         .map_err(|err| err.to_string())?;
     check(output)
+}
+
+fn git_stdout(repo: &Path, args: &[&str]) -> Result<String, String> {
+    let output = git_cmd(repo, args)
+        .output()
+        .map_err(|err| err.to_string())?;
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+    }
+}
+
+/// Pick a fetched remote branch to merge into the local history: the one
+/// matching the local branch when possible, else the first. Avoids relying on
+/// `origin/HEAD`, which some git setups do not maintain.
+fn remote_branch(repo: &Path) -> Option<String> {
+    let local = git_stdout(repo, &["symbolic-ref", "--short", "HEAD"]).unwrap_or_default();
+    let refs = git_stdout(
+        repo,
+        &[
+            "for-each-ref",
+            "--format=%(refname:short)",
+            "refs/remotes/origin",
+        ],
+    )
+    .unwrap_or_default();
+
+    let mut branches: Vec<String> = refs
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.ends_with("/HEAD"))
+        .map(str::to_string)
+        .collect();
+
+    let preferred = format!("origin/{}", local.trim());
+    if let Some(position) = branches.iter().position(|branch| *branch == preferred) {
+        return Some(branches.remove(position));
+    }
+    branches.into_iter().next()
 }
 
 /// Run a command with a deadline, killing it if it overruns. Used for the
