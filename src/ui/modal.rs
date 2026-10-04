@@ -128,14 +128,15 @@ fn help_modal(f: &mut Frame, theme: &Theme, data_path: &Path) {
     let (key_style, label_style) = theme.key_hint();
     let entries = [
         ("j / k", "move"),
+        ("h / l", "previous / next section"),
         ("g / G", "top / bottom"),
         ("space", "done"),
         ("a", "add (to today)"),
         ("e", "edit title"),
         ("t", "move to today"),
-        ("[ / ]", "bucket closer / farther"),
+        ("[ / ]", "send to previous / next bucket"),
         ("x", "archive"),
-        ("l", "expand / fold later"),
+        ("z", "expand / fold later"),
         ("c", "completed"),
         ("q / esc", "quit"),
     ];

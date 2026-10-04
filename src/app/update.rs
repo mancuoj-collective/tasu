@@ -87,13 +87,15 @@ fn normal(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effect>
                 effects.push(Effect::Save);
             }
         }
-        KeyCode::Char(']') => {
-            if selected_mutates(model, |board, index| board.move_bucket(index, 1, now)) {
+        KeyCode::Char('h') | KeyCode::Left => model.cursor_bucket(-1),
+        KeyCode::Char('l') | KeyCode::Right => model.cursor_bucket(1),
+        KeyCode::Char('[') => {
+            if selected_mutates(model, |board, index| board.move_bucket(index, -1, now)) {
                 effects.push(Effect::Save);
             }
         }
-        KeyCode::Char('[') => {
-            if selected_mutates(model, |board, index| board.move_bucket(index, -1, now)) {
+        KeyCode::Char(']') => {
+            if selected_mutates(model, |board, index| board.move_bucket(index, 1, now)) {
                 effects.push(Effect::Save);
             }
         }
@@ -107,7 +109,7 @@ fn normal(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effect>
             model.ui.done_cursor = 0;
             model.ui.done_filter.reset();
         }
-        KeyCode::Char('l') => {
+        KeyCode::Char('z') => {
             model.ui.later_expanded = !model.ui.later_expanded;
             model.clamp_cursor();
         }
@@ -288,6 +290,19 @@ mod tests {
     }
 
     #[test]
+    fn h_and_l_move_the_cursor_between_buckets() {
+        let mut model = model();
+        model.board.add("today task", at(2026, 10, 5));
+        model.board.add("later task", at(2026, 10, 5));
+        model.board.move_bucket(1, 2, at(2026, 10, 5));
+
+        update(&mut model, press(KeyCode::Char('l')), at(2026, 10, 5));
+        assert_eq!(model.selected(), Some(1), "l should jump to Later");
+        update(&mut model, press(KeyCode::Char('h')), at(2026, 10, 5));
+        assert_eq!(model.selected(), Some(0), "h should jump back to Today");
+    }
+
+    #[test]
     fn later_collapses_then_expands() {
         use crate::app::Row;
         let mut model = model();
@@ -301,7 +316,7 @@ mod tests {
         assert_eq!(model.selectable_len(), Model::LATER_VISIBLE);
         assert!(model.rows().iter().any(|row| matches!(row, Row::Fold(2))));
 
-        update(&mut model, press(KeyCode::Char('l')), at(2026, 10, 5));
+        update(&mut model, press(KeyCode::Char('z')), at(2026, 10, 5));
         assert_eq!(model.selectable_len(), 7);
     }
 

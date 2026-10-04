@@ -107,10 +107,12 @@ fn hint_line(model: &Model, theme: &Theme) -> Line<'static> {
         Mode::Normal => &[
             ("q", "quit"),
             ("j/k", "move"),
+            ("h/l", "section"),
             ("space", "done"),
             ("a", "add"),
             ("[/]", "bucket"),
             ("x", "archive"),
+            ("z", "fold"),
             ("c", "history"),
         ],
         Mode::Add | Mode::Edit => &[("enter", "save"), ("esc", "cancel")],

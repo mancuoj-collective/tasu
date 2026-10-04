@@ -157,6 +157,42 @@ impl Model {
         self.ui.cursor = self.selectable_len().saturating_sub(1);
     }
 
+    /// Move the cursor to the nearest non-empty bucket in the given direction,
+    /// keeping the row offset within the bucket when possible. In the wide
+    /// kanban this is literally left/right between columns.
+    pub fn cursor_bucket(&mut self, delta: i32) {
+        let Some((position, local)) = self.cursor_bucket_position() else {
+            return;
+        };
+        let mut target = position as i32 + delta;
+        while (0..Self::BUCKETS.len() as i32).contains(&target) {
+            let indices = self.bucket_view(Self::BUCKETS[target as usize]).0;
+            if !indices.is_empty() {
+                let base: usize = Self::BUCKETS[..target as usize]
+                    .iter()
+                    .map(|bucket| self.bucket_view(*bucket).0.len())
+                    .sum();
+                self.ui.cursor = base + local.min(indices.len() - 1);
+                return;
+            }
+            target += delta;
+        }
+    }
+
+    /// The cursor's `(bucket position, row within bucket)`, if any.
+    fn cursor_bucket_position(&self) -> Option<(usize, usize)> {
+        let mut seen = 0;
+        for (position, bucket) in Self::BUCKETS.iter().enumerate() {
+            for local in 0..self.bucket_view(*bucket).0.len() {
+                if seen == self.ui.cursor {
+                    return Some((position, local));
+                }
+                seen += 1;
+            }
+        }
+        None
+    }
+
     pub fn clamp_cursor(&mut self) {
         let len = self.selectable_len();
         if len == 0 {
