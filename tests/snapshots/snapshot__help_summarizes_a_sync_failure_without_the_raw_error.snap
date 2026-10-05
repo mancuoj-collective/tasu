@@ -9,17 +9,17 @@ expression: out
            │                       █  █▀█ ▀▀▄ █ █                       │           
  THIS WEEK │                       ▀  ▀ ▀ ▄▄▀ ▀▄▀                       │           
  ──────────│                                                            │────────── 
-  ○ write t│   j / k                                             move   │           
-           │   h / l                          previous / next section   │           
- LATER     │   g / G                                     top / bottom   │           
- ──────────│   space                                             done   │────────── 
+  ○ write t│   j / k / ↓ / ↑                                     move   │           
+           │   h / l / ← / →                  previous / next section   │           
+ LATER     │   g / G / home / end                        top / bottom   │           
+ ──────────│   space / enter                                     done   │────────── 
   ○ read th│   a                                       add (to today)   │           
            │   e                                           edit title   │           
            │   t                                        move to today   │           
            │   [ / ]                   send to previous / next bucket   │           
            │   x                                       drop (archive)   │           
            │   c                                              history   │           
-           │   tab                    history: done / dropped (or ←→)   │           
+           │   ?                                            this help   │           
            │   q / esc                                           quit   │           
            │   ctrl+c                                   quit anywhere   │           
            │                                                            │           

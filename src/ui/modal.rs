@@ -20,6 +20,8 @@ const HELP_MAX_WIDTH: u16 = 62;
 const HELP_PAD_X: u16 = 3;
 const HELP_PAD_TOP: u16 = 1;
 const HELP_PAD_BOTTOM: u16 = 1;
+/// Width of the key column, wide enough for `g / G / home / end`.
+const HELP_KEY_COL: usize = 18;
 /// Border (2) plus vertical padding.
 const HELP_CHROME: u16 = 2 + HELP_PAD_TOP + HELP_PAD_BOTTOM;
 
@@ -161,17 +163,17 @@ fn search_box(f: &mut Frame, model: &Model, theme: &Theme, area: Rect) {
 fn help_modal(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path, sync: Option<&str>) {
     let (key_style, label_style) = theme.key_hint();
     let entries = [
-        ("j / k", "move"),
-        ("h / l", "previous / next section"),
-        ("g / G", "top / bottom"),
-        ("space", "done"),
+        ("j / k / \u{2193} / \u{2191}", "move"),
+        ("h / l / \u{2190} / \u{2192}", "previous / next section"),
+        ("g / G / home / end", "top / bottom"),
+        ("space / enter", "done"),
         ("a", "add (to today)"),
         ("e", "edit title"),
         ("t", "move to today"),
         ("[ / ]", "send to previous / next bucket"),
         ("x", "drop (archive)"),
         ("c", "history"),
-        ("tab", "history: done / dropped (or \u{2190}\u{2192})"),
+        ("?", "this help"),
         ("q / esc", "quit"),
         ("ctrl+c", "quit anywhere"),
     ];
@@ -198,10 +200,10 @@ fn help_modal(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path, syn
     // Breathing room under the logo, none above it.
     lines.push(Line::default());
 
-    let label_width = inner.saturating_sub(10);
+    let label_width = inner.saturating_sub(HELP_KEY_COL);
     for (key, label) in entries {
         lines.push(Line::from(vec![
-            Span::styled(format!("{key:<10}"), key_style),
+            Span::styled(format!("{key:<width$}", width = HELP_KEY_COL), key_style),
             Span::styled(format!("{label:>label_width$}"), label_style),
         ]));
     }

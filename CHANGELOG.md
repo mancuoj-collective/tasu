@@ -11,6 +11,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Connecting a remote from a machine that already has a board no longer
   overwrites the remote's tasks: the two boards are merged (union, exact
   duplicates dropped), so neither machine loses anything.
+- The help overlay lists every binding, including the arrow/enter/home/end
+  aliases and `?` itself; the lone history-tab note is gone (the history keys
+  are shown in its own footer).
 
 ### Fixed
 
