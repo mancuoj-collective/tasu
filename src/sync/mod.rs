@@ -459,10 +459,15 @@ fn clone(url: &str, repo: &Path) -> Result<(), String> {
     run_bounded(&mut cmd, NETWORK_TIMEOUT)
 }
 
+/// Bring the local branch up to date with the remote without ever producing a
+/// rebase conflict. The board is the whole state, so history carries no extra
+/// meaning; the local board is merged **task by task** into the remote's.
 fn pull(repo: &Path, remote: Option<&str>) -> Result<(), String> {
     if remote.is_none() {
         return Ok(());
     }
+    // Clear any rebase/merge an older version may have left in progress.
+    abort_in_progress(repo);
     // Nothing to pull until the first commit exists (fresh remote).
     if !git_ok(repo, &["rev-parse", "--verify", "--quiet", "HEAD"]) {
         return Ok(());
@@ -470,28 +475,55 @@ fn pull(repo: &Path, remote: Option<&str>) -> Result<(), String> {
     let Some(branch) = current_branch(repo) else {
         return Ok(());
     };
-    // Name the branch explicitly: a repo adopted from a remote has no upstream
-    // configured yet, and a bare `git pull` would fail with "no tracking
-    // information".
-    let mut cmd = git_cmd(
+
+    // Fetch the remote branch into a private ref (remote-tracking refs are not
+    // always created), then compare histories.
+    let mut fetch = git_cmd(
         repo,
         &[
-            "pull",
-            "--rebase",
-            "--autostash",
+            "fetch",
             "--quiet",
             "origin",
-            &branch,
+            &format!("+refs/heads/{branch}:refs/tasu/remote"),
         ],
     );
-    match run_bounded(&mut cmd, NETWORK_TIMEOUT) {
-        Ok(()) => Ok(()),
-        Err(err) => {
-            // A conflicting rebase would otherwise leave the repo stuck
-            // mid-operation; abort back to a clean state and report.
-            let _ = git(repo, &["rebase", "--abort"]);
-            Err(err)
-        }
+    run_bounded(&mut fetch, NETWORK_TIMEOUT)?;
+
+    // If the remote is already reachable from HEAD, we are level or ahead.
+    if git_ok(
+        repo,
+        &["merge-base", "--is-ancestor", "refs/tasu/remote", "HEAD"],
+    ) {
+        return Ok(());
+    }
+
+    // The remote is ahead, or the two histories diverged. Rebase would conflict
+    // on `todos.json`; instead adopt the remote's tree and overlay the local
+    // board, merging task by task so nothing is lost and the repo never sticks.
+    let local_board = std::fs::read(repo.join("todos.json")).ok();
+    let remote_board = git_bytes(repo, &["show", "refs/tasu/remote:todos.json"]);
+    let _ = git(repo, &["reset", "--hard", "refs/tasu/remote"]);
+    let board = match (local_board, remote_board) {
+        // Remote is the shared base; the local board fills in and advances.
+        (Some(local), Some(remote)) => crate::store::merge_files(&remote, &local).or(Some(remote)),
+        (Some(local), None) => Some(local),
+        (None, board) => board,
+    };
+    if let Some(bytes) = board.filter(|bytes| !bytes.is_empty()) {
+        std::fs::write(repo.join("todos.json"), bytes).map_err(|err| err.to_string())?;
+    }
+    Ok(())
+}
+
+/// Undo a rebase or merge an older version may have left in progress, so the
+/// repository is never stuck mid-operation.
+fn abort_in_progress(repo: &Path) {
+    let git_dir = repo.join(".git");
+    if git_dir.join("rebase-merge").exists() || git_dir.join("rebase-apply").exists() {
+        let _ = git(repo, &["rebase", "--abort"]);
+    }
+    if git_dir.join("MERGE_HEAD").exists() {
+        let _ = git(repo, &["merge", "--abort"]);
     }
 }
 
@@ -867,6 +899,40 @@ mod tests {
             .unwrap();
     }
 
+    fn commit(repo: &Path, message: &str) {
+        git(repo, &["add", "-A"]).unwrap();
+        git(
+            repo,
+            &[
+                "-c",
+                "user.name=tasu",
+                "-c",
+                "user.email=tasu@localhost",
+                "commit",
+                "-q",
+                "-m",
+                message,
+            ],
+        )
+        .unwrap();
+    }
+
+    fn add_task(repo: &Path, title: &str) {
+        let store = crate::store::Store::new(repo.join("todos.json"));
+        let mut board = store.load();
+        board.add(title, chrono::Local::now());
+        store.save(&board).unwrap();
+    }
+
+    fn clone_repo(remote: &str, into: &Path) {
+        let status = Command::new("git")
+            .args(["clone", "--quiet", remote])
+            .arg(into)
+            .status()
+            .unwrap();
+        assert!(status.success(), "clone failed");
+    }
+
     #[test]
     fn connecting_to_a_remote_that_has_a_board_unions_both() {
         let dir = tempfile::tempdir().unwrap();
@@ -1123,6 +1189,68 @@ mod tests {
             !files.contains("config.json"),
             "config.json is still tracked on the remote: {files}"
         );
+    }
+
+    #[test]
+    fn diverged_histories_merge_instead_of_conflicting() {
+        let dir = tempfile::tempdir().unwrap();
+        let remote = bare_remote(dir.path());
+
+        // Publish a base board on `main` and point the bare HEAD at it, so a
+        // clone checks it out.
+        let seed = dir.path().join("seed");
+        std::fs::create_dir_all(&seed).unwrap();
+        write_board(&seed, &["base"]);
+        git(&seed, &["init", "-q", "-b", "main"]).unwrap();
+        git(&seed, &["add", "-A"]).unwrap();
+        commit(&seed, "base");
+        git(&seed, &["remote", "add", "origin", &remote]).unwrap();
+        git(&seed, &["push", "-q", "origin", "main"]).unwrap();
+        let _ = Command::new("git")
+            .arg("--git-dir")
+            .arg(&remote)
+            .args(["symbolic-ref", "HEAD", "refs/heads/main"])
+            .status();
+
+        // A: a local commit that is never pushed.
+        let a = dir.path().join("a");
+        clone_repo(&remote, &a);
+        add_task(&a, "from A");
+        commit(&a, "a");
+
+        // B: a different commit, pushed.
+        let b = dir.path().join("b");
+        clone_repo(&remote, &b);
+        add_task(&b, "from B");
+        commit(&b, "b");
+        git(&b, &["push", "-q", "origin", "main"]).unwrap();
+
+        // A pulls. The histories diverge; the boards must merge, not conflict.
+        pull(&a, Some(&remote)).unwrap();
+        let titles = board_titles(&a);
+        for title in ["base", "from A", "from B"] {
+            assert!(
+                titles.iter().any(|seen| seen == title),
+                "lost {title:?}: {titles:?}"
+            );
+        }
+
+        // And it converges: A pushes, B pulls, both see everything.
+        commit_push(&a, Some(&remote)).unwrap();
+        pull(&b, Some(&remote)).unwrap();
+        assert!(
+            board_titles(&b).iter().any(|seen| seen == "from A"),
+            "B did not get A"
+        );
+    }
+
+    fn board_titles(repo: &Path) -> Vec<String> {
+        crate::store::Store::new(repo.join("todos.json"))
+            .load()
+            .tasks()
+            .iter()
+            .map(|task| task.title.clone())
+            .collect()
     }
 
     #[test]

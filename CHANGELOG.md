@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Sync no longer rebases the board, so two machines that both changed
+  `todos.json` can no longer strand the repository in a rebase conflict with the
+  push rejected. A pull now fetches, and when the histories diverge it resets to
+  the remote and merges the boards task by task (a completed or dropped copy
+  wins over an open one).
+
 ## [0.9.0] - 2026-10-06
 
 ### Fixed

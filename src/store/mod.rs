@@ -103,16 +103,16 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
     fs::rename(&tmp, path).context("failed to replace board file")
 }
 
-/// Union two serialized boards, de-duplicating identical tasks. Returns `None`
-/// when either side is unreadable or from another schema version, so the caller
-/// can fall back to one side rather than guess.
-pub fn merge_files(local: &[u8], remote: &[u8]) -> Option<Vec<u8>> {
-    let local: FileSchema = serde_json::from_slice(local).ok()?;
-    let remote: FileSchema = serde_json::from_slice(remote).ok()?;
-    if local.version != SCHEMA_VERSION || remote.version != SCHEMA_VERSION {
+/// Merge two serialized boards: `base` wins ties, `other` fills in and advances
+/// matching tasks. Returns `None` when either side is unreadable or from another
+/// schema version, so the caller can fall back to one side rather than guess.
+pub fn merge_files(base: &[u8], other: &[u8]) -> Option<Vec<u8>> {
+    let base: FileSchema = serde_json::from_slice(base).ok()?;
+    let other: FileSchema = serde_json::from_slice(other).ok()?;
+    if base.version != SCHEMA_VERSION || other.version != SCHEMA_VERSION {
         return None;
     }
-    let merged = Board::from_tasks(local.tasks).merged_with(&Board::from_tasks(remote.tasks));
+    let merged = Board::from_tasks(base.tasks).merged_with(&Board::from_tasks(other.tasks));
     let schema = FileSchema {
         version: SCHEMA_VERSION,
         tasks: merged.into_tasks(),

@@ -151,7 +151,9 @@ the current remote, and `tasu remote --clear` turns syncing off.
 - `tasu add` pulls before it reads and pushes after it writes, so a CLI-only
   machine stays in sync too.
 - Designed for **one writer at a time** (your work machine *or* your home
-  machine, not both editing at once). There is no merge of conflicting edits.
+  machine). If the two do diverge, sync merges the boards task by task instead of
+  getting stuck on a conflict: tasks are matched by title and creation time, and
+  a completed or dropped copy wins over an open one.
 
 To try it against a local bare repository:
 

@@ -42,14 +42,25 @@ impl Board {
         self.tasks.get(index)
     }
 
-    /// Union of two boards, preserving order. Used when a machine with existing
-    /// data first connects to a remote that already has a board: nothing from
-    /// either side is lost. Tasks carry no id, so identity is the whole record;
-    /// an exact duplicate is dropped.
+    /// Merge another board in, task by task. Tasks carry no id, so identity is
+    /// `title` + `created_at`. For a matching task the one that is further along
+    /// wins — a terminal state (`done` / `archived`) over `open`, then the later
+    /// `bucket_since` — so merging is idempotent and two machines that edited
+    /// the same task do not drift into duplicates. A task only on the other side
+    /// is added; `self` wins true ties.
     pub fn merged_with(mut self, other: &Board) -> Board {
         for task in &other.tasks {
-            if !self.tasks.iter().any(|existing| existing == task) {
-                self.tasks.push(task.clone());
+            match self
+                .tasks
+                .iter()
+                .position(|existing| same_task(existing, task))
+            {
+                Some(index) => {
+                    if is_further(task, &self.tasks[index]) {
+                        self.tasks[index] = task.clone();
+                    }
+                }
+                None => self.tasks.push(task.clone()),
             }
         }
         self
@@ -197,6 +208,26 @@ impl Board {
     }
 }
 
+/// Task identity without an id: same title created at the same instant.
+fn same_task(a: &Task, b: &Task) -> bool {
+    a.title == b.title && a.created_at == b.created_at
+}
+
+/// Whether `candidate` is further along than `current`: a terminal state beats
+/// `open`, and within a state a later bucket move wins.
+fn is_further(candidate: &Task, current: &Task) -> bool {
+    state_rank(candidate.state) > state_rank(current.state)
+        || (candidate.state == current.state && candidate.bucket_since > current.bucket_since)
+}
+
+fn state_rank(state: TaskState) -> u8 {
+    match state {
+        TaskState::Open => 0,
+        TaskState::Done => 1,
+        TaskState::Archived => 2,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -269,6 +300,24 @@ mod tests {
             .map(|task| task.title.as_str())
             .collect();
         assert_eq!(titles, vec!["shared", "only left", "only right"]);
+    }
+
+    #[test]
+    fn merging_prefers_the_task_that_is_further_along() {
+        let mut open = Board::new();
+        open.add("ship it", at(2026, 10, 5));
+        let mut done = Board::new();
+        done.add("ship it", at(2026, 10, 5));
+        done.complete(0, at(2026, 10, 6));
+
+        // Either merge direction yields one task, completed.
+        for merged in [
+            open.clone().merged_with(&done),
+            done.clone().merged_with(&open),
+        ] {
+            assert_eq!(merged.len(), 1, "the two copies must collapse");
+            assert_eq!(merged.task(0).unwrap().state, TaskState::Done);
+        }
     }
 
     #[test]

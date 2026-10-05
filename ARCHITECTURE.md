@@ -244,10 +244,17 @@ offline. Settings exist only for advanced use.
 
 ## Sync
 
-Git single-writer model (see `PRODUCT.md`): `git -C <repo> pull --rebase
---autostash origin <branch>`, then `git add -A && git commit ... && git push
-origin HEAD:refs/heads/<branch>`. With **no remote / not a repository** the whole
-layer degrades silently to local and produces no git calls.
+Git single-writer model (see `PRODUCT.md`). **Pull never rebases** — rebasing the
+JSON board conflicts as soon as two machines touch it, and then the push is
+rejected and the repo is stranded. Instead `pull` fetches into a private ref and
+compares histories: if the remote is reachable from `HEAD` there is nothing to
+do; otherwise it resets to the remote and merges the boards **task by task**
+(`store::merge_files`, identity = title + `created_at`, terminal state wins),
+leaving the merged board for the next `commit_push` (`git add -A && git commit
+... && git push origin HEAD:refs/heads/<branch>`) to publish. Any rebase/merge a
+previous version left in progress is aborted first. With **no remote / not a
+repository** the whole layer degrades silently to local and produces no git
+calls.
 
 - **Branch contract**: every machine syncs on **one branch** so a host's
   `init.defaultBranch` (often `master` on Windows) never leaks into the data
