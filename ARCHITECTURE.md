@@ -198,7 +198,8 @@ its own writes, which is what separates "our write" from "an external one".
   what it captured.
 - `tasu list [bucket] [--json]` (alias `ls`) → load + `settle` and print the open
   tasks grouped by bucket. Read-only and local; `tasu sync` refreshes first.
-- `tasu history [done|dropped] [--json]` → print completed or dropped tasks.
+- `tasu history [done|dropped] [--json]` → print completed and dropped tasks
+  (both by default).
 - `tasu done <title>` / `tasu drop <title>` / `tasu move <bucket> <title>` →
   mutate an **open** task identified by its exact title (erroring on none or
   several matches, since tasks carry no id), then save and best-effort push.

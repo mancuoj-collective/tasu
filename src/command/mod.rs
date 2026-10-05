@@ -53,40 +53,84 @@ pub fn list(config: &Config, bucket: Option<Bucket>, json: bool) -> Result<()> {
     Ok(())
 }
 
-/// `tasu history [done|dropped]`: print completed or dropped tasks.
-pub fn history(config: &Config, dropped: bool, json: bool) -> Result<()> {
+/// Which history lists `tasu history` prints.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HistoryList {
+    Both,
+    Done,
+    Dropped,
+}
+
+/// `tasu history [done|dropped]`: print completed and dropped tasks. With no
+/// view, both sections are shown.
+pub fn history(config: &Config, view: HistoryList, json: bool) -> Result<()> {
     let board = Store::new(config.board_path()).load();
-    let indices = if dropped {
-        board.archived()
-    } else {
-        board.done()
-    };
-    let tasks: Vec<&Task> = indices
-        .iter()
-        .filter_map(|&index| board.task(index))
-        .collect();
+    let sections = history_sections(&board, view);
 
     if json {
+        let tasks: Vec<&Task> = sections
+            .iter()
+            .flat_map(|(_, tasks)| tasks.iter().copied())
+            .collect();
         return print_json(&tasks);
     }
-    let mark = if dropped { '\u{2717}' } else { '\u{2713}' };
-    let mut out = String::new();
-    for task in tasks {
-        out.push_str("  ");
-        out.push(mark);
-        out.push(' ');
-        out.push_str(&task.title);
-        out.push('\n');
-    }
-    if out.is_empty() {
-        out.push_str(if dropped {
-            "nothing dropped\n"
-        } else {
-            "nothing done\n"
-        });
-    }
-    print!("{out}");
+    print!("{}", render_history(&sections, view));
     Ok(())
+}
+
+/// The requested history views as `(dropped, tasks)`, newest first, in print
+/// order. Empty views are kept so `render_history` can skip them.
+fn history_sections<'a>(board: &'a Board, view: HistoryList) -> Vec<(bool, Vec<&'a Task>)> {
+    let wanted: &[bool] = match view {
+        HistoryList::Both => &[false, true],
+        HistoryList::Done => &[false],
+        HistoryList::Dropped => &[true],
+    };
+    wanted
+        .iter()
+        .map(|&dropped| {
+            let indices = if dropped {
+                board.archived()
+            } else {
+                board.done()
+            };
+            let tasks = indices
+                .iter()
+                .filter_map(|&index| board.task(index))
+                .collect();
+            (dropped, tasks)
+        })
+        .collect()
+}
+
+fn render_history(sections: &[(bool, Vec<&Task>)], view: HistoryList) -> String {
+    let mut rendered: Vec<String> = Vec::new();
+    for (dropped, tasks) in sections {
+        if tasks.is_empty() {
+            continue;
+        }
+        let mark = if *dropped { '\u{2717}' } else { '\u{2713}' };
+        let mut out = String::new();
+        out.push_str(if *dropped { "DROPPED" } else { "DONE" });
+        out.push('\n');
+        for task in tasks {
+            out.push_str("  ");
+            out.push(mark);
+            out.push(' ');
+            out.push_str(&task.title);
+            out.push('\n');
+        }
+        rendered.push(out);
+    }
+    if rendered.is_empty() {
+        match view {
+            HistoryList::Both => "nothing done or dropped\n".to_string(),
+            HistoryList::Done => "nothing done\n".to_string(),
+            HistoryList::Dropped => "nothing dropped\n".to_string(),
+        }
+    } else {
+        rendered.join("\n")
+    }
 }
 
 /// `tasu done "<title>"`: complete an open task by its exact title.
@@ -562,6 +606,42 @@ mod tests {
         assert_eq!(
             super::render_open(&Board::new(), &[Bucket::Today]),
             "no open tasks\n"
+        );
+    }
+
+    #[test]
+    fn history_shows_both_views_by_default() {
+        use crate::domain::Board;
+        use crate::domain::test_time::at;
+
+        let mut board = Board::new();
+        board.add("done thing", at(2026, 10, 5));
+        board.add("dropped thing", at(2026, 10, 5));
+        board.complete(0, at(2026, 10, 5));
+        board.archive(1, at(2026, 10, 5));
+
+        let sections = super::history_sections(&board, super::HistoryList::Both);
+        assert_eq!(
+            super::render_history(&sections, super::HistoryList::Both),
+            "DONE\n  \u{2713} done thing\n\nDROPPED\n  \u{2717} dropped thing\n"
+        );
+    }
+
+    #[test]
+    fn history_can_show_one_view() {
+        use crate::domain::Board;
+        use crate::domain::test_time::at;
+
+        let mut board = Board::new();
+        board.add("done thing", at(2026, 10, 5));
+        board.add("dropped thing", at(2026, 10, 5));
+        board.complete(0, at(2026, 10, 5));
+        board.archive(1, at(2026, 10, 5));
+
+        let sections = super::history_sections(&board, super::HistoryList::Dropped);
+        assert_eq!(
+            super::render_history(&sections, super::HistoryList::Dropped),
+            "DROPPED\n  \u{2717} dropped thing\n"
         );
     }
 

@@ -73,7 +73,7 @@ tasu list [today|week|later]# print the open tasks
 tasu done "buy cat food"    # complete a task
 tasu drop "old idea"        # drop (archive) a task
 tasu move later "someday"   # send a task to another bucket
-tasu history [done|dropped] # print completed / dropped tasks
+tasu history [done|dropped] # print history (both views by default)
 tasu config                 # print the data dir, config file and sync remote
 tasu remote <url>           # set the git sync remote (optional)
 tasu sync                   # pull then push once, and report the result

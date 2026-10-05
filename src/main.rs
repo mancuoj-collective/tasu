@@ -44,9 +44,15 @@ fn run() -> Result<()> {
         Some(Command::List { bucket, json }) => {
             command::list(&config, bucket.map(Bucket::from), json)
         }
-        Some(Command::History { view, json }) => {
-            command::history(&config, matches!(view, Some(HistoryName::Dropped)), json)
-        }
+        Some(Command::History { view, json }) => command::history(
+            &config,
+            match view {
+                None => command::HistoryList::Both,
+                Some(HistoryName::Done) => command::HistoryList::Done,
+                Some(HistoryName::Dropped) => command::HistoryList::Dropped,
+            },
+            json,
+        ),
         Some(Command::Done { title }) => command::done(&config, &title),
         Some(Command::Drop { title }) => command::drop_task(&config, &title),
         Some(Command::Move { bucket, title }) => command::move_task(&config, bucket.into(), &title),

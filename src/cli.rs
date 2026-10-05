@@ -52,9 +52,9 @@ pub enum Command {
         #[arg(long)]
         json: bool,
     },
-    /// Print completed or dropped tasks.
+    /// Print completed and dropped tasks.
     History {
-        /// Which view to show (default: done).
+        /// Which view to show; omit to show both.
         #[arg(value_enum)]
         view: Option<HistoryName>,
         /// Output a JSON array.
