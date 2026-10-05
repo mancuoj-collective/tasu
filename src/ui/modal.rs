@@ -14,6 +14,15 @@ use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use super::{components, scroll_offset, theme::Theme};
 
+/// Help overlay geometry, in cells. Generous side padding keeps the content off
+/// the border; the logo gets no margin above and a blank line below.
+const HELP_MAX_WIDTH: u16 = 62;
+const HELP_PAD_X: u16 = 3;
+const HELP_PAD_TOP: u16 = 0;
+const HELP_PAD_BOTTOM: u16 = 0;
+/// Border (2) plus vertical padding.
+const HELP_CHROME: u16 = 2 + HELP_PAD_TOP + HELP_PAD_BOTTOM;
+
 /// Compact block-letter `tasu`, shown at the top of help. Three rows keeps it
 /// from dominating the modal while the `s` stays legible.
 const HELP_ART: [&str; 3] = [
@@ -168,9 +177,9 @@ fn help_modal(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path, syn
     ];
 
     let full = f.area();
-    let width = full.width.saturating_sub(4).min(56);
-    // Content width inside the border (2) and horizontal padding (2 per side).
-    let inner = width.saturating_sub(6) as usize;
+    let width = full.width.saturating_sub(4).min(HELP_MAX_WIDTH);
+    // Content width inside the border (2) and horizontal padding.
+    let inner = width.saturating_sub(2 + HELP_PAD_X * 2) as usize;
 
     let mut lines: Vec<Line> = Vec::new();
     // Center the logo by its widest row so the letters stay aligned.
@@ -186,6 +195,8 @@ fn help_modal(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path, syn
             theme.accent(),
         )));
     }
+    // Breathing room under the logo, none above it.
+    lines.push(Line::default());
 
     let label_width = inner.saturating_sub(10);
     for (key, label) in entries {
@@ -233,17 +244,17 @@ fn help_modal(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path, syn
         );
     }
 
-    let padding = Padding::new(2, 2, 1, 1);
+    let padding = Padding::new(HELP_PAD_X, HELP_PAD_X, HELP_PAD_TOP, HELP_PAD_BOTTOM);
     let block = Block::bordered()
         .border_style(theme.accent())
         .padding(padding);
     // Height fits the content but never exceeds the screen (one blank row to
     // spare top and bottom); extra lines scroll.
-    let height = (lines.len() as u16 + 4).min(full.height.saturating_sub(2));
+    let height = (lines.len() as u16 + HELP_CHROME).min(full.height.saturating_sub(2));
     let area = centered(full, width, height);
     f.render_widget(Clear, area);
 
-    let inner_height = height.saturating_sub(4) as usize;
+    let inner_height = height.saturating_sub(HELP_CHROME) as usize;
     let max_offset = lines.len().saturating_sub(inner_height);
     let offset = model.ui.help_scroll.get().min(max_offset);
     // Write the clamped offset back so the next key press starts from here.

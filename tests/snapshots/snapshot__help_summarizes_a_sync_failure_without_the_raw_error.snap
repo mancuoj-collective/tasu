@@ -4,31 +4,31 @@ expression: out
 ---
  TODAY                                                                              
  ────────────────────────────────────────────────────────────────────────────────── 
-  ○ Nand2Tetri┌──────────────────────────────────────────────────────┐              
-  ○ learn GPUI│                                                      │              
-              │                   ▀█▀ ▄▀█ ▄▀▀ █ █                    │              
- THIS WEEK  41│                    █  █▀█ ▀▀▄ █ █                    │              
- ─────────────│                    ▀  ▀ ▀ ▄▄▀ ▀▄▀                    │───────────── 
-  ○ write the │  j / k                                         move  │              
-              │  h / l                      previous / next section  │              
- LATER        │  g / G                                 top / bottom  │              
- ─────────────│  space                                         done  │───────────── 
-  ○ read the r│  a                                   add (to today)  │              
-              │  e                                       edit title  │              
-              │  t                                    move to today  │              
-              │  [ / ]               send to previous / next bucket  │              
-              │  x                                   drop (archive)  │              
-              │  c                                          history  │              
-              │  tab                history: done / dropped (or ←→)  │              
-              │  q / esc                                       quit  │              
-              │  ctrl+c                               quit anywhere  │              
-              │                                                      │              
-              │  data   /opt/tasu-data/Library/Application Support/  │              
-              │                                     tasu/todos.json  │              
-              │  sync        https://github.com/mancuoj-collective/  │              
-              │                                       tasu-data.git  │              
-              │        ✗ authentication failed · run tasu sync       │              
-              │                                                      │              
-              └──────────────────────────────────────────────────────┘              
+  ○ Nand2Tetris chapter 6                                                           
+  ○ learn G┌────────────────────────────────────────────────────────────┐           
+           │                      ▀█▀ ▄▀█ ▄▀▀ █ █                       │           
+ THIS WEEK │                       █  █▀█ ▀▀▄ █ █                       │           
+ ──────────│                       ▀  ▀ ▀ ▄▄▀ ▀▄▀                       │────────── 
+  ○ write t│                                                            │           
+           │   j / k                                             move   │           
+ LATER     │   h / l                          previous / next section   │           
+ ──────────│   g / G                                     top / bottom   │────────── 
+  ○ read th│   space                                             done   │           
+           │   a                                       add (to today)   │           
+           │   e                                           edit title   │           
+           │   t                                        move to today   │           
+           │   [ / ]                   send to previous / next bucket   │           
+           │   x                                       drop (archive)   │           
+           │   c                                              history   │           
+           │   tab                    history: done / dropped (or ←→)   │           
+           │   q / esc                                           quit   │           
+           │   ctrl+c                                   quit anywhere   │           
+           │                                                            │           
+           │   data  /opt/tasu-data/Library/Application Support/tasu/   │           
+           │                                               todos.json   │           
+           │   sync            https://github.com/mancuoj-collective/   │           
+           │                                            tasu-data.git   │           
+           │         ✗ authentication failed · run tasu sync            │           
+           └────────────────────────────────────────────────────────────┘           
                                                                                     
  ↑↓ scroll  esc close                                          ✗ sync failed · auth

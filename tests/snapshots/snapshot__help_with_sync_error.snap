@@ -3,28 +3,28 @@ source: tests/snapshot.rs
 expression: "render(&model, 84, 26)"
 ---
  TODAY                                                                              
- ─────────────┌──────────────────────────────────────────────────────┐───────────── 
-  ○ Nand2Tetri│                                                      │              
-  ○ learn GPUI│                   ▀█▀ ▄▀█ ▄▀▀ █ █                    │              
-              │                    █  █▀█ ▀▀▄ █ █                    │              
- THIS WEEK  41│                    ▀  ▀ ▀ ▄▄▀ ▀▄▀                    │              
- ─────────────│  j / k                                         move  │───────────── 
-  ○ write the │  h / l                      previous / next section  │              
-              │  g / G                                 top / bottom  │              
- LATER        │  space                                         done  │              
- ─────────────│  a                                   add (to today)  │───────────── 
-  ○ read the r│  e                                       edit title  │              
-              │  t                                    move to today  │              
-              │  [ / ]               send to previous / next bucket  │              
-              │  x                                   drop (archive)  │              
-              │  c                                          history  │              
-              │  tab                history: done / dropped (or ←→)  │              
-              │  q / esc                                       quit  │              
-              │  ctrl+c                               quit anywhere  │              
-              │                                                      │              
-              │  data                          /tmp/tasu/todos.json  │              
-              │  sync              git@github.com:you/tasu-data.git  │              
-              │        ✗ repository not found · run tasu sync        │              
-              │                                                      │              
-              └──────────────────────────────────────────────────────┘              
+ ────────────────────────────────────────────────────────────────────────────────── 
+  ○ Nand2Te┌────────────────────────────────────────────────────────────┐           
+  ○ learn G│                      ▀█▀ ▄▀█ ▄▀▀ █ █                       │           
+           │                       █  █▀█ ▀▀▄ █ █                       │           
+ THIS WEEK │                       ▀  ▀ ▀ ▄▄▀ ▀▄▀                       │           
+ ──────────│                                                            │────────── 
+  ○ write t│   j / k                                             move   │           
+           │   h / l                          previous / next section   │           
+ LATER     │   g / G                                     top / bottom   │           
+ ──────────│   space                                             done   │────────── 
+  ○ read th│   a                                       add (to today)   │           
+           │   e                                           edit title   │           
+           │   t                                        move to today   │           
+           │   [ / ]                   send to previous / next bucket   │           
+           │   x                                       drop (archive)   │           
+           │   c                                              history   │           
+           │   tab                    history: done / dropped (or ←→)   │           
+           │   q / esc                                           quit   │           
+           │   ctrl+c                                   quit anywhere   │           
+           │                                                            │           
+           │   data                              /tmp/tasu/todos.json   │           
+           │   sync                  git@github.com:you/tasu-data.git   │           
+           │         ✗ repository not found · run tasu sync             │           
+           └────────────────────────────────────────────────────────────┘           
  ↑↓ scroll  esc close                                     ✗ sync failed · not found
