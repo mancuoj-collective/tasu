@@ -144,10 +144,10 @@ the current remote, and `tasu remote --clear` turns syncing off.
 - **One branch** everywhere: the remote's default branch if it has one,
   otherwise `main`. A machine's `init.defaultBranch` never leaks into the data
   repo.
-- In the app, tasu pulls on start, pushes a few seconds after each change
-  (debounced), and pushes once more on exit. A failure shows `✗ sync failed ·
-  <reason>` in the footer and a one-line reason in help; `tasu sync` prints the
-  full git error.
+- In the app, tasu pulls on start and pushes a few seconds after each change
+  (debounced). A failure shows `✗ <reason> · run tasu sync` in the footer;
+  `tasu sync` prints the full git error. Quitting hands any last push to a
+  detached process and returns to the shell immediately.
 - `tasu add` pulls before it reads and pushes after it writes, so a CLI-only
   machine stays in sync too.
 - Designed for **one writer at a time** (your work machine *or* your home

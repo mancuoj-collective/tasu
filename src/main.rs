@@ -61,6 +61,7 @@ fn run() -> Result<()> {
         Some(Command::Sync) => command::sync(&config),
         Some(Command::Update) => command::update(),
         Some(Command::Completions { shell }) => command::completions(shell),
+        Some(Command::Flush) => command::flush(&config),
         None => run_tui(config),
     }
 }
@@ -103,10 +104,26 @@ fn run_tui(config: Config) -> Result<()> {
         }
         Ok(())
     });
-    if let Err(err) = runtime.flush() {
-        eprintln!("tasu: final push failed: {err}");
+    // Quitting must not wait on the network: the board is already saved on disk,
+    // so hand any pending commit+push to a detached `tasu flush` and return now.
+    if remote.is_some() {
+        spawn_background_flush();
     }
     result
+}
+
+/// Commit and push in a detached process, so quitting returns to the shell at
+/// once. The child inherits the environment, so it opens the same data dir.
+fn spawn_background_flush() {
+    let Ok(exe) = std::env::current_exe() else {
+        return;
+    };
+    let _ = std::process::Command::new(exe)
+        .arg("flush")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn();
 }
 
 /// Owns the store and the sync worker, plus the small amount of state needed to
@@ -119,7 +136,7 @@ struct Runtime {
     last_change: Instant,
     retry_at: Option<Instant>,
     sync_status: SyncStatus,
-    /// Last sync error message, surfaced in help.
+    /// Last sync error message, summarised in the footer.
     sync_error: Option<String>,
     /// Number of jobs the worker is still running.
     in_flight: usize,
@@ -248,13 +265,6 @@ impl Runtime {
             return Some(Action::Reload(board));
         }
         None
-    }
-
-    fn flush(&mut self) -> Result<(), String> {
-        match &self.sync {
-            Some(sync) => sync.flush(),
-            None => Ok(()),
-        }
     }
 }
 

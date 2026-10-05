@@ -357,6 +357,13 @@ fn windows_installer_hint() -> String {
     )
 }
 
+/// Internal: commit and push whatever is pending, then exit. The TUI spawns
+/// this detached on quit, so quitting never waits on the network.
+pub fn flush(config: &Config) -> Result<()> {
+    best_effort_push(config);
+    Ok(())
+}
+
 /// `tasu config`: show the resolved settings.
 pub fn config(config: &Config, json: bool) -> Result<()> {
     if json {

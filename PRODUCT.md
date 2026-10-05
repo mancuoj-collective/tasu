@@ -98,9 +98,11 @@ less you finish, the deeper it sinks.
 - The remote is probed before it is saved: unreachable / unauthorized / missing
   is **not saved, and clears any previous setting**, rather than leaving a config
   that always fails.
-- Pull on start; after a change, debounce a few seconds then `add/commit/push`;
-  one more push on exit.
+- Pull on start; after a change, debounce a few seconds then `add/commit/push`.
+- Quitting never waits on the network: the board is already saved, and the last
+  push is handed to a detached process that runs after the shell returns.
 - Offline or a failed push: stay quiet and retry later, without interrupting.
+  A failure is summarised in the footer as `✗ <reason> · run tasu sync`.
 - **No concurrent merge**: under a single writer, last-write-wins is safe enough.
 
 ## Non-goals

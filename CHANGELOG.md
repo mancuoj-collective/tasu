@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The help overlay no longer shows the sync error. A failure is summarised in
+  the footer as `✗ <reason> · run tasu sync`, with the full git error left to
+  `tasu sync`.
+- Quitting returns to the shell immediately: the board is already saved, and the
+  final commit+push runs in a detached process instead of blocking on the
+  network.
+
 ## [0.7.0] - 2026-10-06
 
 ### Added

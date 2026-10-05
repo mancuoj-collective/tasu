@@ -27,4 +27,4 @@ expression: "render(&model, 84, 26)"
            │   sync                  git@github.com:you/tasu-data.git   │           
            │                                                            │           
            └────────────────────────────────────────────────────────────┘           
- ↑↓ scroll  esc close                                     ✗ sync failed · not found
+ ↑↓ scroll  esc close                            ✗ remote not found · run tasu sync

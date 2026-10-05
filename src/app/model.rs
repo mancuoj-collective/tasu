@@ -53,7 +53,7 @@ pub struct UiState {
     pub history_view: HistoryView,
     /// Background sync status, refreshed from the runtime each frame.
     pub sync: SyncStatus,
-    /// Message from the last failed sync, shown in help.
+    /// Message from the last failed sync, summarised in the footer.
     pub sync_error: Option<String>,
     /// A fatal-ish error (e.g. the board could not be written) shown in the
     /// footer, so data loss is never silent.

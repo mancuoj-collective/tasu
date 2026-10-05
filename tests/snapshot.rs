@@ -88,7 +88,7 @@ fn help_with_sync_error() {
 }
 
 #[test]
-fn help_summarizes_a_sync_failure_without_the_raw_error() {
+fn help_hides_the_sync_error_and_the_footer_carries_it() {
     let mut model = Model::new(board(), dt(8));
     model.ui.mode = Mode::Help;
     model.ui.sync = SyncStatus::Failed;
@@ -108,11 +108,11 @@ fn help_summarizes_a_sync_failure_without_the_raw_error() {
     );
     assert!(
         !out.contains("fatal:"),
-        "raw git error leaked into help:\n{out}"
+        "raw git error leaked into the UI:\n{out}"
     );
     assert!(
-        out.contains("authentication failed"),
-        "missing summary:\n{out}"
+        out.contains("auth failed") && out.contains("run tasu sync"),
+        "the footer should explain the failure:\n{out}"
     );
     insta::assert_snapshot!(out);
 }

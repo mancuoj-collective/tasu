@@ -1,0 +1,34 @@
+---
+source: tests/snapshot.rs
+expression: out
+---
+ TODAY                                                                              
+ ────────────────────────────────────────────────────────────────────────────────── 
+  ○ Nand2Te┌────────────────────────────────────────────────────────────┐           
+  ○ learn G│                                                            │           
+           │                      ▀█▀ ▄▀█ ▄▀▀ █ █                       │           
+ THIS WEEK │                       █  █▀█ ▀▀▄ █ █                       │           
+ ──────────│                       ▀  ▀ ▀ ▄▄▀ ▀▄▀                       │────────── 
+  ○ write t│                                                            │           
+           │   j / k / ↓ / ↑                                     move   │           
+ LATER     │   h / l / ← / →                  previous / next section   │           
+ ──────────│   g / G / home / end                        top / bottom   │────────── 
+  ○ read th│   space / enter                                     done   │           
+           │   a                                       add (to today)   │           
+           │   e                                           edit title   │           
+           │   t                                        move to today   │           
+           │   [ / ]                   send to previous / next bucket   │           
+           │   x                                       drop (archive)   │           
+           │   c                                              history   │           
+           │   ?                                            this help   │           
+           │   q / esc                                           quit   │           
+           │   ctrl+c                                   quit anywhere   │           
+           │                                                            │           
+           │   data  /opt/tasu-data/Library/Application Support/tasu/   │           
+           │                                               todos.json   │           
+           │   sync            https://github.com/mancuoj-collective/   │           
+           │                                            tasu-data.git   │           
+           │                                                            │           
+           └────────────────────────────────────────────────────────────┘           
+                                                                                    
+ ↑↓ scroll  esc close                                 ✗ auth failed · run tasu sync

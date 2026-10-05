@@ -112,4 +112,8 @@ pub enum Command {
         #[arg(value_enum)]
         shell: clap_complete::Shell,
     },
+    /// Internal: commit and push pending changes. Spawned detached by the TUI
+    /// on quit, so quitting never waits on the network.
+    #[command(hide = true)]
+    Flush,
 }

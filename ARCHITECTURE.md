@@ -183,12 +183,13 @@ its own writes, which is what separates "our write" from "an external one".
 - Toast: a brief `saved to today` after capture, gone after ~3 s, never
   stealing the cursor.
 - The footer's right side shows, in priority order: a write error, sync status
-  (a blinking dot while syncing, `✗ sync failed · <reason>` on failure), then the
-  toast.
+  (a blinking dot while syncing, `✗ <reason> · run tasu sync` on failure), then
+  the toast. Sync failures live only here — the help overlay does not repeat
+  them — and never as a raw git dump; the full error is left to `tasu sync`.
 - Help overlay: geometry lives in a few constants at the top of `modal.rs`; long
   paths and URLs wrap at their separators and right-align with the key column.
-  A failed sync is shown as a **one-line reason**, never a raw git dump; the full
-  error is left to `tasu sync`.
+- Quitting returns to the shell at once: the board is already saved, and the
+  final commit+push is spawned as a detached `tasu flush` rather than awaited.
 
 ## CLI
 
@@ -257,8 +258,8 @@ layer degrades silently to local and produces no git calls.
   if a schema cannot be understood it falls back to the local side rather than
   guessing. After the merge, normal single-writer pull/push resumes.
 - **Error classification**: `sync::Failure::classify` maps git's stderr to
-  `NotFound` / `Auth` / `Network` / `Other`, shared by the CLI message and the
-  in-app footer/help.
+  `NotFound` / `Auth` / `Network` / `Other`, shared by the `tasu remote`
+  message and the in-app footer.
 
 ## Testing
 

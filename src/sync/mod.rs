@@ -20,8 +20,6 @@ const DEFAULT_BRANCH: &str = "main";
 /// a worker thread; the app talks to it through a channel and is never blocked
 /// by the network. Without a remote, nothing here ever shells out to git.
 pub struct Sync {
-    repo: PathBuf,
-    remote: Option<String>,
     jobs: Sender<Job>,
     results: Receiver<Result<(), String>>,
 }
@@ -36,17 +34,17 @@ impl Sync {
         let (jobs_tx, jobs_rx) = mpsc::channel::<Job>();
         let (results_tx, results_rx) = mpsc::channel::<Result<(), String>>();
 
-        let worker_repo = repo.clone();
-        let worker_remote = remote.clone();
+        // The worker owns the repo and remote; the app only talks to it over
+        // the channels.
         thread::spawn(move || {
             // Adopt or create the repository once, before the first job.
-            if ensure_repo(&worker_repo, worker_remote.as_deref()).is_err() {
+            if ensure_repo(&repo, remote.as_deref()).is_err() {
                 // Fall through: local-only operation still works.
             }
             while let Ok(job) = jobs_rx.recv() {
                 let result = match job {
-                    Job::Pull => pull(&worker_repo, worker_remote.as_deref()),
-                    Job::CommitPush => commit_push(&worker_repo, worker_remote.as_deref()),
+                    Job::Pull => pull(&repo, remote.as_deref()),
+                    Job::CommitPush => commit_push(&repo, remote.as_deref()),
                 };
                 if results_tx.send(result).is_err() {
                     break;
@@ -55,8 +53,6 @@ impl Sync {
         });
 
         Self {
-            repo,
-            remote,
             jobs: jobs_tx,
             results: results_rx,
         }
@@ -79,12 +75,6 @@ impl Sync {
 
     pub fn poll(&self) -> Option<Result<(), String>> {
         self.results.try_recv().ok()
-    }
-
-    /// Best-effort push on exit, run on the calling thread so it is not lost
-    /// when the process ends.
-    pub fn flush(&self) -> Result<(), String> {
-        commit_now(&self.repo, self.remote.as_deref())
     }
 }
 
@@ -149,7 +139,7 @@ impl Failure {
         }
     }
 
-    /// One phrase, for the help overlay.
+    /// A phrase naming the cause, for the `tasu remote` failure message.
     pub fn reason(self) -> &'static str {
         match self {
             Self::NotFound => "repository not found",
@@ -159,13 +149,13 @@ impl Failure {
         }
     }
 
-    /// A couple of words, for the footer.
-    pub fn short(self) -> &'static str {
+    /// A phrase for the footer, paired with a `tasu sync` hint.
+    pub fn footer(self) -> &'static str {
         match self {
-            Self::NotFound => "not found",
-            Self::Auth => "auth",
+            Self::NotFound => "remote not found",
+            Self::Auth => "auth failed",
             Self::Network => "offline",
-            Self::Other => "error",
+            Self::Other => "sync failed",
         }
     }
 

@@ -111,10 +111,10 @@ fn status_line(model: &Model, theme: &Theme) -> Option<Line<'static>> {
                 .ui
                 .sync_error
                 .as_deref()
-                .map(|err| crate::sync::Failure::classify(err).short())
-                .unwrap_or("error");
+                .map(|err| crate::sync::Failure::classify(err).footer())
+                .unwrap_or("sync failed");
             Some(Line::from(Span::styled(
-                format!("\u{2717} sync failed \u{b7} {reason}"),
+                format!("\u{2717} {reason} \u{b7} run tasu sync"),
                 theme.warn(),
             )))
         }

@@ -232,22 +232,6 @@ fn help_modal(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path, syn
         Alignment::Right,
     );
 
-    // A failed sync is a one-line status, never a raw git dump: the full error
-    // lives in `tasu sync`.
-    if let Some(err) = &model.ui.sync_error {
-        let reason = crate::sync::Failure::classify(err).reason();
-        // A blank row separates the failure from the sync line above it.
-        lines.push(Line::default());
-        push_block(
-            &mut lines,
-            "      ",
-            &format!("\u{2717} {reason} \u{b7} run tasu sync"),
-            theme.warn(),
-            inner,
-            Alignment::Left,
-        );
-    }
-
     let padding = Padding::new(HELP_PAD_X, HELP_PAD_X, HELP_PAD_TOP, HELP_PAD_BOTTOM);
     let block = Block::bordered()
         .border_style(theme.accent())
