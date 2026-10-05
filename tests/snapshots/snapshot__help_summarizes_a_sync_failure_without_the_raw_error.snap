@@ -3,18 +3,17 @@ source: tests/snapshot.rs
 expression: out
 ---
  TODAY                                                                              
- ────────────────────────────────────────────────────────────────────────────────── 
-  ○ Nand2Tetris chapter 6                                                           
-  ○ learn G┌────────────────────────────────────────────────────────────┐           
-           │                      ▀█▀ ▄▀█ ▄▀▀ █ █                       │           
- THIS WEEK │                       █  █▀█ ▀▀▄ █ █                       │           
- ──────────│                       ▀  ▀ ▀ ▄▄▀ ▀▄▀                       │────────── 
-  ○ write t│                                                            │           
-           │   j / k                                             move   │           
- LATER     │   h / l                          previous / next section   │           
- ──────────│   g / G                                     top / bottom   │────────── 
-  ○ read th│   space                                             done   │           
-           │   a                                       add (to today)   │           
+ ──────────┌────────────────────────────────────────────────────────────┐────────── 
+  ○ Nand2Te│                                                            │           
+  ○ learn G│                      ▀█▀ ▄▀█ ▄▀▀ █ █                       │           
+           │                       █  █▀█ ▀▀▄ █ █                       │           
+ THIS WEEK │                       ▀  ▀ ▀ ▄▄▀ ▀▄▀                       │           
+ ──────────│                                                            │────────── 
+  ○ write t│   j / k                                             move   │           
+           │   h / l                          previous / next section   │           
+ LATER     │   g / G                                     top / bottom   │           
+ ──────────│   space                                             done   │────────── 
+  ○ read th│   a                                       add (to today)   │           
            │   e                                           edit title   │           
            │   t                                        move to today   │           
            │   [ / ]                   send to previous / next bucket   │           
@@ -28,7 +27,8 @@ expression: out
            │                                               todos.json   │           
            │   sync            https://github.com/mancuoj-collective/   │           
            │                                            tasu-data.git   │           
+           │                                                            │           
            │         ✗ authentication failed · run tasu sync            │           
+           │                                                            │           
            └────────────────────────────────────────────────────────────┘           
-                                                                                    
  ↑↓ scroll  esc close                                          ✗ sync failed · auth

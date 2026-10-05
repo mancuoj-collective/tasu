@@ -18,8 +18,8 @@ use super::{components, scroll_offset, theme::Theme};
 /// the border; the logo gets no margin above and a blank line below.
 const HELP_MAX_WIDTH: u16 = 62;
 const HELP_PAD_X: u16 = 3;
-const HELP_PAD_TOP: u16 = 0;
-const HELP_PAD_BOTTOM: u16 = 0;
+const HELP_PAD_TOP: u16 = 1;
+const HELP_PAD_BOTTOM: u16 = 1;
 /// Border (2) plus vertical padding.
 const HELP_CHROME: u16 = 2 + HELP_PAD_TOP + HELP_PAD_BOTTOM;
 
@@ -234,6 +234,8 @@ fn help_modal(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path, syn
     // lives in `tasu sync`.
     if let Some(err) = &model.ui.sync_error {
         let reason = crate::sync::Failure::classify(err).reason();
+        // A blank row separates the failure from the sync line above it.
+        lines.push(Line::default());
         push_block(
             &mut lines,
             "      ",
