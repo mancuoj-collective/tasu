@@ -27,4 +27,7 @@ pub enum Command {
     },
     /// Run one pull-then-push now and report the result.
     Sync,
+    /// Update tasu, using however it was installed (Homebrew, the installer
+    /// script, or Cargo).
+    Update,
 }

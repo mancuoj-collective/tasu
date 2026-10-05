@@ -6,6 +6,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `tasu update`, which upgrades tasu using however it was installed (Homebrew,
+  the installer script, or Cargo), instead of guessing.
+
 ## [0.6.0] - 2026-10-05
 
 ### Changed

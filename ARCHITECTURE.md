@@ -197,6 +197,11 @@ its own writes, which is what separates "our write" from "an external one".
 - `tasu config` → print the resolved data dir, config file and remote.
 - `tasu remote <url>` / `--clear` → probe, then save or clear (see Sync).
 - `tasu sync` → one pull-then-push, printing the real git error on failure.
+- `tasu update` → upgrade using however tasu was installed: `brew upgrade` for a
+  Homebrew install, the official installer for a script install, `cargo install`
+  for a Cargo install; otherwise it prints the right command. The method is
+  inferred from the executable path and the installer's receipt, so no new
+  dependency or download logic is needed.
 
 Both front-ends share `domain` / `store` / `sync`.
 

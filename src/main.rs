@@ -47,6 +47,7 @@ fn run() -> Result<()> {
         }
         Some(Command::Remote { url, clear }) => command::remote(&config, url.as_deref(), clear),
         Some(Command::Sync) => command::sync(&config),
+        Some(Command::Update) => command::update(),
         None => run_tui(config),
     }
 }

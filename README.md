@@ -72,7 +72,13 @@ tasu add "buy cat food"    # record a task without opening the app
 tasu config                # print the data dir, config file and sync remote
 tasu remote <url>          # set the git sync remote (optional)
 tasu sync                  # pull then push once, and report the result
+tasu update                # upgrade tasu the way it was installed
 ```
+
+`tasu update` detects how tasu was installed and runs the matching upgrade —
+`brew upgrade mancuoj/tap/tasu`, the official installer, or `cargo install tasu`
+— so the binary and the package manager that owns it stay in agreement. For an
+unknown install it prints the right command instead of guessing.
 
 ### Keys
 
