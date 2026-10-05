@@ -37,13 +37,14 @@ pub enum HistoryName {
 #[derive(Debug, Subcommand)]
 pub enum Command {
     /// Add a task to today without opening the TUI.
+    #[command(visible_alias = "a")]
     Add {
         /// The task title.
         #[arg(required = true, num_args = 1..)]
         title: Vec<String>,
     },
     /// Print the open tasks, grouped by bucket.
-    #[command(alias = "ls")]
+    #[command(visible_alias = "ls")]
     List {
         /// Only show this bucket.
         #[arg(value_enum)]
@@ -53,6 +54,7 @@ pub enum Command {
         json: bool,
     },
     /// Print completed and dropped tasks.
+    #[command(visible_alias = "h")]
     History {
         /// Which view to show; omit to show both.
         #[arg(value_enum)]
@@ -62,18 +64,21 @@ pub enum Command {
         json: bool,
     },
     /// Complete an open task, matched by its exact title.
+    #[command(visible_alias = "d")]
     Done {
         /// The exact title of an open task.
         #[arg(required = true, num_args = 1..)]
         title: Vec<String>,
     },
     /// Drop (archive) an open task, matched by its exact title.
+    #[command(visible_alias = "x")]
     Drop {
         /// The exact title of an open task.
         #[arg(required = true, num_args = 1..)]
         title: Vec<String>,
     },
     /// Move an open task to a bucket, matched by its exact title.
+    #[command(visible_alias = "mv")]
     Move {
         /// The target bucket.
         #[arg(value_enum)]
@@ -83,12 +88,14 @@ pub enum Command {
         title: Vec<String>,
     },
     /// Show the resolved data directory, config file and sync remote.
+    #[command(visible_alias = "cfg")]
     Config {
         /// Output a JSON object.
         #[arg(long)]
         json: bool,
     },
     /// Show, set or clear the git sync remote.
+    #[command(visible_alias = "r")]
     Remote {
         /// Remote URL, local path, or a GitHub `owner/repo` shorthand.
         url: Option<String>,
@@ -97,11 +104,14 @@ pub enum Command {
         clear: bool,
     },
     /// Run one pull-then-push now and report the result.
+    #[command(visible_alias = "s")]
     Sync,
     /// Update tasu, using however it was installed (Homebrew, the installer
     /// script, or Cargo).
+    #[command(visible_aliases = ["up", "upgrade"])]
     Update,
     /// Print a shell completion script.
+    #[command(visible_alias = "comp")]
     Completions {
         /// The shell to generate for.
         #[arg(value_enum)]

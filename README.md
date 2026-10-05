@@ -81,6 +81,10 @@ tasu update                 # upgrade tasu the way it was installed
 tasu completions bash       # print a shell completion script
 ```
 
+Every command has a short alias, shown in `tasu --help`: `a` (add), `ls`
+(list), `h` (history), `d` (done), `x` (drop), `mv` (move), `cfg` (config),
+`r` (remote), `s` (sync), `up` / `upgrade` (update), `comp` (completions).
+
 Every command that changes something prints what it did, and `list`, `history`
 and `config` take `--json` for scripting.
 
