@@ -213,9 +213,8 @@ its own writes, which is what separates "our write" from "an external one".
   dependency or download logic is needed.
 - `tasu completions <shell>` → print a completion script for the given shell.
 
-The everyday subcommands carry short hidden aliases (`a`, `ls`, `h`, `d`, `x`,
-`mv`), summarised in an `after_help` "Aliases" block; the occasional commands
-have none, keeping the command list uncluttered.
+Every subcommand has a short `visible_alias` (`a`, `ls`, `h`, `d`, `x`, `mv`,
+`cfg`, `r`, `s`, `up`, `comp`), so clap lists them under `tasu --help`.
 
 Both front-ends share `domain` / `store` / `sync`.
 
