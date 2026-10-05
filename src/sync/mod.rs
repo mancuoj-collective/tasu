@@ -179,12 +179,17 @@ fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), String> {
         ensure_gitignore(repo);
         if let Some(url) = remote {
             set_origin(repo, url);
-            // All machines must agree on one branch. Adopt the remote's default
-            // branch when it already has one; otherwise fall back to a fixed
-            // name. Only reconcile when the remote is actually readable, so a
-            // transient network failure never renames a healthy local branch.
-            if let Some(branch) = remote_default_branch(url) {
-                name_branch(repo, &branch);
+            // All machines must agree on one branch. Reconcile it once per
+            // remote, then stop asking: the `ls-remote` this needs is a network
+            // round-trip we do not want on every launch. An unreachable remote
+            // is not marked, so it is retried next time.
+            if !is_settled(repo, url)
+                && let Ok(branch) = remote_default_branch_result(url)
+            {
+                if let Some(branch) = branch {
+                    name_branch(repo, &branch);
+                }
+                mark_settled(repo, url);
             }
         }
         return Ok(());
@@ -207,6 +212,7 @@ fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), String> {
         // board unpopulated.
         settle_head(repo, &target_branch(url));
         ensure_gitignore(repo);
+        mark_settled(repo, url);
         return Ok(());
     }
 
@@ -276,6 +282,7 @@ fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), String> {
             "tasu: local",
         ],
     );
+    mark_settled(repo, url);
     Ok(())
 }
 
@@ -296,17 +303,36 @@ fn target_branch(remote: &str) -> String {
 /// The remote's default branch, read from its symbolic `HEAD`. `None` when the
 /// remote is empty, unreachable, or has an unusual layout.
 fn remote_default_branch(remote: &str) -> Option<String> {
+    remote_default_branch_result(remote).ok().flatten()
+}
+
+/// Like [`remote_default_branch`], but distinguishes an unreachable remote
+/// (`Err`) from a readable one that simply has no default branch (`Ok(None)`).
+/// `ensure_repo` uses the difference to decide whether to retry later.
+fn remote_default_branch_result(remote: &str) -> Result<Option<String>, String> {
     let mut cmd = Command::new("git");
     cmd.args(["ls-remote", "--symref", remote, "HEAD"]);
-    let output = run_output(&mut cmd, NETWORK_TIMEOUT).ok()?;
+    let output = run_output(&mut cmd, NETWORK_TIMEOUT)?;
     // "ref: refs/heads/main\tHEAD"
-    output.lines().find_map(|line| {
+    Ok(output.lines().find_map(|line| {
         let name = line
             .strip_prefix("ref:")?
             .trim()
             .strip_prefix("refs/heads/")?;
         name.split_whitespace().next().map(str::to_string)
-    })
+    }))
+}
+
+/// Remember the remote whose default branch we already reconciled, so later
+/// runs skip the `ls-remote` that needs. Stored in the repo's own config, never
+/// committed.
+fn mark_settled(repo: &Path, url: &str) {
+    let _ = git(repo, &["config", "tasu.remote", url]);
+}
+
+/// Whether the branch for `url` was already reconciled on a previous run.
+fn is_settled(repo: &Path, url: &str) -> bool {
+    git_string(repo, &["config", "--get", "tasu.remote"]).as_deref() == Some(url)
 }
 
 /// The current branch, or `None` on a detached HEAD or an error.
@@ -526,6 +552,12 @@ fn git_ok(repo: &Path, args: &[&str]) -> bool {
 fn git_bytes(repo: &Path, args: &[&str]) -> Option<Vec<u8>> {
     let output = git_cmd(repo, args).output().ok()?;
     output.status.success().then_some(output.stdout)
+}
+
+/// Trimmed stdout of a git command expected to succeed.
+fn git_string(repo: &Path, args: &[&str]) -> Option<String> {
+    let bytes = git_bytes(repo, args)?;
+    Some(String::from_utf8_lossy(&bytes).trim().to_string())
 }
 
 /// Run a command with a deadline, killing it if it overruns. Used for the
@@ -934,6 +966,24 @@ mod tests {
         ensure_repo(&data, Some(&missing.to_string_lossy())).unwrap();
 
         assert_eq!(current_branch(&data).as_deref(), Some("master"));
+    }
+
+    #[test]
+    fn branch_reconciliation_is_remembered() {
+        let dir = tempfile::tempdir().unwrap();
+        let remote = seeded_remote(dir.path(), "trunk");
+        let data = dir.path().join("data");
+        std::fs::create_dir_all(&data).unwrap();
+        std::fs::write(data.join("todos.json"), "{\"version\":1,\"tasks\":[]}").unwrap();
+
+        ensure_repo(&data, Some(&remote)).unwrap();
+
+        assert_eq!(current_branch(&data).as_deref(), Some("trunk"));
+        assert!(
+            is_settled(&data, &remote),
+            "the remote should be remembered so later runs skip the ls-remote"
+        );
+        assert!(!is_settled(&data, "/some/other/remote.git"));
     }
 
     #[test]

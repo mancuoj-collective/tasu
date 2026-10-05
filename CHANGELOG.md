@@ -10,6 +10,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Starting tasu no longer runs a `git ls-remote` to reconcile the branch on
+  every launch; that result is remembered per remote, so opening only does the
+  one pull.
 - The help overlay no longer shows the sync error. A failure is summarised in
   the footer as `✗ <reason> · run tasu sync`, with the full git error left to
   `tasu sync`.

@@ -251,7 +251,9 @@ layer degrades silently to local and produces no git calls.
   repo. The remote's default branch is adopted when it has one, otherwise
   `main`; `push` targets the explicit branch name and `pull` names
   `origin <branch>` (no upstream needed). An unreadable remote triggers no
-  rename, so a transient failure cannot corrupt a healthy local branch.
+  rename, so a transient failure cannot corrupt a healthy local branch. The
+  reconcile needs an `ls-remote`, so its result is remembered in the repo's own
+  Git config (`tasu.remote`): it runs once per remote, not on every launch.
 - **First-connect merge**: when the local and remote boards both exist, the graft
   path calls `store::merge_files` to union and de-duplicate instead of letting
   the local side overwrite the remote. If one side is missing it is kept as is;
