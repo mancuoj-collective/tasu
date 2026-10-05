@@ -168,8 +168,10 @@ How it behaves inside the app:
 
 - pulls when it starts;
 - after each change, commits and pushes a few seconds later (debounced);
-- shows a blinking dot in the footer while a sync is running (a warning-coloured
-  dot if the last one failed);
+- shows a blinking dot in the footer while a sync is running, and
+  `✗ sync failed · <reason>` if the last one failed;
+- shows the same one-line reason in the help overlay; run `tasu sync` for the
+  full git error;
 - pushes once more on exit;
 - if the network is down or the push fails, stays quiet and retries later
   (pulling first, so a rejected push can recover).
