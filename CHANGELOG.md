@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-06
+
 ### Changed
 
 - Board merges (first connect and divergence) identify tasks by their creation
@@ -162,7 +164,8 @@ architecture and optional git sync.
 Initial release: a flat terminal todo list with JSON persistence (add, edit,
 toggle, delete) built with ratatui.
 
-[Unreleased]: https://github.com/mancuoj-collective/tasu/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/mancuoj-collective/tasu/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.11.0
 [0.10.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.10.0
 [0.9.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.9.0
 [0.8.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.8.0
