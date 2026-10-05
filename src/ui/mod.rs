@@ -106,7 +106,10 @@ fn status_line(model: &Model, theme: &Theme) -> Option<Line<'static>> {
             };
             Some(Line::from(span))
         }
-        SyncStatus::Failed => Some(Line::from(Span::styled("\u{25cf}", theme.warn()))),
+        SyncStatus::Failed => Some(Line::from(Span::styled(
+            "\u{25cf} sync failed",
+            theme.warn(),
+        ))),
         SyncStatus::Local | SyncStatus::Idle => None,
     }
 }

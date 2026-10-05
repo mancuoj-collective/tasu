@@ -187,13 +187,6 @@ fn help_modal(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path, syn
         )));
     }
 
-    // Keep the sync error at the top so it is visible even on short terminals.
-    // Wrap it in full: a half-shown git error is useless for diagnosis.
-    if let Some(err) = &model.ui.sync_error {
-        push_block(&mut lines, "!  ", err, theme.warn(), inner, Alignment::Left);
-    }
-    lines.push(Line::default());
-
     let label_width = inner.saturating_sub(10);
     for (key, label) in entries {
         lines.push(Line::from(vec![
@@ -225,6 +218,13 @@ fn help_modal(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path, syn
         inner,
         Alignment::Right,
     );
+
+    // The raw sync error sits at the bottom: shown in full (wrapped) but it
+    // never pushes the key list down. The footer carries the short summary.
+    if let Some(err) = &model.ui.sync_error {
+        lines.push(Line::default());
+        push_block(&mut lines, "!  ", err, theme.warn(), inner, Alignment::Left);
+    }
 
     let padding = Padding::new(2, 2, 1, 1);
     let block = Block::bordered()
@@ -271,6 +271,7 @@ fn push_block(
     let indent = prefix.width();
     let body_width = inner.saturating_sub(indent).max(1);
     for (i, chunk) in wrap_text(body, body_width).into_iter().enumerate() {
+        let chunk = chunk.trim_end();
         let lead = if i == 0 {
             prefix.to_string()
         } else {
@@ -288,44 +289,34 @@ fn push_block(
     }
 }
 
-/// Greedy word wrap to at most `width` columns, measured in display cells.
-/// Words longer than a line are hard-broken. Always returns at least one line.
+/// Greedy wrap to at most `width` display cells. Break opportunities are
+/// whitespace and `/`, so paths and URLs break at their own separators and the
+/// first line fills up, leaving a shorter remainder (long-top, short-bottom).
+/// An atom wider than a line is hard-broken character by character. The text is
+/// preserved exactly. Always returns at least one line.
 fn wrap_text(text: &str, width: usize) -> Vec<String> {
     let width = width.max(1);
     let mut out: Vec<String> = Vec::new();
 
     for paragraph in text.split('\n') {
         let mut line = String::new();
-        let mut line_width = 0usize;
-        for word in paragraph.split_whitespace() {
-            let mut rest = word;
+        for atom in atoms(paragraph) {
+            if !line.is_empty() && format!("{line}{atom}").trim_end().width() > width {
+                out.push(std::mem::take(&mut line));
+            }
+            let mut rest = atom.as_str();
             while !rest.is_empty() {
-                let space = usize::from(line_width > 0);
-                if line_width + space >= width {
+                let room = width.saturating_sub(line.trim_end().width());
+                if room == 0 {
                     out.push(std::mem::take(&mut line));
-                    line_width = 0;
                     continue;
                 }
-                let avail = width - line_width - space;
-                // Prefer moving a whole word down over splitting it, unless it
-                // is longer than a full line and must be broken anyway.
-                if space == 1 && rest.width() > avail && rest.width() <= width {
-                    out.push(std::mem::take(&mut line));
-                    line_width = 0;
-                    continue;
-                }
-                let (chunk, tail) = split_at_width(rest, avail);
-                if space == 1 {
-                    line.push(' ');
-                    line_width += 1;
-                }
-                line_width += chunk.width();
+                let (chunk, tail) = split_at_width(rest, room);
                 line.push_str(&chunk);
                 rest = tail;
                 if !rest.is_empty() {
                     // The chunk filled the line; flush before continuing.
                     out.push(std::mem::take(&mut line));
-                    line_width = 0;
                 }
             }
         }
@@ -336,6 +327,23 @@ fn wrap_text(text: &str, width: usize) -> Vec<String> {
         out.push(String::new());
     }
     out
+}
+
+/// Split into atoms at whitespace and `/`, keeping the separator on the atom it
+/// follows so the pieces reassemble exactly.
+fn atoms(text: &str) -> Vec<String> {
+    let mut atoms = Vec::new();
+    let mut current = String::new();
+    for ch in text.chars() {
+        current.push(ch);
+        if ch == ' ' || ch == '/' {
+            atoms.push(std::mem::take(&mut current));
+        }
+    }
+    if !current.is_empty() {
+        atoms.push(current);
+    }
+    atoms
 }
 
 /// Split `text` at the widest prefix that fits in `width` cells. Takes one
@@ -377,7 +385,11 @@ mod tests {
     use unicode_width::UnicodeWidthStr;
 
     fn widths(lines: &[String]) -> Vec<usize> {
-        lines.iter().map(|line| line.width()).collect()
+        lines.iter().map(|line| line.trim_end().width()).collect()
+    }
+
+    fn trimmed(lines: &[String]) -> Vec<&str> {
+        lines.iter().map(|line| line.trim_end()).collect()
     }
 
     #[test]
@@ -386,12 +398,30 @@ mod tests {
     }
 
     #[test]
-    fn words_wrap_on_spaces_without_splitting_them() {
+    fn words_wrap_on_spaces_without_losing_text() {
         let text = "fatal: repository not found";
         let lines = wrap_text(text, 12);
         assert!(lines.len() > 1, "should wrap: {lines:?}");
         assert!(widths(&lines).iter().all(|&w| w <= 12), "{lines:?}");
-        assert_eq!(lines.join(" "), text);
+        assert_eq!(lines.concat(), text);
+    }
+
+    #[test]
+    fn paths_fill_the_first_line_and_leave_a_short_remainder() {
+        let lines = wrap_text("~/Library/Application Support/tasu/todos.json", 44);
+        assert_eq!(
+            trimmed(&lines),
+            vec!["~/Library/Application Support/tasu/", "todos.json"]
+        );
+    }
+
+    #[test]
+    fn urls_break_after_a_slash() {
+        let lines = wrap_text("https://github.com/mancuoj-collective/tasu-data.git", 44);
+        assert_eq!(
+            trimmed(&lines),
+            vec!["https://github.com/mancuoj-collective/", "tasu-data.git"]
+        );
     }
 
     #[test]

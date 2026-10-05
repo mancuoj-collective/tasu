@@ -8,14 +8,12 @@ expression: "render(&model, 84, 26)"
   ○ learn GPUI│                   ▀█▀ ▄▀█ ▄▀▀ █ █                    │              
               │                    █  █▀█ ▀▀▄ █ █                    │              
  THIS WEEK  41│                    ▀  ▀ ▀ ▄▄▀ ▀▄▀                    │              
- ─────────────│  !  fatal: repository 'you/tasu-data' not found      │───────────── 
-  ○ write the │                                                      │              
-              │  j / k                                         move  │              
- LATER        │  h / l                      previous / next section  │              
- ─────────────│  g / G                                 top / bottom  │───────────── 
-  ○ read the r│  space                                         done  │              
-              │  a                                   add (to today)  │              
-              │  e                                       edit title  │              
+ ─────────────│  j / k                                         move  │───────────── 
+  ○ write the │  h / l                      previous / next section  │              
+              │  g / G                                 top / bottom  │              
+ LATER        │  space                                         done  │              
+ ─────────────│  a                                   add (to today)  │───────────── 
+  ○ read the r│  e                                       edit title  │              
               │  t                                    move to today  │              
               │  [ / ]               send to previous / next bucket  │              
               │  x                                   drop (archive)  │              
@@ -25,6 +23,8 @@ expression: "render(&model, 84, 26)"
               │  ctrl+c                               quit anywhere  │              
               │                                                      │              
               │  data                          /tmp/tasu/todos.json  │              
+              │  sync              git@github.com:you/tasu-data.git  │              
+              │                                                      │              
               │                                                      │              
               └──────────────────────────────────────────────────────┘              
- ↑↓ scroll  esc close                                                             ●
+ ↑↓ scroll  esc close                                                 ● sync failed
