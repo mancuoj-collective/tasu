@@ -8,10 +8,10 @@ use clap::Parser;
 use crossterm::event;
 
 use tasu::app::{Action, Effect, Model, SyncStatus, update};
-use tasu::cli::{Cli, Command};
+use tasu::cli::{Cli, Command, HistoryName};
 use tasu::command;
 use tasu::config::Config;
-use tasu::domain::settle;
+use tasu::domain::{Bucket, settle};
 use tasu::store::Store;
 use tasu::sync::Sync;
 use tasu::ui::{self, theme::Theme};
@@ -41,14 +41,20 @@ fn run() -> Result<()> {
     let config = Config::load();
     match cli.command {
         Some(Command::Add { title }) => command::add(&config, &title),
-        Some(Command::List) => command::list(&config),
-        Some(Command::Config) => {
-            command::config(&config);
-            Ok(())
+        Some(Command::List { bucket, json }) => {
+            command::list(&config, bucket.map(Bucket::from), json)
         }
+        Some(Command::History { view, json }) => {
+            command::history(&config, matches!(view, Some(HistoryName::Dropped)), json)
+        }
+        Some(Command::Done { title }) => command::done(&config, &title),
+        Some(Command::Drop { title }) => command::drop_task(&config, &title),
+        Some(Command::Move { bucket, title }) => command::move_task(&config, bucket.into(), &title),
+        Some(Command::Config { json }) => command::config(&config, json),
         Some(Command::Remote { url, clear }) => command::remote(&config, url.as_deref(), clear),
         Some(Command::Sync) => command::sync(&config),
         Some(Command::Update) => command::update(),
+        Some(Command::Completions { shell }) => command::completions(shell),
         None => run_tui(config),
     }
 }

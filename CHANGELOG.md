@@ -8,8 +8,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- `tasu list` (alias `ls`) prints the open tasks grouped by bucket, and
-  `tasu add` now confirms what it captured.
+- A fuller command line: `tasu list` (alias `ls`, optional bucket, `--json`),
+  `tasu history [done|dropped]` (`--json`), `tasu done` / `drop` / `move` by
+  exact title, `tasu config --json`, and `tasu completions <shell>`.
+- `tasu add` now confirms what it captured.
 - `tasu update`, which upgrades tasu using however it was installed (Homebrew,
   the installer script, or Cargo), instead of guessing.
 

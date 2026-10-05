@@ -15,8 +15,9 @@ does this serve?".
    can change underneath us; neither may block a keypress.
 4. **Two front-ends, one core.** The TUI and `tasu add` share `domain` +
    `store` + `sync`.
-5. **Minimal dependencies.** `clap` and `chrono` are the only real additions;
-   git is a system command and file changes are detected by polling mtime.
+5. **Minimal dependencies.** No HTTP client and no async runtime: git is a
+   system command, file changes are detected by polling mtime, and shell
+   completions come from `clap_complete`.
 
 ## Layering
 
@@ -195,9 +196,13 @@ its own writes, which is what separates "our write" from "an external one".
 - `tasu add <title>...` → load + `settle` + `add` + save + **best-effort**
   commit/push (bounded; offline is fine and the exit code is still 0), printing
   what it captured.
-- `tasu list` (alias `ls`) → load + `settle` and print the open tasks grouped by
-  bucket. Read-only and local; `tasu sync` refreshes from the remote first.
-- `tasu config` → print the resolved data dir, config file and remote.
+- `tasu list [bucket] [--json]` (alias `ls`) → load + `settle` and print the open
+  tasks grouped by bucket. Read-only and local; `tasu sync` refreshes first.
+- `tasu history [done|dropped] [--json]` → print completed or dropped tasks.
+- `tasu done <title>` / `tasu drop <title>` / `tasu move <bucket> <title>` →
+  mutate an **open** task identified by its exact title (erroring on none or
+  several matches, since tasks carry no id), then save and best-effort push.
+- `tasu config [--json]` → print the resolved data dir, config file and remote.
 - `tasu remote <url>` / `--clear` → probe, then save or clear (see Sync).
 - `tasu sync` → one pull-then-push, printing the real git error on failure.
 - `tasu update` → upgrade using however tasu was installed: `brew upgrade` for a
@@ -205,6 +210,7 @@ its own writes, which is what separates "our write" from "an external one".
   for a Cargo install; otherwise it prints the right command. The method is
   inferred from the executable path and the installer's receipt, so no new
   dependency or download logic is needed.
+- `tasu completions <shell>` → print a completion script for the given shell.
 
 Both front-ends share `domain` / `store` / `sync`.
 

@@ -6,57 +6,218 @@ use anyhow::{Context, Result};
 use chrono::Local;
 
 use crate::config::Config;
-use crate::domain::{Board, Bucket, settle};
+use crate::domain::{Board, Bucket, Task, TaskState, settle};
 use crate::store::Store;
 use crate::sync;
 
 /// `tasu add "..."`: record a task and push, without opening the TUI. The push
 /// is best-effort: offline still exits successfully.
 pub fn add(config: &Config, words: &[String]) -> Result<()> {
-    let title = words.join(" ");
-    let title = title.trim();
-    if title.is_empty() {
-        return Ok(());
-    }
+    let Some(title) = joined_title(words) else {
+        anyhow::bail!("a title is required");
+    };
+    best_effort_pull(config);
 
     let store = Store::new(config.board_path());
-
-    // Best-effort pull before reading, so a machine that only ever uses the
-    // CLI still converges with the remote.
-    if let Err(err) = sync::pull_now(&config.data_dir, config.remote.as_deref()) {
-        eprintln!("tasu: pull failed: {err}");
-    }
-
     let now = Local::now();
     let mut board = store.load();
     settle(&mut board, now);
-    board.add(title, now);
+    board.add(title.as_str(), now);
     store.save(&board)?;
     println!("+ {title}");
 
-    if let Err(err) = sync::commit_now(&config.data_dir, config.remote.as_deref()) {
-        eprintln!("tasu: push failed: {err}");
-    }
+    best_effort_push(config);
     Ok(())
 }
 
 /// `tasu list`: print the open tasks, grouped by bucket. Read-only and local —
 /// run `tasu sync` first if you want the latest from the remote.
-pub fn list(config: &Config) -> Result<()> {
+pub fn list(config: &Config, bucket: Option<Bucket>, json: bool) -> Result<()> {
     let mut board = Store::new(config.board_path()).load();
     settle(&mut board, Local::now());
-    print!("{}", render_list(&board));
+
+    let buckets = match bucket {
+        Some(bucket) => vec![bucket],
+        None => vec![Bucket::Today, Bucket::Week, Bucket::Later],
+    };
+    let tasks: Vec<&Task> = buckets
+        .iter()
+        .flat_map(|bucket| board.open_in(*bucket))
+        .filter_map(|index| board.task(index))
+        .collect();
+
+    if json {
+        return print_json(&tasks);
+    }
+    print!("{}", render_open(&board, &buckets));
     Ok(())
 }
 
-fn render_list(board: &Board) -> String {
+/// `tasu history [done|dropped]`: print completed or dropped tasks.
+pub fn history(config: &Config, dropped: bool, json: bool) -> Result<()> {
+    let board = Store::new(config.board_path()).load();
+    let indices = if dropped {
+        board.archived()
+    } else {
+        board.done()
+    };
+    let tasks: Vec<&Task> = indices
+        .iter()
+        .filter_map(|&index| board.task(index))
+        .collect();
+
+    if json {
+        return print_json(&tasks);
+    }
+    let mark = if dropped { '\u{2717}' } else { '\u{2713}' };
     let mut out = String::new();
-    for bucket in [Bucket::Today, Bucket::Week, Bucket::Later] {
-        let indices = board.open_in(bucket);
+    for task in tasks {
+        out.push_str("  ");
+        out.push(mark);
+        out.push(' ');
+        out.push_str(&task.title);
+        out.push('\n');
+    }
+    if out.is_empty() {
+        out.push_str(if dropped {
+            "nothing dropped\n"
+        } else {
+            "nothing done\n"
+        });
+    }
+    print!("{out}");
+    Ok(())
+}
+
+/// `tasu done "<title>"`: complete an open task by its exact title.
+pub fn done(config: &Config, words: &[String]) -> Result<()> {
+    finish(config, words, false)
+}
+
+/// `tasu drop "<title>"`: drop (archive) an open task by its exact title.
+pub fn drop_task(config: &Config, words: &[String]) -> Result<()> {
+    finish(config, words, true)
+}
+
+/// `tasu move <bucket> "<title>"`: send an open task to a bucket by its exact
+/// title.
+pub fn move_task(config: &Config, bucket: Bucket, words: &[String]) -> Result<()> {
+    let Some(title) = joined_title(words) else {
+        anyhow::bail!("a title is required");
+    };
+    best_effort_pull(config);
+
+    let store = Store::new(config.board_path());
+    let now = Local::now();
+    let mut board = store.load();
+    settle(&mut board, now);
+
+    let index = find_open(&board, &title)?;
+    let current = board.task(index).map_or(0, |task| task.bucket.index());
+    let delta = bucket.index() as i32 - current as i32;
+    if delta != 0 {
+        board.move_bucket(index, delta, now);
+    }
+    store.save(&board)?;
+    println!(
+        "\u{2192} moved {title:?} to {}",
+        bucket_label(bucket).to_lowercase()
+    );
+
+    best_effort_push(config);
+    Ok(())
+}
+
+/// Shared body of `done` and `drop`: resolve the title, then act on it.
+fn finish(config: &Config, words: &[String], drop: bool) -> Result<()> {
+    let Some(title) = joined_title(words) else {
+        anyhow::bail!("a title is required");
+    };
+    best_effort_pull(config);
+
+    let store = Store::new(config.board_path());
+    let now = Local::now();
+    let mut board = store.load();
+    settle(&mut board, now);
+
+    let index = find_open(&board, &title)?;
+    let changed = if drop {
+        board.archive(index, now)
+    } else {
+        board.complete(index, now)
+    };
+    if !changed {
+        anyhow::bail!("could not update {title:?}");
+    }
+    store.save(&board)?;
+    println!(
+        "{} {title:?}",
+        if drop {
+            "\u{2717} dropped"
+        } else {
+            "\u{2713} completed"
+        }
+    );
+
+    best_effort_push(config);
+    Ok(())
+}
+
+/// Resolve a title to a single open task. Errors on none or several matches:
+/// tasks carry no id, so the title has to be exact and unambiguous.
+fn find_open(board: &Board, title: &str) -> Result<usize> {
+    let matches: Vec<usize> = board
+        .tasks()
+        .iter()
+        .enumerate()
+        .filter(|(_, task)| task.state == TaskState::Open && task.title == title)
+        .map(|(index, _)| index)
+        .collect();
+    match matches.as_slice() {
+        [] => anyhow::bail!("no open task titled {title:?}"),
+        [index] => Ok(*index),
+        many => anyhow::bail!(
+            "{} open tasks titled {title:?}; rename one to disambiguate",
+            many.len()
+        ),
+    }
+}
+
+fn joined_title(words: &[String]) -> Option<String> {
+    let joined = words.join(" ");
+    let trimmed = joined.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn best_effort_pull(config: &Config) {
+    if let Err(err) = sync::pull_now(&config.data_dir, config.remote.as_deref()) {
+        eprintln!("tasu: pull failed: {err}");
+    }
+}
+
+fn best_effort_push(config: &Config) {
+    if let Err(err) = sync::commit_now(&config.data_dir, config.remote.as_deref()) {
+        eprintln!("tasu: push failed: {err}");
+    }
+}
+
+fn print_json(tasks: &[&Task]) -> Result<()> {
+    println!("{}", serde_json::to_string_pretty(tasks)?);
+    Ok(())
+}
+
+fn render_open(board: &Board, buckets: &[Bucket]) -> String {
+    let mut out = String::new();
+    for bucket in buckets {
+        let indices = board.open_in(*bucket);
         if indices.is_empty() {
             continue;
         }
-        out.push_str(bucket_label(bucket));
+        out.push_str(bucket_label(*bucket));
         out.push('\n');
         for index in indices {
             if let Some(task) = board.task(index) {
@@ -153,7 +314,17 @@ fn windows_installer_hint() -> String {
 }
 
 /// `tasu config`: show the resolved settings.
-pub fn config(config: &Config) {
+pub fn config(config: &Config, json: bool) -> Result<()> {
+    if json {
+        let value = serde_json::json!({
+            "data_dir": config.data_dir.display().to_string(),
+            "board": config.board_path().display().to_string(),
+            "config": Config::config_file().map(|path| path.display().to_string()),
+            "remote": config.remote.as_deref(),
+        });
+        println!("{}", serde_json::to_string_pretty(&value)?);
+        return Ok(());
+    }
     println!("data dir   {}", config.data_dir.display());
     println!("board      {}", config.board_path().display());
     if let Some(path) = Config::config_file() {
@@ -163,6 +334,15 @@ pub fn config(config: &Config) {
         Some(url) => println!("sync       {url}"),
         None => println!("sync       off (local only)"),
     }
+    Ok(())
+}
+
+/// `tasu completions <shell>`: print a completion script to stdout.
+pub fn completions(shell: clap_complete::Shell) -> Result<()> {
+    use clap::CommandFactory;
+    let mut command = crate::cli::Cli::command();
+    clap_complete::generate(shell, &mut command, "tasu", &mut std::io::stdout());
+    Ok(())
 }
 
 /// `tasu remote`: show, set or clear the sync remote. Accepts a full URL, a
@@ -362,8 +542,8 @@ mod tests {
 
     #[test]
     fn list_prints_open_tasks_by_bucket() {
-        use crate::domain::Board;
         use crate::domain::test_time::at;
+        use crate::domain::{Board, Bucket};
 
         let mut board = Board::new();
         board.add("today one", at(2026, 10, 5));
@@ -371,15 +551,60 @@ mod tests {
         board.move_bucket(1, 2, at(2026, 10, 5));
 
         assert_eq!(
-            super::render_list(&board),
+            super::render_open(&board, &[Bucket::Today, Bucket::Week, Bucket::Later]),
             "TODAY\n  \u{25cb} today one\nLATER\n  \u{25cb} later one\n"
         );
     }
 
     #[test]
     fn list_reports_an_empty_board() {
+        use crate::domain::{Board, Bucket};
+        assert_eq!(
+            super::render_open(&Board::new(), &[Bucket::Today]),
+            "no open tasks\n"
+        );
+    }
+
+    #[test]
+    fn find_open_requires_a_unique_exact_title() {
         use crate::domain::Board;
-        assert_eq!(super::render_list(&Board::new()), "no open tasks\n");
+        use crate::domain::test_time::at;
+
+        let mut board = Board::new();
+        board.add("write tests", at(2026, 10, 5));
+        board.add("write tests", at(2026, 10, 5));
+        board.add("other", at(2026, 10, 5));
+        board.add("solo", at(2026, 10, 5));
+        board.complete(2, at(2026, 10, 5));
+
+        assert!(super::find_open(&board, "solo").is_ok());
+        assert!(super::find_open(&board, "missing").is_err());
+        assert!(
+            super::find_open(&board, "other").is_err(),
+            "done tasks must not match"
+        );
+        let ambiguous = super::find_open(&board, "write tests")
+            .unwrap_err()
+            .to_string();
+        assert!(ambiguous.contains("disambiguate"), "{ambiguous}");
+    }
+
+    #[test]
+    fn done_completes_a_unique_title() {
+        use crate::config::Config;
+        use crate::domain::TaskState;
+        use crate::store::Store;
+
+        let dir = tempfile::tempdir().unwrap();
+        let config = Config {
+            data_dir: dir.path().to_path_buf(),
+            remote: None,
+        };
+        super::add(&config, &["buy milk".to_string()]).unwrap();
+        super::done(&config, &["buy milk".to_string()]).unwrap();
+
+        let board = Store::new(config.board_path()).load();
+        assert_eq!(board.task(0).unwrap().state, TaskState::Done);
     }
 
     #[test]

@@ -67,14 +67,25 @@ cargo install --path .
 ## Usage
 
 ```bash
-tasu                       # open the app
-tasu add "buy cat food"    # record a task without opening the app
-tasu list                  # print the open tasks without opening the app
-tasu config                # print the data dir, config file and sync remote
-tasu remote <url>          # set the git sync remote (optional)
-tasu sync                  # pull then push once, and report the result
-tasu update                # upgrade tasu the way it was installed
+tasu                        # open the app
+tasu add "buy cat food"     # record a task without opening the app
+tasu list [today|week|later]# print the open tasks
+tasu done "buy cat food"    # complete a task
+tasu drop "old idea"        # drop (archive) a task
+tasu move later "someday"   # send a task to another bucket
+tasu history [done|dropped] # print completed / dropped tasks
+tasu config                 # print the data dir, config file and sync remote
+tasu remote <url>           # set the git sync remote (optional)
+tasu sync                   # pull then push once, and report the result
+tasu update                 # upgrade tasu the way it was installed
+tasu completions bash       # print a shell completion script
 ```
+
+Every command that changes something prints what it did, and `list`, `history`
+and `config` take `--json` for scripting.
+
+Tasks carry no id, so `done`, `drop` and `move` match an open task by its
+**exact title**; if none or several match, they error rather than guess.
 
 `tasu update` detects how tasu was installed and runs the matching upgrade —
 `brew upgrade mancuoj/tap/tasu`, the official installer, or `cargo install tasu`
