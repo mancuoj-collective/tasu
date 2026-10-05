@@ -122,78 +122,18 @@ pub fn normalize_remote(spec: &str) -> String {
     spec.to_string()
 }
 
-/// Why a remote could not be reached, inferred from git's stderr. Used to lead
-/// with the likely cause instead of dumping the raw error.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ReachError {
-    NotFound,
-    Auth,
-    Network,
-    Other,
-}
-
-impl ReachError {
-    fn classify(error: &str) -> Self {
-        let error = error.to_ascii_lowercase();
-        let has = |needle: &str| error.contains(needle);
-        if has("repository not found") || has("does not appear to be a git repository") {
-            Self::NotFound
-        } else if has("authentication failed")
-            || has("could not read username")
-            || has("could not read password")
-            || has("terminal prompts disabled")
-            || has("permission denied")
-            || has("403")
-        {
-            Self::Auth
-        } else if has("could not resolve host")
-            || has("could not resolve")
-            || has("unable to access")
-            || has("failed to connect")
-            || has("timed out")
-            || has("network is unreachable")
-        {
-            Self::Network
-        } else {
-            Self::Other
-        }
-    }
-
-    fn title(self) -> &'static str {
-        match self {
-            Self::NotFound => "repository not found",
-            Self::Auth => "authentication failed",
-            Self::Network => "could not reach the host",
-            Self::Other => "could not reach the remote",
-        }
-    }
-
-    fn fix(self) -> &'static str {
-        match self {
-            Self::NotFound => {
-                "check the owner/repo, or create the repository (private is fine), then retry"
-            }
-            Self::Auth => {
-                "no stored credentials or no write access \u{2014} over HTTPS git needs a token, or use an SSH remote"
-            }
-            Self::Network => "check your network and the host name, then retry",
-            Self::Other => "the git error is above",
-        }
-    }
-}
-
 /// A short, prioritised explanation of a failed probe: lead with the cause,
 /// show the URL once, then one fix. The raw git error only appears when it
 /// cannot be classified.
 fn unreachable(url: &str, error: &str) -> String {
-    let kind = ReachError::classify(error);
+    let kind = sync::Failure::classify(error);
     let mut message = format!(
         "{} {}\n",
         styled("1;31", "\u{2717}"),
-        styled("1;31", &format!("remote not set \u{b7} {}", kind.title())),
+        styled("1;31", &format!("remote not set \u{b7} {}", kind.reason())),
     );
     message.push_str(&format!("  {url}\n"));
-    if kind == ReachError::Other
+    if kind == sync::Failure::Other
         && let Some(line) = error.lines().map(str::trim).find(|line| !line.is_empty())
     {
         message.push_str(&format!("  {}\n", styled("2", line)));
@@ -218,7 +158,7 @@ fn styled(code: &str, text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{ReachError, normalize_remote};
+    use super::normalize_remote;
 
     #[test]
     fn expands_github_shorthand() {
@@ -249,25 +189,6 @@ mod tests {
     #[test]
     fn adds_a_scheme_to_a_bare_host() {
         assert_eq!(normalize_remote("github.com/a/b"), "https://github.com/a/b");
-    }
-
-    #[test]
-    fn classifies_common_git_failures() {
-        assert_eq!(
-            ReachError::classify("remote: Repository not found.\nfatal: repository 'x' not found"),
-            ReachError::NotFound
-        );
-        assert_eq!(
-            ReachError::classify(
-                "fatal: could not read Username for 'https://github.com': terminal prompts disabled"
-            ),
-            ReachError::Auth
-        );
-        assert_eq!(
-            ReachError::classify("fatal: unable to access 'x': Could not resolve host: github.com"),
-            ReachError::Network
-        );
-        assert_eq!(ReachError::classify("something else"), ReachError::Other);
     }
 
     #[test]

@@ -14,8 +14,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- The help overlay wraps the sync error and the data/remote paths in full
-  instead of truncating them, and aligns the values with the key-hint column.
+- The help overlay wraps the data/remote values in full instead of truncating
+  them, and shows a failed sync as a one-line reason (e.g. `✗ authentication
+  failed`) rather than a raw git dump; the full error stays in `tasu sync`.
+- The footer shows `✗ sync failed · <reason>` instead of a bare dot.
 - `tasu remote` prints a single, prioritised failure line (cause + one fix)
   instead of repeating the URL and dumping a generic multi-line hint.
 

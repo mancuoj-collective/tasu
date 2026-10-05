@@ -219,11 +219,18 @@ fn help_modal(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path, syn
         Alignment::Right,
     );
 
-    // The raw sync error sits at the bottom: shown in full (wrapped) but it
-    // never pushes the key list down. The footer carries the short summary.
+    // A failed sync is a one-line status, never a raw git dump: the full error
+    // lives in `tasu sync`.
     if let Some(err) = &model.ui.sync_error {
-        lines.push(Line::default());
-        push_block(&mut lines, "!  ", err, theme.warn(), inner, Alignment::Left);
+        let reason = crate::sync::Failure::classify(err).reason();
+        push_block(
+            &mut lines,
+            "      ",
+            &format!("\u{2717} {reason} \u{b7} run tasu sync"),
+            theme.warn(),
+            inner,
+            Alignment::Left,
+        );
     }
 
     let padding = Padding::new(2, 2, 1, 1);

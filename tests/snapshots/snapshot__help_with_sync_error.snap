@@ -24,7 +24,7 @@ expression: "render(&model, 84, 26)"
               │                                                      │              
               │  data                          /tmp/tasu/todos.json  │              
               │  sync              git@github.com:you/tasu-data.git  │              
-              │                                                      │              
+              │        ✗ repository not found · run tasu sync        │              
               │                                                      │              
               └──────────────────────────────────────────────────────┘              
- ↑↓ scroll  esc close                                                 ● sync failed
+ ↑↓ scroll  esc close                                     ✗ sync failed · not found

@@ -106,10 +106,18 @@ fn status_line(model: &Model, theme: &Theme) -> Option<Line<'static>> {
             };
             Some(Line::from(span))
         }
-        SyncStatus::Failed => Some(Line::from(Span::styled(
-            "\u{25cf} sync failed",
-            theme.warn(),
-        ))),
+        SyncStatus::Failed => {
+            let reason = model
+                .ui
+                .sync_error
+                .as_deref()
+                .map(|err| crate::sync::Failure::classify(err).short())
+                .unwrap_or("error");
+            Some(Line::from(Span::styled(
+                format!("\u{2717} sync failed \u{b7} {reason}"),
+                theme.warn(),
+            )))
+        }
         SyncStatus::Local | SyncStatus::Idle => None,
     }
 }

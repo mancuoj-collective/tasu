@@ -109,6 +109,81 @@ pub fn probe_remote(url: &str) -> Result<(), String> {
     run_bounded(&mut cmd, NETWORK_TIMEOUT)
 }
 
+/// A short, human-readable reason a sync failed, inferred from git's stderr.
+/// Used to lead with the likely cause instead of a raw error dump.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Failure {
+    NotFound,
+    Auth,
+    Network,
+    Other,
+}
+
+impl Failure {
+    pub fn classify(error: &str) -> Self {
+        let error = error.to_ascii_lowercase();
+        let has = |needle: &str| error.contains(needle);
+        if has("repository not found")
+            || has("does not appear to be a git repository")
+            || (has("repository") && has("not found"))
+        {
+            Self::NotFound
+        } else if has("authentication failed")
+            || has("could not read username")
+            || has("could not read password")
+            || has("terminal prompts disabled")
+            || has("permission denied")
+            || has("403")
+        {
+            Self::Auth
+        } else if has("could not resolve host")
+            || has("could not resolve")
+            || has("unable to access")
+            || has("failed to connect")
+            || has("timed out")
+            || has("network is unreachable")
+        {
+            Self::Network
+        } else {
+            Self::Other
+        }
+    }
+
+    /// One phrase, for the help overlay.
+    pub fn reason(self) -> &'static str {
+        match self {
+            Self::NotFound => "repository not found",
+            Self::Auth => "authentication failed",
+            Self::Network => "can't reach the host",
+            Self::Other => "sync failed",
+        }
+    }
+
+    /// A couple of words, for the footer.
+    pub fn short(self) -> &'static str {
+        match self {
+            Self::NotFound => "not found",
+            Self::Auth => "auth",
+            Self::Network => "offline",
+            Self::Other => "error",
+        }
+    }
+
+    /// One actionable line, for the `tasu remote` failure message.
+    pub fn fix(self) -> &'static str {
+        match self {
+            Self::NotFound => {
+                "check the owner/repo, or create the repository (private is fine), then retry"
+            }
+            Self::Auth => {
+                "no stored credentials or no write access \u{2014} over HTTPS git needs a token, or use an SSH remote"
+            }
+            Self::Network => "check your network and the host name, then retry",
+            Self::Other => "the git error is above",
+        }
+    }
+}
+
 fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), String> {
     if repo.join(".git").exists() {
         ensure_gitignore(repo);
@@ -863,6 +938,25 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let missing = dir.path().join("nope.git");
         assert!(probe_remote(&missing.to_string_lossy()).is_err());
+    }
+
+    #[test]
+    fn classifies_common_git_failures() {
+        assert_eq!(
+            Failure::classify("remote: Repository not found."),
+            Failure::NotFound
+        );
+        assert_eq!(
+            Failure::classify(
+                "fatal: could not read Username for 'https://github.com': terminal prompts disabled"
+            ),
+            Failure::Auth
+        );
+        assert_eq!(
+            Failure::classify("fatal: unable to access 'x': Could not resolve host: github.com"),
+            Failure::Network
+        );
+        assert_eq!(Failure::classify("something else"), Failure::Other);
     }
 
     #[test]

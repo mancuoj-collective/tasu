@@ -88,23 +88,31 @@ fn help_with_sync_error() {
 }
 
 #[test]
-fn help_wraps_long_error_and_paths() {
+fn help_summarizes_a_sync_failure_without_the_raw_error() {
     let mut model = Model::new(board(), dt(8));
     model.ui.mode = Mode::Help;
     model.ui.sync = SyncStatus::Failed;
     model.ui.sync_error = Some(
-        "fatal: could not read Username for 'https://github.com': terminal prompts \
-         disabled; fatal: repository not found"
+        "fatal: could not read Username for 'https://github.com': terminal prompts disabled"
             .to_string(),
     );
-    // Keep the path outside any home directory: `display_path` abbreviates the
+    // The path stays outside any home directory: `display_path` abbreviates the
     // home dir, which differs between machines and would make this snapshot
     // environment-dependent.
-    insta::assert_snapshot!(render_full(
+    let out = render_full(
         &model,
         84,
-        34,
+        30,
         Path::new("/opt/tasu-data/Library/Application Support/tasu/todos.json"),
         Some("https://github.com/mancuoj-collective/tasu-data.git"),
-    ));
+    );
+    assert!(
+        !out.contains("fatal:"),
+        "raw git error leaked into help:\n{out}"
+    );
+    assert!(
+        out.contains("authentication failed"),
+        "missing summary:\n{out}"
+    );
+    insta::assert_snapshot!(out);
 }
