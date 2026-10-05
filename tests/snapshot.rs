@@ -39,17 +39,19 @@ fn board() -> Board {
 }
 
 fn render(model: &Model, width: u16, height: u16) -> String {
+    render_full(
+        model,
+        width,
+        height,
+        Path::new("/tmp/tasu/todos.json"),
+        Some("git@github.com:you/tasu-data.git"),
+    )
+}
+
+fn render_full(model: &Model, width: u16, height: u16, path: &Path, sync: Option<&str>) -> String {
     let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
     terminal
-        .draw(|frame| {
-            ui::draw(
-                frame,
-                model,
-                &ui::theme::Theme::DARK,
-                Path::new("/tmp/tasu/todos.json"),
-                Some("git@github.com:you/tasu-data.git"),
-            )
-        })
+        .draw(|frame| ui::draw(frame, model, &ui::theme::Theme::DARK, path, sync))
         .unwrap();
 
     let buffer = terminal.backend().buffer();
@@ -83,4 +85,23 @@ fn help_with_sync_error() {
     model.ui.sync = SyncStatus::Failed;
     model.ui.sync_error = Some("fatal: repository 'you/tasu-data' not found".to_string());
     insta::assert_snapshot!(render(&model, 84, 26));
+}
+
+#[test]
+fn help_wraps_long_error_and_paths() {
+    let mut model = Model::new(board(), dt(8));
+    model.ui.mode = Mode::Help;
+    model.ui.sync = SyncStatus::Failed;
+    model.ui.sync_error = Some(
+        "fatal: could not read Username for 'https://github.com': terminal prompts \
+         disabled; fatal: repository not found"
+            .to_string(),
+    );
+    insta::assert_snapshot!(render_full(
+        &model,
+        84,
+        34,
+        Path::new("/Users/mancuoj/Library/Application Support/tasu/todos.json"),
+        Some("https://github.com/mancuoj-collective/tasu-data.git"),
+    ));
 }

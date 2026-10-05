@@ -1,0 +1,38 @@
+---
+source: tests/snapshot.rs
+expression: "render_full(&model, 84, 34,\nPath::new(\"/Users/mancuoj/Library/Application Support/tasu/todos.json\"),\nSome(\"https://github.com/mancuoj-collective/tasu-data.git\"),)"
+---
+ TODAY                                                                              
+ ────────────────────────────────────────────────────────────────────────────────── 
+  ○ Nand2Tetris chapter 6                                                           
+  ○ learn GPUI┌──────────────────────────────────────────────────────┐              
+              │                                                      │              
+ THIS WEEK  41│                   ▀█▀ ▄▀█ ▄▀▀ █ █                    │              
+ ─────────────│                    █  █▀█ ▀▀▄ █ █                    │───────────── 
+  ○ write the │                    ▀  ▀ ▀ ▄▄▀ ▀▄▀                    │              
+              │  !  fatal: could not read Username for               │              
+ LATER        │     'https://github.com': terminal prompts           │              
+ ─────────────│     disabled; fatal: repository not found            │───────────── 
+  ○ read the r│                                                      │              
+              │  j / k                                         move  │              
+              │  h / l                      previous / next section  │              
+              │  g / G                                 top / bottom  │              
+              │  space                                         done  │              
+              │  a                                   add (to today)  │              
+              │  e                                       edit title  │              
+              │  t                                    move to today  │              
+              │  [ / ]               send to previous / next bucket  │              
+              │  x                                   drop (archive)  │              
+              │  c                                          history  │              
+              │  tab                history: done / dropped (or ←→)  │              
+              │  q / esc                                       quit  │              
+              │  ctrl+c                               quit anywhere  │              
+              │                                                      │              
+              │  data  ~/Library/Application                         │              
+              │        Support/tasu/todos.json                       │              
+              │  sync  https://github.com/mancuoj-collective/tasu-d  │              
+              │        ata.git                                       │              
+              │                                                      │              
+              └──────────────────────────────────────────────────────┘              
+                                                                                    
+ ↑↓ scroll  esc close                                                             ●

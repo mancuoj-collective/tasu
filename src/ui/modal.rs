@@ -10,7 +10,7 @@ use ratatui::{
 
 use crate::app::{HistoryView, Mode, Model};
 
-use unicode_width::UnicodeWidthStr;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use super::{components, scroll_offset, theme::Theme};
 
@@ -168,7 +168,7 @@ fn help_modal(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path, syn
     ];
 
     let full = f.area();
-    let width = full.width.saturating_sub(4).min(50);
+    let width = full.width.saturating_sub(4).min(56);
     // Content width inside the border (2) and horizontal padding (2 per side).
     let inner = width.saturating_sub(6) as usize;
 
@@ -188,14 +188,9 @@ fn help_modal(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path, syn
     }
 
     // Keep the sync error at the top so it is visible even on short terminals.
+    // Wrap it in full: a half-shown git error is useless for diagnosis.
     if let Some(err) = &model.ui.sync_error {
-        let first = err.lines().next().unwrap_or(err);
-        let text = truncate_middle(&format!("!  {first}"), inner);
-        let pad = inner.saturating_sub(text.width()) / 2;
-        lines.push(Line::from(Span::styled(
-            format!("{}{text}", " ".repeat(pad)),
-            theme.warn(),
-        )));
+        push_block(&mut lines, "!  ", err, theme.warn(), inner);
     }
     lines.push(Line::default());
 
@@ -208,20 +203,20 @@ fn help_modal(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path, syn
     }
 
     lines.push(Line::default());
-    let info_line = |text: &str| -> Line<'static> {
-        let text = truncate_middle(text, inner);
-        let pad = inner.saturating_sub(text.width()) / 2;
-        Line::from(Span::styled(
-            format!("{}{text}", " ".repeat(pad)),
-            label_style,
-        ))
-    };
-    lines.push(info_line(&format!("data  {}", display_path(data_path))));
+    // Wrap the long, space-less values (paths, URLs) onto continuation lines
+    // with a hanging indent instead of eliding them.
+    push_block(
+        &mut lines,
+        "data  ",
+        &display_path(data_path),
+        label_style,
+        inner,
+    );
     let sync = match sync {
-        Some(url) => format!("sync  {url}"),
-        None => "sync  off \u{b7} tasu remote <url>".to_string(),
+        Some(url) => ("sync  ", url.to_string()),
+        None => ("sync  ", "off \u{b7} tasu remote <url>".to_string()),
     };
-    lines.push(info_line(&sync));
+    push_block(&mut lines, sync.0, &sync.1, label_style, inner);
 
     let padding = Padding::new(2, 2, 1, 1);
     let block = Block::bordered()
@@ -254,46 +249,101 @@ fn display_path(path: &Path) -> String {
     text
 }
 
-/// Keep the head and the tail (usually the filename), eliding the middle, so a
-/// long path stays readable and never exceeds `max` columns.
-fn truncate_middle(text: &str, max: usize) -> String {
-    use unicode_width::UnicodeWidthChar;
-
-    if text.width() <= max {
-        return text.to_string();
+/// Append a labelled, wrapped block to `lines`. The first line begins with
+/// `prefix`; continuation lines are indented under it. Long tokens without
+/// spaces (paths, URLs) are hard-broken, so nothing is ever cut off.
+fn push_block(
+    lines: &mut Vec<Line<'static>>,
+    prefix: &str,
+    body: &str,
+    style: Style,
+    inner: usize,
+) {
+    let indent = prefix.width();
+    let body_width = inner.saturating_sub(indent).max(1);
+    for (i, chunk) in wrap_text(body, body_width).into_iter().enumerate() {
+        let line = if i == 0 {
+            Line::from(vec![
+                Span::styled(prefix.to_string(), style),
+                Span::styled(chunk, style),
+            ])
+        } else {
+            Line::from(Span::styled(
+                format!("{}{chunk}", " ".repeat(indent)),
+                style,
+            ))
+        };
+        lines.push(line);
     }
-    if max <= 1 {
-        return "\u{2026}".to_string();
+}
+
+/// Greedy word wrap to at most `width` columns, measured in display cells.
+/// Words longer than a line are hard-broken. Always returns at least one line.
+fn wrap_text(text: &str, width: usize) -> Vec<String> {
+    let width = width.max(1);
+    let mut out: Vec<String> = Vec::new();
+
+    for paragraph in text.split('\n') {
+        let mut line = String::new();
+        let mut line_width = 0usize;
+        for word in paragraph.split_whitespace() {
+            let mut rest = word;
+            while !rest.is_empty() {
+                let space = usize::from(line_width > 0);
+                if line_width + space >= width {
+                    out.push(std::mem::take(&mut line));
+                    line_width = 0;
+                    continue;
+                }
+                let avail = width - line_width - space;
+                // Prefer moving a whole word down over splitting it, unless it
+                // is longer than a full line and must be broken anyway.
+                if space == 1 && rest.width() > avail && rest.width() <= width {
+                    out.push(std::mem::take(&mut line));
+                    line_width = 0;
+                    continue;
+                }
+                let (chunk, tail) = split_at_width(rest, avail);
+                if space == 1 {
+                    line.push(' ');
+                    line_width += 1;
+                }
+                line_width += chunk.width();
+                line.push_str(&chunk);
+                rest = tail;
+                if !rest.is_empty() {
+                    // The chunk filled the line; flush before continuing.
+                    out.push(std::mem::take(&mut line));
+                    line_width = 0;
+                }
+            }
+        }
+        out.push(line);
     }
 
-    let budget = max - 1;
-    let head_budget = budget / 2;
-    let tail_budget = budget - head_budget;
+    if out.is_empty() {
+        out.push(String::new());
+    }
+    out
+}
 
-    let mut head = String::new();
-    let mut used = 0;
-    for ch in text.chars() {
-        let width = ch.width().unwrap_or(0);
-        if used + width > head_budget {
+/// Split `text` at the widest prefix that fits in `width` cells. Takes one
+/// character even if it overflows, so the caller always makes progress.
+fn split_at_width(text: &str, width: usize) -> (String, &str) {
+    let mut used = 0usize;
+    let mut end = 0usize;
+    for (index, ch) in text.char_indices() {
+        let cells = ch.width().unwrap_or(0);
+        if used + cells > width {
             break;
         }
-        used += width;
-        head.push(ch);
+        used += cells;
+        end = index + ch.len_utf8();
     }
-
-    let mut tail: Vec<char> = Vec::new();
-    let mut used = 0;
-    for ch in text.chars().rev() {
-        let width = ch.width().unwrap_or(0);
-        if used + width > tail_budget {
-            break;
-        }
-        used += width;
-        tail.push(ch);
+    if end == 0 && !text.is_empty() {
+        end = text.chars().next().map(char::len_utf8).unwrap_or(0);
     }
-    tail.reverse();
-
-    format!("{head}\u{2026}{}", tail.into_iter().collect::<String>())
+    (text[..end].to_string(), &text[end..])
 }
 
 fn centered(area: Rect, width: u16, height: u16) -> Rect {
@@ -312,21 +362,46 @@ fn centered(area: Rect, width: u16, height: u16) -> Rect {
 
 #[cfg(test)]
 mod tests {
-    use super::truncate_middle;
+    use super::wrap_text;
     use unicode_width::UnicodeWidthStr;
 
-    #[test]
-    fn short_paths_pass_through() {
-        assert_eq!(truncate_middle("a/b/c", 20), "a/b/c");
+    fn widths(lines: &[String]) -> Vec<usize> {
+        lines.iter().map(|line| line.width()).collect()
     }
 
     #[test]
-    fn long_paths_elide_the_middle() {
-        let path = "/Users/mancuoj/Library/Application Support/tasu/todos.json";
-        let out = truncate_middle(path, 24);
-        assert!(out.contains('\u{2026}'));
-        assert!(out.starts_with('/'), "keeps the head: {out}");
-        assert!(out.ends_with("todos.json"), "keeps the tail: {out}");
-        assert!(out.width() <= 24);
+    fn short_text_is_a_single_line() {
+        assert_eq!(wrap_text("a/b/c", 20), vec!["a/b/c".to_string()]);
+    }
+
+    #[test]
+    fn words_wrap_on_spaces_without_splitting_them() {
+        let text = "fatal: repository not found";
+        let lines = wrap_text(text, 12);
+        assert!(lines.len() > 1, "should wrap: {lines:?}");
+        assert!(widths(&lines).iter().all(|&w| w <= 12), "{lines:?}");
+        assert_eq!(lines.join(" "), text);
+    }
+
+    #[test]
+    fn long_tokens_are_hard_broken_without_loss() {
+        let token = "https://github.com/mancuoj-collective/tasu-data.git";
+        let lines = wrap_text(token, 24);
+        assert!(lines.len() > 1, "should wrap: {lines:?}");
+        assert!(widths(&lines).iter().all(|&w| w <= 24), "{lines:?}");
+        assert_eq!(lines.concat(), token);
+    }
+
+    #[test]
+    fn wrapping_counts_display_cells() {
+        // CJK characters occupy two cells each.
+        let lines = wrap_text("数据数据数据", 5);
+        assert!(widths(&lines).iter().all(|&w| w <= 5), "{lines:?}");
+        assert_eq!(lines.concat(), "数据数据数据");
+    }
+
+    #[test]
+    fn empty_text_still_yields_one_line() {
+        assert_eq!(wrap_text("", 10), vec![String::new()]);
     }
 }
