@@ -2,7 +2,7 @@ use std::path::Path;
 
 use ratatui::{
     Frame,
-    layout::{Constraint, Flex, Layout, Rect},
+    layout::{Alignment, Constraint, Flex, Layout, Rect},
     style::Style,
     text::{Line, Span},
     widgets::{Block, Clear, Padding, Paragraph},
@@ -190,7 +190,7 @@ fn help_modal(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path, syn
     // Keep the sync error at the top so it is visible even on short terminals.
     // Wrap it in full: a half-shown git error is useless for diagnosis.
     if let Some(err) = &model.ui.sync_error {
-        push_block(&mut lines, "!  ", err, theme.warn(), inner);
+        push_block(&mut lines, "!  ", err, theme.warn(), inner, Alignment::Left);
     }
     lines.push(Line::default());
 
@@ -211,12 +211,20 @@ fn help_modal(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path, syn
         &display_path(data_path),
         label_style,
         inner,
+        Alignment::Right,
     );
     let sync = match sync {
         Some(url) => ("sync  ", url.to_string()),
         None => ("sync  ", "off \u{b7} tasu remote <url>".to_string()),
     };
-    push_block(&mut lines, sync.0, &sync.1, label_style, inner);
+    push_block(
+        &mut lines,
+        sync.0,
+        &sync.1,
+        label_style,
+        inner,
+        Alignment::Right,
+    );
 
     let padding = Padding::new(2, 2, 1, 1);
     let block = Block::bordered()
@@ -258,22 +266,25 @@ fn push_block(
     body: &str,
     style: Style,
     inner: usize,
+    align: Alignment,
 ) {
     let indent = prefix.width();
     let body_width = inner.saturating_sub(indent).max(1);
     for (i, chunk) in wrap_text(body, body_width).into_iter().enumerate() {
-        let line = if i == 0 {
-            Line::from(vec![
-                Span::styled(prefix.to_string(), style),
-                Span::styled(chunk, style),
-            ])
+        let lead = if i == 0 {
+            prefix.to_string()
         } else {
-            Line::from(Span::styled(
-                format!("{}{chunk}", " ".repeat(indent)),
-                style,
-            ))
+            " ".repeat(indent)
         };
-        lines.push(line);
+        let pad = match align {
+            Alignment::Right => body_width.saturating_sub(chunk.width()),
+            Alignment::Center => body_width.saturating_sub(chunk.width()) / 2,
+            Alignment::Left => 0,
+        };
+        lines.push(Line::from(Span::styled(
+            format!("{lead}{}{chunk}", " ".repeat(pad)),
+            style,
+        )));
     }
 }
 

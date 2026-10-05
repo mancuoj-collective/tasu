@@ -24,7 +24,7 @@ expression: "render(&model, 84, 26)"
               │  q / esc                                       quit  │              
               │  ctrl+c                               quit anywhere  │              
               │                                                      │              
-              │  data  /tmp/tasu/todos.json                          │              
+              │  data                          /tmp/tasu/todos.json  │              
               │                                                      │              
               └──────────────────────────────────────────────────────┘              
  ↑↓ scroll  esc close                                                             ●

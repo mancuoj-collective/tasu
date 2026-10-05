@@ -28,10 +28,10 @@ expression: "render_full(&model, 84, 34,\nPath::new(\"/opt/tasu-data/Library/App
               │  q / esc                                       quit  │              
               │  ctrl+c                               quit anywhere  │              
               │                                                      │              
-              │  data  /opt/tasu-data/Library/Application            │              
-              │        Support/tasu/todos.json                       │              
+              │  data            /opt/tasu-data/Library/Application  │              
+              │                             Support/tasu/todos.json  │              
               │  sync  https://github.com/mancuoj-collective/tasu-d  │              
-              │        ata.git                                       │              
+              │                                             ata.git  │              
               │                                                      │              
               └──────────────────────────────────────────────────────┘              
                                                                                     
