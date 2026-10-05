@@ -1,6 +1,6 @@
 ---
 source: tests/snapshot.rs
-expression: "render_full(&model, 84, 34,\nPath::new(\"/Users/mancuoj/Library/Application Support/tasu/todos.json\"),\nSome(\"https://github.com/mancuoj-collective/tasu-data.git\"),)"
+expression: "render_full(&model, 84, 34,\nPath::new(\"/opt/tasu-data/Library/Application Support/tasu/todos.json\"),\nSome(\"https://github.com/mancuoj-collective/tasu-data.git\"),)"
 ---
  TODAY                                                                              
  ────────────────────────────────────────────────────────────────────────────────── 
@@ -28,7 +28,7 @@ expression: "render_full(&model, 84, 34,\nPath::new(\"/Users/mancuoj/Library/App
               │  q / esc                                       quit  │              
               │  ctrl+c                               quit anywhere  │              
               │                                                      │              
-              │  data  ~/Library/Application                         │              
+              │  data  /opt/tasu-data/Library/Application            │              
               │        Support/tasu/todos.json                       │              
               │  sync  https://github.com/mancuoj-collective/tasu-d  │              
               │        ata.git                                       │              

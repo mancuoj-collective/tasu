@@ -97,11 +97,14 @@ fn help_wraps_long_error_and_paths() {
          disabled; fatal: repository not found"
             .to_string(),
     );
+    // Keep the path outside any home directory: `display_path` abbreviates the
+    // home dir, which differs between machines and would make this snapshot
+    // environment-dependent.
     insta::assert_snapshot!(render_full(
         &model,
         84,
         34,
-        Path::new("/Users/mancuoj/Library/Application Support/tasu/todos.json"),
+        Path::new("/opt/tasu-data/Library/Application Support/tasu/todos.json"),
         Some("https://github.com/mancuoj-collective/tasu-data.git"),
     ));
 }
