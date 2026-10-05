@@ -46,7 +46,7 @@ pub enum TaskState {
 ///
 /// `bucket` is preserved across `Done`/`Archived` so undo can return a task to
 /// the bucket it came from.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Task {
     pub title: String,
     pub state: TaskState,

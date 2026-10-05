@@ -42,6 +42,19 @@ impl Board {
         self.tasks.get(index)
     }
 
+    /// Union of two boards, preserving order. Used when a machine with existing
+    /// data first connects to a remote that already has a board: nothing from
+    /// either side is lost. Tasks carry no id, so identity is the whole record;
+    /// an exact duplicate is dropped.
+    pub fn merged_with(mut self, other: &Board) -> Board {
+        for task in &other.tasks {
+            if !self.tasks.iter().any(|existing| existing == task) {
+                self.tasks.push(task.clone());
+            }
+        }
+        self
+    }
+
     /// Add a task to `Today`. Returns its index.
     pub fn add(&mut self, title: impl Into<String>, now: DateTime<Local>) -> usize {
         self.tasks.push(Task::new(title, now));
@@ -243,6 +256,19 @@ mod tests {
         assert!(!board.move_bucket(0, -1, at(2026, 10, 6))); // Today promoted = Today
         assert!(board.move_bucket(0, 2, at(2026, 10, 6))); // drops to Later
         assert!(!board.move_bucket(0, 1, at(2026, 10, 6))); // Later demoted = Later
+    }
+
+    #[test]
+    fn merging_unions_and_drops_exact_duplicates() {
+        let left = seeded(&["shared", "only left"]);
+        let right = seeded(&["shared", "only right"]);
+        let merged = left.merged_with(&right);
+        let titles: Vec<&str> = merged
+            .tasks()
+            .iter()
+            .map(|task| task.title.as_str())
+            .collect();
+        assert_eq!(titles, vec!["shared", "only left", "only right"]);
     }
 
     #[test]

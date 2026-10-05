@@ -103,10 +103,55 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
     fs::rename(&tmp, path).context("failed to replace board file")
 }
 
+/// Union two serialized boards, de-duplicating identical tasks. Returns `None`
+/// when either side is unreadable or from another schema version, so the caller
+/// can fall back to one side rather than guess.
+pub fn merge_files(local: &[u8], remote: &[u8]) -> Option<Vec<u8>> {
+    let local: FileSchema = serde_json::from_slice(local).ok()?;
+    let remote: FileSchema = serde_json::from_slice(remote).ok()?;
+    if local.version != SCHEMA_VERSION || remote.version != SCHEMA_VERSION {
+        return None;
+    }
+    let merged = Board::from_tasks(local.tasks).merged_with(&Board::from_tasks(remote.tasks));
+    let schema = FileSchema {
+        version: SCHEMA_VERSION,
+        tasks: merged.into_tasks(),
+    };
+    serde_json::to_vec_pretty(&schema).ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::domain::test_time::at;
+
+    fn board_bytes(titles: &[&str]) -> Vec<u8> {
+        let schema = FileSchema {
+            version: SCHEMA_VERSION,
+            tasks: titles
+                .iter()
+                .map(|t| Task::new(*t, at(2026, 10, 5)))
+                .collect(),
+        };
+        serde_json::to_vec(&schema).unwrap()
+    }
+
+    #[test]
+    fn merging_files_unions_and_dedupes() {
+        let local = board_bytes(&["shared", "local only"]);
+        let remote = board_bytes(&["shared", "remote only"]);
+        let merged: FileSchema =
+            serde_json::from_slice(&merge_files(&local, &remote).unwrap()).unwrap();
+        let titles: Vec<&str> = merged.tasks.iter().map(|t| t.title.as_str()).collect();
+        assert_eq!(titles, vec!["shared", "local only", "remote only"]);
+    }
+
+    #[test]
+    fn merging_refuses_input_it_cannot_safely_merge() {
+        let ok = board_bytes(&["a"]);
+        assert!(merge_files(b"not json", &ok).is_none());
+        assert!(merge_files(&ok, b"{\"version\":99,\"tasks\":[]}").is_none());
+    }
 
     fn store_in(dir: &tempfile::TempDir) -> Store {
         Store::new(dir.path().join("todos.json"))

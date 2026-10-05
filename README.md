@@ -144,6 +144,10 @@ The repository does not have to be empty: if it already has commits (say a
 README), tasu adopts that history on first sync and pushes the local board on
 top, keeping both.
 
+If the remote **also** already has a board, the first connection merges the two:
+tasks are unioned and exact duplicates dropped, so neither machine's tasks are
+lost. Later syncs are back to plain single-writer pull/push.
+
 ### The sync branch
 
 All machines sync on **one branch**, so a Windows box whose git defaults to

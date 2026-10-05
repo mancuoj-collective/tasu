@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Connecting a remote from a machine that already has a board no longer
+  overwrites the remote's tasks: the two boards are merged (union, exact
+  duplicates dropped), so neither machine loses anything.
+
+### Fixed
+
+- The help overlay wraps the sync error and the data/remote paths in full
+  instead of truncating them, and aligns the values with the key-hint column.
+
 ## [0.5.0] - 2026-10-05
 
 ### Fixed

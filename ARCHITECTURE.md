@@ -182,6 +182,8 @@ Git 单写者模型（详见 `PRODUCT.md`）：`git -C <repo> pull --rebase --au
 
 **分支约定**：所有机器固定在**同一个分支**上同步，绝不让本机 `init.defaultBranch`（Windows 上常是 `master`）泄漏进数据仓库。远端已有默认分支时采用其分支名（并把本地分支改名对齐），否则用 `main`；`push` 显式推到该分支名，`pull` 显式 `origin <branch>`（不依赖 upstream）。远端不可读时不做改名，避免瞬时故障改坏本地分支。
 
+**首次接入的合并**：本地已有 board、远端也已有 `todos.json` 时，graft 不再用本地覆盖远端，而是调用 `store::merge_files` 做**并集去重**（任务无 id，按整条记录相等去重；显示顺序本就由 `created_at` 推出，与数组顺序无关）。任一侧缺失则保留另一侧；任一侧 schema 不可识别则退回本地，绝不猜。合并后照旧单写者 pull/push。
+
 ## 测试
 
 E2E 优先（ratatui `TestBackend` + 临时目录 + 本地裸仓库）：

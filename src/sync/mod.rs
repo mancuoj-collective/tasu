@@ -146,10 +146,10 @@ fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), String> {
     }
 
     // Existing local data (first machine, or a remote that already has a
-    // README). We keep the local board aside, adopt the remote's history, then
-    // replay the board on top and push. No unrelated-history merge, which proved
-    // unreliable across git builds.
-    let board = std::fs::read(repo.join("todos.json")).ok();
+    // README). The local board is kept aside, the remote's history is adopted,
+    // then the board is committed on top and pushed. No unrelated-history merge,
+    // which proved unreliable across git builds.
+    let local_board = std::fs::read(repo.join("todos.json")).ok();
 
     // Name the branch before the first commit: `git init` alone would use the
     // host's default (e.g. `master`), splitting the remote into two branches.
@@ -180,8 +180,20 @@ fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), String> {
         let _ = git(repo, &["reset", "--hard", "refs/tasu/remote"]);
     }
 
-    // Replay the local board and commit it on top (or as the root commit).
-    if let Some(bytes) = board {
+    // The remote may already carry a board. When both sides have one, union them
+    // so connecting a remote never silently drops the other machine's tasks;
+    // otherwise keep whichever side has data.
+    let remote_board = if fetched {
+        git_bytes(repo, &["show", "refs/tasu/remote:todos.json"])
+    } else {
+        None
+    };
+    let board = match (local_board, remote_board) {
+        (Some(local), Some(remote)) => crate::store::merge_files(&local, &remote).or(Some(local)),
+        (board, None) => board,
+        (None, board) => board,
+    };
+    if let Some(bytes) = board.filter(|bytes| !bytes.is_empty()) {
         std::fs::write(repo.join("todos.json"), bytes).map_err(|err| err.to_string())?;
     }
     ensure_gitignore(repo);
@@ -436,6 +448,13 @@ fn git_ok(repo: &Path, args: &[&str]) -> bool {
         .output()
         .map(|output| output.status.success())
         .unwrap_or(false)
+}
+
+/// stdout of a git command expected to succeed, for reading a file out of a
+/// commit (`git show <ref>:<path>`).
+fn git_bytes(repo: &Path, args: &[&str]) -> Option<Vec<u8>> {
+    let output = git_cmd(repo, args).output().ok()?;
+    output.status.success().then_some(output.stdout)
 }
 
 /// Run a command with a deadline, killing it if it overruns. Used for the
@@ -711,6 +730,53 @@ mod tests {
         assert!(refs.contains("refs/heads/trunk"), "expected trunk: {refs}");
         assert!(!refs.contains("refs/heads/master"), "stray branch: {refs}");
         assert!(!refs.contains("refs/heads/main"), "stray branch: {refs}");
+    }
+
+    /// Write a valid board file at `dir/todos.json` with one task per title.
+    fn write_board(dir: &Path, titles: &[&str]) {
+        let mut board = crate::domain::Board::new();
+        for title in titles {
+            board.add(*title, chrono::Local::now());
+        }
+        crate::store::Store::new(dir.join("todos.json"))
+            .save(&board)
+            .unwrap();
+    }
+
+    #[test]
+    fn connecting_to_a_remote_that_has_a_board_unions_both() {
+        let dir = tempfile::tempdir().unwrap();
+        let remote = bare_remote(dir.path());
+
+        // First machine publishes a board.
+        let first = dir.path().join("first");
+        std::fs::create_dir_all(&first).unwrap();
+        write_board(&first, &["remote task"]);
+        ensure_repo(&first, Some(&remote)).unwrap();
+        commit_push(&first, Some(&remote)).unwrap();
+
+        // Second machine already has its own board, then enables the remote.
+        let second = dir.path().join("second");
+        std::fs::create_dir_all(&second).unwrap();
+        write_board(&second, &["local task"]);
+        ensure_repo(&second, Some(&remote)).unwrap();
+        commit_push(&second, Some(&remote)).unwrap();
+
+        let board = Command::new("git")
+            .arg("--git-dir")
+            .arg(&remote)
+            .args(["show", "refs/heads/main:todos.json"])
+            .output()
+            .unwrap();
+        let board = String::from_utf8_lossy(&board.stdout);
+        assert!(
+            board.contains("remote task"),
+            "lost the remote board: {board}"
+        );
+        assert!(
+            board.contains("local task"),
+            "lost the local board: {board}"
+        );
     }
 
     #[test]
