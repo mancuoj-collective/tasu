@@ -466,6 +466,12 @@ fn pull(repo: &Path, remote: Option<&str>) -> Result<(), String> {
 }
 
 fn commit_push(repo: &Path, remote: Option<&str>) -> Result<(), String> {
+    commit_push_with(repo, remote, PUSH_TIMEOUT)
+}
+
+/// `commit_push` with an explicit push deadline, so tests can allow for a slow
+/// machine without loosening the bound the app ships with.
+fn commit_push_with(repo: &Path, remote: Option<&str>, timeout: Duration) -> Result<(), String> {
     if remote.is_none() {
         return Ok(());
     }
@@ -501,7 +507,7 @@ fn commit_push(repo: &Path, remote: Option<&str>) -> Result<(), String> {
             &format!("HEAD:refs/heads/{branch}"),
         ],
     );
-    run_bounded(&mut cmd, PUSH_TIMEOUT)?;
+    run_bounded(&mut cmd, timeout)?;
     Ok(())
 }
 
@@ -630,6 +636,13 @@ fn check(output: std::process::Output) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Shadow the production `commit_push` with a generous deadline: CI —
+    /// Windows especially — can be slow when these tests spawn many git
+    /// processes in parallel.
+    fn commit_push(repo: &Path, remote: Option<&str>) -> Result<(), String> {
+        commit_push_with(repo, remote, Duration::from_secs(60))
+    }
     use std::process::Command;
 
     /// A bare repository standing in for the remote, so the tests exercise the
