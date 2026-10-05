@@ -6,7 +6,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.8.0] - 2026-10-06
+## [0.9.0] - 2026-10-06
 
 ### Fixed
 
@@ -22,6 +22,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Starting tasu no longer runs a `git ls-remote` to reconcile the branch on
   every launch; that result is remembered per remote, so opening only does the
   one pull.
+
+## [0.8.0] - 2026-10-06
+
+### Changed
+
 - The help overlay no longer shows the sync error. A failure is summarised in
   the footer as `✗ <reason> · run tasu sync`, with the full git error left to
   `tasu sync`.
@@ -141,7 +146,8 @@ architecture and optional git sync.
 Initial release: a flat terminal todo list with JSON persistence (add, edit,
 toggle, delete) built with ratatui.
 
-[Unreleased]: https://github.com/mancuoj-collective/tasu/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/mancuoj-collective/tasu/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.9.0
 [0.8.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.8.0
 [0.7.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.7.0
 [0.6.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.6.0
