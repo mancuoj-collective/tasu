@@ -1,8 +1,8 @@
 # tasu
 
-[![Crates.io](https://img.shields.io/crates/v/tasu.svg)](https://crates.io/crates/tasu)
-[![CI](https://github.com/mancuoj-collective/tasu/actions/workflows/ci.yml/badge.svg)](https://github.com/mancuoj-collective/tasu/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Crates.io][crates-src]][crates-href]
+[![CI][ci-src]][ci-href]
+[![License][license-src]][license-href]
 
 **A terminal todo list that ages.**
 
@@ -191,3 +191,12 @@ cargo run --example preview
 ## License
 
 Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
+
+<!-- Badges -->
+
+[crates-src]: https://img.shields.io/crates/v/tasu?style=flat&colorA=18181b&colorB=1f6feb
+[crates-href]: https://crates.io/crates/tasu
+[ci-src]: https://img.shields.io/github/actions/workflow/status/mancuoj-collective/tasu/ci.yml?branch=main&style=flat&colorA=18181b&colorB=1f6feb&label=CI
+[ci-href]: https://github.com/mancuoj-collective/tasu/actions/workflows/ci.yml
+[license-src]: https://img.shields.io/github/license/mancuoj-collective/tasu?style=flat&colorA=18181b&colorB=1f6feb
+[license-href]: https://github.com/mancuoj-collective/tasu/blob/main/LICENSE
