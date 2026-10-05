@@ -88,14 +88,12 @@ pub enum Command {
         title: Vec<String>,
     },
     /// Show the resolved data directory, config file and sync remote.
-    #[command(visible_alias = "cfg")]
     Config {
         /// Output a JSON object.
         #[arg(long)]
         json: bool,
     },
     /// Show, set or clear the git sync remote.
-    #[command(visible_alias = "r")]
     Remote {
         /// Remote URL, local path, or a GitHub `owner/repo` shorthand.
         url: Option<String>,
@@ -104,14 +102,11 @@ pub enum Command {
         clear: bool,
     },
     /// Run one pull-then-push now and report the result.
-    #[command(visible_alias = "s")]
     Sync,
     /// Update tasu, using however it was installed (Homebrew, the installer
     /// script, or Cargo).
-    #[command(visible_aliases = ["up", "upgrade"])]
     Update,
     /// Print a shell completion script.
-    #[command(visible_alias = "comp")]
     Completions {
         /// The shell to generate for.
         #[arg(value_enum)]
