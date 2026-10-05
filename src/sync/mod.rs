@@ -888,11 +888,12 @@ mod tests {
         assert!(!refs.contains("refs/heads/main"), "stray branch: {refs}");
     }
 
-    /// Write a valid board file at `dir/todos.json` with one task per title.
-    fn write_board(dir: &Path, titles: &[&str]) {
+    /// Write a board with explicit `(title, day)` tasks, so a test controls the
+    /// creation times that are the task identity.
+    fn write_board(dir: &Path, tasks: &[(&str, u32)]) {
         let mut board = crate::domain::Board::new();
-        for title in titles {
-            board.add(*title, chrono::Local::now());
+        for (title, day) in tasks {
+            board.add(*title, crate::domain::test_time::at(2026, 10, *day));
         }
         crate::store::Store::new(dir.join("todos.json"))
             .save(&board)
@@ -917,10 +918,10 @@ mod tests {
         .unwrap();
     }
 
-    fn add_task(repo: &Path, title: &str) {
+    fn add_task(repo: &Path, title: &str, day: u32) {
         let store = crate::store::Store::new(repo.join("todos.json"));
         let mut board = store.load();
-        board.add(title, chrono::Local::now());
+        board.add(title, crate::domain::test_time::at(2026, 10, day));
         store.save(&board).unwrap();
     }
 
@@ -941,14 +942,14 @@ mod tests {
         // First machine publishes a board.
         let first = dir.path().join("first");
         std::fs::create_dir_all(&first).unwrap();
-        write_board(&first, &["remote task"]);
+        write_board(&first, &[("remote task", 5)]);
         ensure_repo(&first, Some(&remote)).unwrap();
         commit_push(&first, Some(&remote)).unwrap();
 
         // Second machine already has its own board, then enables the remote.
         let second = dir.path().join("second");
         std::fs::create_dir_all(&second).unwrap();
-        write_board(&second, &["local task"]);
+        write_board(&second, &[("local task", 6)]);
         ensure_repo(&second, Some(&remote)).unwrap();
         commit_push(&second, Some(&remote)).unwrap();
 
@@ -1170,7 +1171,7 @@ mod tests {
 
         let data = dir.path().join("data");
         std::fs::create_dir_all(&data).unwrap();
-        write_board(&data, &["local"]);
+        write_board(&data, &[("local", 5)]);
         ensure_repo(&data, Some(&remote)).unwrap();
         commit_push(&data, Some(&remote)).unwrap();
 
@@ -1200,7 +1201,7 @@ mod tests {
         // clone checks it out.
         let seed = dir.path().join("seed");
         std::fs::create_dir_all(&seed).unwrap();
-        write_board(&seed, &["base"]);
+        write_board(&seed, &[("base", 5)]);
         git(&seed, &["init", "-q", "-b", "main"]).unwrap();
         git(&seed, &["add", "-A"]).unwrap();
         commit(&seed, "base");
@@ -1215,13 +1216,13 @@ mod tests {
         // A: a local commit that is never pushed.
         let a = dir.path().join("a");
         clone_repo(&remote, &a);
-        add_task(&a, "from A");
+        add_task(&a, "from A", 6);
         commit(&a, "a");
 
         // B: a different commit, pushed.
         let b = dir.path().join("b");
         clone_repo(&remote, &b);
-        add_task(&b, "from B");
+        add_task(&b, "from B", 7);
         commit(&b, "b");
         git(&b, &["push", "-q", "origin", "main"]).unwrap();
 

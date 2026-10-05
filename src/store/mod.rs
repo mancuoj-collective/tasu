@@ -125,30 +125,30 @@ mod tests {
     use super::*;
     use crate::domain::test_time::at;
 
-    fn board_bytes(titles: &[&str]) -> Vec<u8> {
+    fn board_bytes(tasks: &[(&str, u32)]) -> Vec<u8> {
         let schema = FileSchema {
             version: SCHEMA_VERSION,
-            tasks: titles
+            tasks: tasks
                 .iter()
-                .map(|t| Task::new(*t, at(2026, 10, 5)))
+                .map(|(title, day)| Task::new(*title, at(2026, 10, *day)))
                 .collect(),
         };
         serde_json::to_vec(&schema).unwrap()
     }
 
     #[test]
-    fn merging_files_unions_and_dedupes() {
-        let local = board_bytes(&["shared", "local only"]);
-        let remote = board_bytes(&["shared", "remote only"]);
+    fn merging_files_matches_tasks_by_creation_time() {
+        let base = board_bytes(&[("shared", 5), ("base only", 6)]);
+        let other = board_bytes(&[("shared", 5), ("other only", 7)]);
         let merged: FileSchema =
-            serde_json::from_slice(&merge_files(&local, &remote).unwrap()).unwrap();
+            serde_json::from_slice(&merge_files(&base, &other).unwrap()).unwrap();
         let titles: Vec<&str> = merged.tasks.iter().map(|t| t.title.as_str()).collect();
-        assert_eq!(titles, vec!["shared", "local only", "remote only"]);
+        assert_eq!(titles, vec!["shared", "base only", "other only"]);
     }
 
     #[test]
     fn merging_refuses_input_it_cannot_safely_merge() {
-        let ok = board_bytes(&["a"]);
+        let ok = board_bytes(&[("a", 5)]);
         assert!(merge_files(b"not json", &ok).is_none());
         assert!(merge_files(&ok, b"{\"version\":99,\"tasks\":[]}").is_none());
     }

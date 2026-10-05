@@ -249,7 +249,7 @@ JSON board conflicts as soon as two machines touch it, and then the push is
 rejected and the repo is stranded. Instead `pull` fetches into a private ref and
 compares histories: if the remote is reachable from `HEAD` there is nothing to
 do; otherwise it resets to the remote and merges the boards **task by task**
-(`store::merge_files`, identity = title + `created_at`, terminal state wins),
+(`store::merge_files`, identity = `created_at`, terminal state wins),
 leaving the merged board for the next `commit_push` (`git add -A && git commit
 ... && git push origin HEAD:refs/heads/<branch>`) to publish. Any rebase/merge a
 previous version left in progress is aborted first. With **no remote / not a

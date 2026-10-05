@@ -43,7 +43,8 @@ impl Board {
     }
 
     /// Merge another board in, task by task. Tasks carry no id, so identity is
-    /// `title` + `created_at`. For a matching task the one that is further along
+    /// `created_at` — unique at nanosecond precision and, unlike the title,
+    /// stable across renames. For a matching task the one that is further along
     /// wins — a terminal state (`done` / `archived`) over `open`, then the later
     /// `bucket_since` — so merging is idempotent and two machines that edited
     /// the same task do not drift into duplicates. A task only on the other side
@@ -208,9 +209,11 @@ impl Board {
     }
 }
 
-/// Task identity without an id: same title created at the same instant.
+/// Task identity without an id: the instant it was created. `created_at` is
+/// preserved when a task is copied between machines and when it is renamed, so
+/// it names the same task on both sides.
 fn same_task(a: &Task, b: &Task) -> bool {
-    a.title == b.title && a.created_at == b.created_at
+    a.created_at == b.created_at
 }
 
 /// Whether `candidate` is further along than `current`: a terminal state beats
@@ -237,6 +240,16 @@ mod tests {
         let mut board = Board::new();
         for (i, title) in titles.iter().enumerate() {
             board.add(*title, at(2026, 10, 5 + i as u32));
+        }
+        board
+    }
+
+    /// A board with explicit `(title, day)` so a test can line up or separate
+    /// creation times, which are the task identity.
+    fn seeded_at(pairs: &[(&str, u32)]) -> Board {
+        let mut board = Board::new();
+        for (title, day) in pairs {
+            board.add(*title, at(2026, 10, *day));
         }
         board
     }
@@ -290,9 +303,9 @@ mod tests {
     }
 
     #[test]
-    fn merging_unions_and_drops_exact_duplicates() {
-        let left = seeded(&["shared", "only left"]);
-        let right = seeded(&["shared", "only right"]);
+    fn merging_matches_tasks_by_creation_time() {
+        let left = seeded_at(&[("shared", 5), ("only left", 6)]);
+        let right = seeded_at(&[("shared", 5), ("only right", 7)]);
         let merged = left.merged_with(&right);
         let titles: Vec<&str> = merged
             .tasks()
@@ -300,6 +313,15 @@ mod tests {
             .map(|task| task.title.as_str())
             .collect();
         assert_eq!(titles, vec!["shared", "only left", "only right"]);
+    }
+
+    #[test]
+    fn a_rename_does_not_fork_the_task() {
+        // Same instant, different title: the same task, renamed.
+        let before = seeded_at(&[("cat food", 5)]);
+        let after = seeded_at(&[("buy cat food", 5)]);
+        let merged = before.merged_with(&after);
+        assert_eq!(merged.len(), 1, "a rename must not become a second task");
     }
 
     #[test]

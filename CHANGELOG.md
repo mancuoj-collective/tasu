@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Board merges (first connect and divergence) identify tasks by their creation
+  time instead of title + creation time, so a renamed task merges into the same
+  task rather than forking into a duplicate.
+
 ## [0.10.0] - 2026-10-06
 
 ### Fixed
