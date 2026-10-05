@@ -80,7 +80,7 @@ pub fn history(config: &Config, view: HistoryList, json: bool) -> Result<()> {
 
 /// The requested history views as `(dropped, tasks)`, newest first, in print
 /// order. Empty views are kept so `render_history` can skip them.
-fn history_sections<'a>(board: &'a Board, view: HistoryList) -> Vec<(bool, Vec<&'a Task>)> {
+fn history_sections(board: &Board, view: HistoryList) -> Vec<(bool, Vec<&Task>)> {
     let wanted: &[bool] = match view {
         HistoryList::Both => &[false, true],
         HistoryList::Done => &[false],
