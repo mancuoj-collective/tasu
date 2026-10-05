@@ -24,7 +24,19 @@ const DEBOUNCE: Duration = Duration::from_secs(3);
 /// Backoff after a failed sync before retrying.
 const RETRY: Duration = Duration::from_secs(30);
 
-fn main() -> Result<()> {
+fn main() -> std::process::ExitCode {
+    match run() {
+        Ok(()) => std::process::ExitCode::SUCCESS,
+        Err(err) => {
+            // Print the message as authored (commands format it themselves)
+            // rather than anyhow's `Error: ...` wrapper.
+            eprintln!("{err:#}");
+            std::process::ExitCode::FAILURE
+        }
+    }
+}
+
+fn run() -> Result<()> {
     let cli = Cli::parse();
     let config = Config::load();
     match cli.command {

@@ -1,3 +1,5 @@
+use std::io::IsTerminal;
+
 use anyhow::Result;
 use chrono::Local;
 
@@ -79,16 +81,7 @@ pub fn remote(config: &Config, spec: Option<&str>, clear: bool) -> Result<()> {
         // a sync that can never succeed.
         if let Err(err) = sync::probe_remote(&url) {
             Config::set_remote(None)?;
-            eprintln!("could not reach {url}:\n  {err}");
-            eprintln!("sync left off (remote cleared)");
-            eprintln!(
-                "hint: over HTTPS git needs a stored token. On macOS a keychain \
-                 helper usually has one from previous clones; otherwise create a \
-                 personal access token and let the helper store it, or use an SSH \
-                 remote instead. Check the repository exists and that you can write \
-                 to it."
-            );
-            anyhow::bail!("remote not set: {url} is unreachable or unauthorized");
+            anyhow::bail!("{}", unreachable(&url, &err));
         }
         let path = Config::set_remote(Some(&url))?;
         println!("sync remote set to {url}");
@@ -129,9 +122,103 @@ pub fn normalize_remote(spec: &str) -> String {
     spec.to_string()
 }
 
+/// Why a remote could not be reached, inferred from git's stderr. Used to lead
+/// with the likely cause instead of dumping the raw error.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ReachError {
+    NotFound,
+    Auth,
+    Network,
+    Other,
+}
+
+impl ReachError {
+    fn classify(error: &str) -> Self {
+        let error = error.to_ascii_lowercase();
+        let has = |needle: &str| error.contains(needle);
+        if has("repository not found") || has("does not appear to be a git repository") {
+            Self::NotFound
+        } else if has("authentication failed")
+            || has("could not read username")
+            || has("could not read password")
+            || has("terminal prompts disabled")
+            || has("permission denied")
+            || has("403")
+        {
+            Self::Auth
+        } else if has("could not resolve host")
+            || has("could not resolve")
+            || has("unable to access")
+            || has("failed to connect")
+            || has("timed out")
+            || has("network is unreachable")
+        {
+            Self::Network
+        } else {
+            Self::Other
+        }
+    }
+
+    fn title(self) -> &'static str {
+        match self {
+            Self::NotFound => "repository not found",
+            Self::Auth => "authentication failed",
+            Self::Network => "could not reach the host",
+            Self::Other => "could not reach the remote",
+        }
+    }
+
+    fn fix(self) -> &'static str {
+        match self {
+            Self::NotFound => {
+                "check the owner/repo, or create the repository (private is fine), then retry"
+            }
+            Self::Auth => {
+                "no stored credentials or no write access \u{2014} over HTTPS git needs a token, or use an SSH remote"
+            }
+            Self::Network => "check your network and the host name, then retry",
+            Self::Other => "the git error is above",
+        }
+    }
+}
+
+/// A short, prioritised explanation of a failed probe: lead with the cause,
+/// show the URL once, then one fix. The raw git error only appears when it
+/// cannot be classified.
+fn unreachable(url: &str, error: &str) -> String {
+    let kind = ReachError::classify(error);
+    let mut message = format!(
+        "{} {}\n",
+        styled("1;31", "\u{2717}"),
+        styled("1;31", &format!("remote not set \u{b7} {}", kind.title())),
+    );
+    message.push_str(&format!("  {url}\n"));
+    if kind == ReachError::Other
+        && let Some(line) = error.lines().map(str::trim).find(|line| !line.is_empty())
+    {
+        message.push_str(&format!("  {}\n", styled("2", line)));
+    }
+    message.push_str(&format!("  {} {}\n", styled("36", "\u{2192}"), kind.fix()));
+    message.push_str(&format!(
+        "  {}",
+        styled("2", "sync stays off (previous remote cleared)")
+    ));
+    message
+}
+
+/// ANSI styling, only when stderr is a terminal and `NO_COLOR` is unset.
+fn styled(code: &str, text: &str) -> String {
+    let color = std::io::stderr().is_terminal() && std::env::var_os("NO_COLOR").is_none();
+    if color {
+        format!("\u{1b}[{code}m{text}\u{1b}[0m")
+    } else {
+        text.to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::normalize_remote;
+    use super::{ReachError, normalize_remote};
 
     #[test]
     fn expands_github_shorthand() {
@@ -162,5 +249,35 @@ mod tests {
     #[test]
     fn adds_a_scheme_to_a_bare_host() {
         assert_eq!(normalize_remote("github.com/a/b"), "https://github.com/a/b");
+    }
+
+    #[test]
+    fn classifies_common_git_failures() {
+        assert_eq!(
+            ReachError::classify("remote: Repository not found.\nfatal: repository 'x' not found"),
+            ReachError::NotFound
+        );
+        assert_eq!(
+            ReachError::classify(
+                "fatal: could not read Username for 'https://github.com': terminal prompts disabled"
+            ),
+            ReachError::Auth
+        );
+        assert_eq!(
+            ReachError::classify("fatal: unable to access 'x': Could not resolve host: github.com"),
+            ReachError::Network
+        );
+        assert_eq!(ReachError::classify("something else"), ReachError::Other);
+    }
+
+    #[test]
+    fn unreachable_message_leads_with_the_cause_and_shows_the_url_once() {
+        let url = "https://github.com/mancuoj/tasu-data.git";
+        let message = super::unreachable(url, "remote: Repository not found.");
+        assert!(
+            message.starts_with("\u{2717} remote not set \u{b7} repository not found"),
+            "{message}"
+        );
+        assert_eq!(message.matches(url).count(), 1, "{message}");
     }
 }

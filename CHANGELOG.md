@@ -16,6 +16,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - The help overlay wraps the sync error and the data/remote paths in full
   instead of truncating them, and aligns the values with the key-hint column.
+- `tasu remote` prints a single, prioritised failure line (cause + one fix)
+  instead of repeating the URL and dumping a generic multi-line hint.
 
 ## [0.5.0] - 2026-10-05
 
