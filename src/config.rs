@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -38,8 +38,20 @@ impl Config {
         self.data_dir.join("todos.json")
     }
 
-    /// Path of the config file, if the platform has a config directory.
+    /// Path of the config file. Kept in an XDG-style directory, **not** the
+    /// platform config dir: on macOS and Windows that equals the data dir, so
+    /// the config would land inside the synced Git working tree, where a
+    /// checkout can overwrite it with whatever the remote has.
     pub fn config_file() -> Option<PathBuf> {
+        let base = std::env::var_os("XDG_CONFIG_HOME")
+            .map(PathBuf::from)
+            .or_else(|| dirs::home_dir().map(|home| home.join(".config")))?;
+        Some(base.join("tasu").join("config.json"))
+    }
+
+    /// The pre-0.9 location, read as a fallback so an existing setting survives
+    /// the move. Never written to.
+    fn legacy_config_file() -> Option<PathBuf> {
         dirs::config_dir().map(|dir| dir.join("tasu").join("config.json"))
     }
 
@@ -60,21 +72,28 @@ struct FileConfig {
 }
 
 impl FileConfig {
-    /// Config lives beside the code's user config, not in the (synced) data
-    /// directory, so it never travels between machines.
     fn read() -> Self {
         let Some(path) = Config::config_file() else {
             return Self::default();
         };
-        let text = match std::fs::read_to_string(&path) {
-            Ok(text) => text,
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Self::default(),
+        match std::fs::read_to_string(&path) {
+            Ok(text) => Self::parse(&text, &path),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                // First run after the move: fall back to the old location.
+                Config::legacy_config_file()
+                    .and_then(|legacy| std::fs::read_to_string(legacy).ok())
+                    .map(|text| Self::parse(&text, Path::new("legacy config")))
+                    .unwrap_or_default()
+            }
             Err(err) => {
                 eprintln!("tasu: could not read {}: {err}", path.display());
-                return Self::default();
+                Self::default()
             }
-        };
-        match serde_json::from_str(&text) {
+        }
+    }
+
+    fn parse(text: &str, path: &Path) -> Self {
+        match serde_json::from_str(text) {
             Ok(file) => file,
             Err(err) => {
                 eprintln!("tasu: ignoring malformed {}: {err}", path.display());

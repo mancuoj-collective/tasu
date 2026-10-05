@@ -175,7 +175,8 @@ tasu never invokes git.
 | Data directory | platform data dir `/tasu` | `TASU_DATA` | `data_dir` |
 | Sync remote | none (local only) | `TASU_REMOTE` | `remote` |
 
-The config file lives in the platform config directory at `tasu/config.json`:
+The config file lives at `$XDG_CONFIG_HOME/tasu/config.json` (i.e.
+`~/.config/tasu/config.json`):
 
 ```json
 {
@@ -184,7 +185,8 @@ The config file lives in the platform config directory at `tasu/config.json`:
 }
 ```
 
-It is kept **out of the data repository**, so it never travels between machines.
+It is kept **outside the data repository**, so it never travels between
+machines (and a git checkout can never overwrite it).
 
 ## Non-goals
 

@@ -230,9 +230,12 @@ offline. Settings exist only for advanced use.
 | Data directory | platform data dir `/tasu` | `TASU_DATA`, or config file | Holds `todos.json`; also the git working tree when syncing |
 | Sync remote | none (local) | `TASU_REMOTE`, or config file | Git URL; with none set, git is never invoked |
 
-- Config file: platform config dir `/tasu/config.json` (`dirs::config_dir()`),
-  optional fields `data_dir` and `remote`. **Config is kept out of the data
-  repository** so it never travels between machines.
+- Config file: `$XDG_CONFIG_HOME/tasu/config.json` (or `~/.config/tasu/config.json`),
+  optional fields `data_dir` and `remote`. It lives here, **not** in the platform
+  config dir, because on macOS and Windows that equals the data dir — which would
+  drop `config.json` inside the synced working tree, where a checkout overwrites
+  it. It is also kept out of the repository itself, and any `config.json` an
+  older version committed is untracked on the next run.
 - Precedence: environment > config file > default.
 - `tasu remote <url>` **probes before it persists**: if `git ls-remote` fails
   (missing repository, no credentials/permission, no network) the remote is not

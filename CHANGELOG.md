@@ -8,6 +8,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.8.0] - 2026-10-06
 
+### Fixed
+
+- The config file no longer lives inside the synced data repository. On macOS
+  and Windows the platform config dir equals the data dir, so `config.json` sat
+  in the Git working tree; a checkout of a repository that tracked it could
+  overwrite the file and silently clear the remote. It now lives at
+  `$XDG_CONFIG_HOME/tasu/config.json`, and any committed `config.json` is
+  untracked on the next run.
+
 ### Changed
 
 - Starting tasu no longer runs a `git ls-remote` to reconcile the branch on

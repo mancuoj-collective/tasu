@@ -427,15 +427,29 @@ fn name_branch(repo: &Path, target: &str) {
     }
 }
 
-/// Keep machine-local files out of the synced repository. On macOS and Windows
-/// the config directory equals the data directory, so `config.json` would
-/// otherwise be committed and pushed.
+/// Keep machine-local files out of the synced repository. The ignore list is
+/// added idempotently, and any `config.json` an older version committed is
+/// untracked: it must never travel between machines.
 fn ensure_gitignore(repo: &Path) {
     let path = repo.join(".gitignore");
-    if !path.exists()
-        && let Err(err) = std::fs::write(&path, "config.json\n*.tmp\n*.corrupt-*\n")
-    {
+    let mut text = std::fs::read_to_string(&path).unwrap_or_default();
+    let mut changed = false;
+    for entry in ["config.json", "*.tmp", "*.corrupt-*"] {
+        if !text.lines().any(|line| line.trim() == entry) {
+            if !text.is_empty() && !text.ends_with('\n') {
+                text.push('\n');
+            }
+            text.push_str(entry);
+            text.push('\n');
+            changed = true;
+        }
+    }
+    if changed && let Err(err) = std::fs::write(&path, &text) {
         eprintln!("tasu: could not write {}: {err}", path.display());
+    }
+
+    if git_ok(repo, &["ls-files", "--error-unmatch", "config.json"]) {
+        let _ = git(repo, &["rm", "--cached", "--quiet", "config.json"]);
     }
 }
 
@@ -1034,7 +1048,8 @@ mod tests {
         let data = dir.path().join("data");
         std::fs::create_dir_all(&data).unwrap();
         std::fs::write(data.join("todos.json"), "{\"version\":1,\"tasks\":[]}").unwrap();
-        // On macOS/Windows the config lives in the data directory.
+        // A stray config.json in the data dir (older versions kept it here) must
+        // never be committed.
         std::fs::write(data.join("config.json"), "{\"remote\":\"x\"}").unwrap();
 
         ensure_repo(&data, Some(&remote)).unwrap();
@@ -1054,6 +1069,59 @@ mod tests {
         assert!(
             !files.contains("config.json"),
             "machine-local config must not be synced: {files}"
+        );
+    }
+
+    #[test]
+    fn a_committed_config_is_untracked_and_not_synced() {
+        let dir = tempfile::tempdir().unwrap();
+        // Seed the remote with a config.json, the way older versions committed
+        // it — a checkout would otherwise restore it over the local config.
+        let seed = dir.path().join("seed");
+        std::fs::create_dir_all(&seed).unwrap();
+        std::fs::write(seed.join("todos.json"), "{\"version\":1,\"tasks\":[]}").unwrap();
+        std::fs::write(seed.join("config.json"), "{\"remote\":null}").unwrap();
+        git(&seed, &["init", "-q", "-b", "main"]).unwrap();
+        git(&seed, &["add", "-A"]).unwrap();
+        git(
+            &seed,
+            &[
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@t",
+                "commit",
+                "-q",
+                "-m",
+                "seed",
+            ],
+        )
+        .unwrap();
+
+        let remote = bare_remote(dir.path());
+        git(&seed, &["remote", "add", "origin", &remote]).unwrap();
+        git(&seed, &["push", "-q", "origin", "main"]).unwrap();
+
+        let data = dir.path().join("data");
+        std::fs::create_dir_all(&data).unwrap();
+        write_board(&data, &["local"]);
+        ensure_repo(&data, Some(&remote)).unwrap();
+        commit_push(&data, Some(&remote)).unwrap();
+
+        assert!(
+            !git_ok(&data, &["ls-files", "--error-unmatch", "config.json"]),
+            "config.json is still tracked locally"
+        );
+        let tree = Command::new("git")
+            .arg("--git-dir")
+            .arg(&remote)
+            .args(["ls-tree", "-r", "--name-only", "main"])
+            .output()
+            .unwrap();
+        let files = String::from_utf8_lossy(&tree.stdout);
+        assert!(
+            !files.contains("config.json"),
+            "config.json is still tracked on the remote: {files}"
         );
     }
 
