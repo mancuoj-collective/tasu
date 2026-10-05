@@ -69,6 +69,7 @@ cargo install --path .
 ```bash
 tasu                       # open the app
 tasu add "buy cat food"    # record a task without opening the app
+tasu list                  # print the open tasks without opening the app
 tasu config                # print the data dir, config file and sync remote
 tasu remote <url>          # set the git sync remote (optional)
 tasu sync                  # pull then push once, and report the result

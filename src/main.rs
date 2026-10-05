@@ -41,6 +41,7 @@ fn run() -> Result<()> {
     let config = Config::load();
     match cli.command {
         Some(Command::Add { title }) => command::add(&config, &title),
+        Some(Command::List) => command::list(&config),
         Some(Command::Config) => {
             command::config(&config);
             Ok(())

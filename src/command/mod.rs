@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use chrono::Local;
 
 use crate::config::Config;
-use crate::domain::settle;
+use crate::domain::{Board, Bucket, settle};
 use crate::store::Store;
 use crate::sync;
 
@@ -32,11 +32,52 @@ pub fn add(config: &Config, words: &[String]) -> Result<()> {
     settle(&mut board, now);
     board.add(title, now);
     store.save(&board)?;
+    println!("+ {title}");
 
     if let Err(err) = sync::commit_now(&config.data_dir, config.remote.as_deref()) {
         eprintln!("tasu: push failed: {err}");
     }
     Ok(())
+}
+
+/// `tasu list`: print the open tasks, grouped by bucket. Read-only and local —
+/// run `tasu sync` first if you want the latest from the remote.
+pub fn list(config: &Config) -> Result<()> {
+    let mut board = Store::new(config.board_path()).load();
+    settle(&mut board, Local::now());
+    print!("{}", render_list(&board));
+    Ok(())
+}
+
+fn render_list(board: &Board) -> String {
+    let mut out = String::new();
+    for bucket in [Bucket::Today, Bucket::Week, Bucket::Later] {
+        let indices = board.open_in(bucket);
+        if indices.is_empty() {
+            continue;
+        }
+        out.push_str(bucket_label(bucket));
+        out.push('\n');
+        for index in indices {
+            if let Some(task) = board.task(index) {
+                out.push_str("  \u{25cb} ");
+                out.push_str(&task.title);
+                out.push('\n');
+            }
+        }
+    }
+    if out.is_empty() {
+        out.push_str("no open tasks\n");
+    }
+    out
+}
+
+fn bucket_label(bucket: Bucket) -> &'static str {
+    match bucket {
+        Bucket::Today => "TODAY",
+        Bucket::Week => "THIS WEEK",
+        Bucket::Later => "LATER",
+    }
 }
 
 /// `tasu sync`: force one pull-then-push and report what happened.
@@ -317,6 +358,28 @@ mod tests {
             Install::classify(Some(Path::new("/usr/local/bin/tasu")), None, false),
             Install::Unknown
         );
+    }
+
+    #[test]
+    fn list_prints_open_tasks_by_bucket() {
+        use crate::domain::Board;
+        use crate::domain::test_time::at;
+
+        let mut board = Board::new();
+        board.add("today one", at(2026, 10, 5));
+        board.add("later one", at(2026, 10, 5));
+        board.move_bucket(1, 2, at(2026, 10, 5));
+
+        assert_eq!(
+            super::render_list(&board),
+            "TODAY\n  \u{25cb} today one\nLATER\n  \u{25cb} later one\n"
+        );
+    }
+
+    #[test]
+    fn list_reports_an_empty_board() {
+        use crate::domain::Board;
+        assert_eq!(super::render_list(&Board::new()), "no open tasks\n");
     }
 
     #[test]

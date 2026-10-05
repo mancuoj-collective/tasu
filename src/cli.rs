@@ -15,6 +15,9 @@ pub enum Command {
         #[arg(required = true, num_args = 1..)]
         title: Vec<String>,
     },
+    /// Print the open tasks, grouped by bucket.
+    #[command(alias = "ls")]
+    List,
     /// Show the resolved data directory, config file and sync remote.
     Config,
     /// Show, set or clear the git sync remote.

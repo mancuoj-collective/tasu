@@ -193,7 +193,10 @@ its own writes, which is what separates "our write" from "an external one".
 
 - `tasu` → the TUI.
 - `tasu add <title>...` → load + `settle` + `add` + save + **best-effort**
-  commit/push (bounded; offline is fine and the exit code is still 0).
+  commit/push (bounded; offline is fine and the exit code is still 0), printing
+  what it captured.
+- `tasu list` (alias `ls`) → load + `settle` and print the open tasks grouped by
+  bucket. Read-only and local; `tasu sync` refreshes from the remote first.
 - `tasu config` → print the resolved data dir, config file and remote.
 - `tasu remote <url>` / `--clear` → probe, then save or clear (see Sync).
 - `tasu sync` → one pull-then-push, printing the real git error on failure.
