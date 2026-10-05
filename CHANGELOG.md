@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-06
+
 ### Changed
 
 - The help overlay no longer shows the sync error. A failure is summarised in
@@ -127,7 +129,8 @@ architecture and optional git sync.
 Initial release: a flat terminal todo list with JSON persistence (add, edit,
 toggle, delete) built with ratatui.
 
-[Unreleased]: https://github.com/mancuoj-collective/tasu/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/mancuoj-collective/tasu/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.8.0
 [0.7.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.7.0
 [0.6.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.6.0
 [0.5.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.5.0
