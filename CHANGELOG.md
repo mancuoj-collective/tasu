@@ -6,20 +6,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-05
+
 ### Changed
 
 - Connecting a remote from a machine that already has a board no longer
   overwrites the remote's tasks: the two boards are merged (union, exact
   duplicates dropped), so neither machine loses anything.
-- The help overlay lists every binding, including the arrow/enter/home/end
-  aliases and `?` itself; the lone history-tab note is gone (the history keys
-  are shown in its own footer).
+- The help overlay is wider with roomier side padding. Long paths and URLs wrap
+  long-top/short-bottom and right-align with the key column, and every binding
+  is listed (the arrow/enter/home/end aliases and `?`); the lone history-tab
+  note is gone, since the history keys are shown in its own footer.
 
 ### Fixed
 
-- The help overlay wraps the data/remote values in full instead of truncating
-  them, and shows a failed sync as a one-line reason (e.g. `✗ authentication
-  failed`) rather than a raw git dump; the full error stays in `tasu sync`.
+- The help overlay shows a failed sync as a one-line reason (e.g. `✗
+  authentication failed`) instead of a raw git dump; the full error stays in
+  `tasu sync`.
 - The footer shows `✗ sync failed · <reason>` instead of a bare dot.
 - `tasu remote` prints a single, prioritised failure line (cause + one fix)
   instead of repeating the URL and dumping a generic multi-line hint.
@@ -102,7 +105,8 @@ architecture and optional git sync.
 Initial release: a flat terminal todo list with JSON persistence (add, edit,
 toggle, delete) built with ratatui.
 
-[Unreleased]: https://github.com/mancuoj-collective/tasu/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/mancuoj-collective/tasu/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.6.0
 [0.5.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.5.0
 [0.4.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.4.0
 [0.3.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.3.0
