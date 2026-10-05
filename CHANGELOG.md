@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- A board can no longer hold two tasks with the same creation time: duplicates
+  older syncs could leave are collapsed, on load and on merge, to the
+  further-along copy.
+
+### Removed
+
+- All backwards-compatibility scaffolding, since only the author uses tasu: the
+  config file's old-location fallback, the `config.json` untracking and ignore
+  entry, and the on-disk schema version with its checks.
+
 ## [0.11.0] - 2026-10-06
 
 ### Changed

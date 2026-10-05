@@ -45,7 +45,7 @@ src/
     task.rs          Task / TaskState / Bucket
     board.rs         Board: collection + operations + per-bucket queries
     settle.rs        pure settle(&mut Board, now)
-  store/mod.rs       load / atomic save / mtime / schema version / merge_files
+  store/mod.rs       load / atomic save / mtime / merge_files
   sync/mod.rs        git: probe, pull, commit+push, branch resolution, error
                      classification; worker thread + result channel
   app/
@@ -64,12 +64,10 @@ src/
 ## Data contract (on disk)
 
 A single `todos.json` in the data directory (the platform data dir by default,
-overridable with `TASU_DATA`). The schema is **versioned** to leave room for
-migration.
+overridable with `TASU_DATA`).
 
 ```json
 {
-  "version": 1,
   "tasks": [
     {
       "title": "Nand2Tetris chapter 6",
@@ -93,9 +91,8 @@ Key decisions:
 - **`bucket` survives `done` / `archived`**, so undo and restore have an
   "original bucket" to return to.
 - All times are `chrono::DateTime<Local>`.
-- `store::merge_files(local, remote)` unions two serialized boards,
-  de-duplicating identical tasks, and refuses (returns `None`) if either side is
-  unreadable or from another schema version.
+- `store::merge_files(base, other)` merges two serialized boards task by task
+  (identity = `created_at`), and returns `None` only if a side is unreadable.
 
 ## Domain and the state machine
 
@@ -233,9 +230,8 @@ offline. Settings exist only for advanced use.
 - Config file: `$XDG_CONFIG_HOME/tasu/config.json` (or `~/.config/tasu/config.json`),
   optional fields `data_dir` and `remote`. It lives here, **not** in the platform
   config dir, because on macOS and Windows that equals the data dir — which would
-  drop `config.json` inside the synced working tree, where a checkout overwrites
-  it. It is also kept out of the repository itself, and any `config.json` an
-  older version committed is untracked on the next run.
+  drop `config.json` inside the synced working tree, where a checkout could
+  overwrite it.
 - Precedence: environment > config file > default.
 - `tasu remote <url>` **probes before it persists**: if `git ls-remote` fails
   (missing repository, no credentials/permission, no network) the remote is not
@@ -251,10 +247,9 @@ compares histories: if the remote is reachable from `HEAD` there is nothing to
 do; otherwise it resets to the remote and merges the boards **task by task**
 (`store::merge_files`, identity = `created_at`, terminal state wins),
 leaving the merged board for the next `commit_push` (`git add -A && git commit
-... && git push origin HEAD:refs/heads/<branch>`) to publish. Any rebase/merge a
-previous version left in progress is aborted first. With **no remote / not a
-repository** the whole layer degrades silently to local and produces no git
-calls.
+... && git push origin HEAD:refs/heads/<branch>`) to publish. With **no remote /
+not a repository** the whole layer degrades silently to local and produces no
+git calls.
 
 - **Branch contract**: every machine syncs on **one branch** so a host's
   `init.defaultBranch` (often `master` on Windows) never leaks into the data
@@ -265,10 +260,9 @@ calls.
   reconcile needs an `ls-remote`, so its result is remembered in the repo's own
   Git config (`tasu.remote`): it runs once per remote, not on every launch.
 - **First-connect merge**: when the local and remote boards both exist, the graft
-  path calls `store::merge_files` to union and de-duplicate instead of letting
-  the local side overwrite the remote. If one side is missing it is kept as is;
-  if a schema cannot be understood it falls back to the local side rather than
-  guessing. After the merge, normal single-writer pull/push resumes.
+  path calls `store::merge_files` to merge them task by task instead of letting
+  the local side overwrite the remote. If one side is missing it is kept as is.
+  After the merge, normal single-writer pull/push resumes.
 - **Error classification**: `sync::Failure::classify` maps git's stderr to
   `NotFound` / `Auth` / `Network` / `Other`, shared by the `tasu remote`
   message and the in-app footer.

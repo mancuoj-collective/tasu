@@ -50,6 +50,7 @@ impl Board {
     /// the same task do not drift into duplicates. A task only on the other side
     /// is added; `self` wins true ties.
     pub fn merged_with(mut self, other: &Board) -> Board {
+        self.dedup();
         for task in &other.tasks {
             match self
                 .tasks
@@ -65,6 +66,27 @@ impl Board {
             }
         }
         self
+    }
+
+    /// Collapse tasks that share a creation time, keeping the one that is
+    /// further along. A board should never hold two — creation time is the
+    /// identity — but older syncs could leave duplicates behind.
+    pub fn dedup(&mut self) {
+        let mut unique: Vec<Task> = Vec::new();
+        for task in self.tasks.drain(..) {
+            match unique
+                .iter_mut()
+                .find(|existing| same_task(existing, &task))
+            {
+                Some(existing) => {
+                    if is_further(&task, existing) {
+                        *existing = task;
+                    }
+                }
+                None => unique.push(task),
+            }
+        }
+        self.tasks = unique;
     }
 
     /// Add a task to `Today`. Returns its index.
@@ -322,6 +344,19 @@ mod tests {
         let after = seeded_at(&[("buy cat food", 5)]);
         let merged = before.merged_with(&after);
         assert_eq!(merged.len(), 1, "a rename must not become a second task");
+    }
+
+    #[test]
+    fn dedup_collapses_same_instant_copies() {
+        // Two copies of one task at the same instant (an older sync could leave
+        // this) collapse to the further-along one.
+        let mut board = Board::new();
+        board.add("dup", at(2026, 10, 5));
+        board.add("dup", at(2026, 10, 5));
+        board.complete(1, at(2026, 10, 6));
+        board.dedup();
+        assert_eq!(board.len(), 1);
+        assert_eq!(board.task(0).unwrap().state, TaskState::Done);
     }
 
     #[test]

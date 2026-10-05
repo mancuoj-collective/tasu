@@ -49,12 +49,6 @@ impl Config {
         Some(base.join("tasu").join("config.json"))
     }
 
-    /// The pre-0.9 location, read as a fallback so an existing setting survives
-    /// the move. Never written to.
-    fn legacy_config_file() -> Option<PathBuf> {
-        dirs::config_dir().map(|dir| dir.join("tasu").join("config.json"))
-    }
-
     /// Set (or clear) the sync remote in the config file.
     pub fn set_remote(remote: Option<&str>) -> std::io::Result<PathBuf> {
         let mut file = FileConfig::read();
@@ -78,13 +72,7 @@ impl FileConfig {
         };
         match std::fs::read_to_string(&path) {
             Ok(text) => Self::parse(&text, &path),
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                // First run after the move: fall back to the old location.
-                Config::legacy_config_file()
-                    .and_then(|legacy| std::fs::read_to_string(legacy).ok())
-                    .map(|text| Self::parse(&text, Path::new("legacy config")))
-                    .unwrap_or_default()
-            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Self::default(),
             Err(err) => {
                 eprintln!("tasu: could not read {}: {err}", path.display());
                 Self::default()

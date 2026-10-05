@@ -7,12 +7,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::{Board, Task};
 
-/// On-disk schema version. Bump when the shape changes; migration lands here.
-const SCHEMA_VERSION: u32 = 1;
-
 #[derive(Debug, Serialize, Deserialize)]
 struct FileSchema {
-    version: u32,
     #[serde(default)]
     tasks: Vec<Task>,
 }
@@ -39,7 +35,11 @@ impl Store {
             return Board::new();
         };
         match serde_json::from_str::<FileSchema>(&text) {
-            Ok(schema) => Board::from_tasks(schema.tasks),
+            Ok(schema) => {
+                let mut board = Board::from_tasks(schema.tasks);
+                board.dedup();
+                board
+            }
             Err(_) => {
                 self.backup();
                 Board::new()
@@ -54,7 +54,6 @@ impl Store {
             fs::create_dir_all(parent).context("failed to create data directory")?;
         }
         let schema = FileSchema {
-            version: SCHEMA_VERSION,
             tasks: board.tasks().to_vec(),
         };
         let json = serde_json::to_string_pretty(&schema).context("failed to serialize board")?;
@@ -104,17 +103,13 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
 }
 
 /// Merge two serialized boards: `base` wins ties, `other` fills in and advances
-/// matching tasks. Returns `None` when either side is unreadable or from another
-/// schema version, so the caller can fall back to one side rather than guess.
+/// matching tasks. Returns `None` when either side is unreadable, so the caller
+/// can fall back to one side rather than guess.
 pub fn merge_files(base: &[u8], other: &[u8]) -> Option<Vec<u8>> {
     let base: FileSchema = serde_json::from_slice(base).ok()?;
     let other: FileSchema = serde_json::from_slice(other).ok()?;
-    if base.version != SCHEMA_VERSION || other.version != SCHEMA_VERSION {
-        return None;
-    }
     let merged = Board::from_tasks(base.tasks).merged_with(&Board::from_tasks(other.tasks));
     let schema = FileSchema {
-        version: SCHEMA_VERSION,
         tasks: merged.into_tasks(),
     };
     serde_json::to_vec_pretty(&schema).ok()
@@ -127,7 +122,6 @@ mod tests {
 
     fn board_bytes(tasks: &[(&str, u32)]) -> Vec<u8> {
         let schema = FileSchema {
-            version: SCHEMA_VERSION,
             tasks: tasks
                 .iter()
                 .map(|(title, day)| Task::new(*title, at(2026, 10, *day)))
@@ -150,7 +144,7 @@ mod tests {
     fn merging_refuses_input_it_cannot_safely_merge() {
         let ok = board_bytes(&[("a", 5)]);
         assert!(merge_files(b"not json", &ok).is_none());
-        assert!(merge_files(&ok, b"{\"version\":99,\"tasks\":[]}").is_none());
+        assert!(merge_files(&ok, b"neither is this").is_none());
     }
 
     fn store_in(dir: &tempfile::TempDir) -> Store {
@@ -181,19 +175,14 @@ mod tests {
     }
 
     #[test]
-    fn writes_a_versioned_schema() {
+    fn writes_a_tasks_array() {
         let dir = tempfile::tempdir().unwrap();
         let store = store_in(&dir);
         store.save(&Board::new()).unwrap();
 
-        let text = std::fs::read_to_string(store.path()).unwrap();
-        assert!(text.contains("\"version\""));
-        assert!(
-            serde_json::from_str::<serde_json::Value>(&text)
-                .unwrap()
-                .get("version")
-                .is_some()
-        );
+        let value: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(store.path()).unwrap()).unwrap();
+        assert!(value.get("tasks").is_some_and(serde_json::Value::is_array));
     }
 
     #[test]
