@@ -1,94 +1,118 @@
-# tasu — 产品形态
+# tasu — product
 
-> 一屏扁平的、按新鲜度自动分层的个人任务清单——记录极快、每天想看、克制但有颜色。
+> A flat, one-screen personal task list that layers itself by freshness —
+> instant to capture, worth opening daily, restrained but coloured.
 
-这是一份个人产品的形态契约。它不是功能清单，而是**边界**：写清楚它做什么，也写清楚它不做什么。后续架构以此为唯一依据倒推。
+This is the product contract. It is not a feature list but a set of
+**boundaries**: what tasu does, and deliberately does not do. The architecture
+is derived from it — every module has to answer "which part of the product is
+this for?".
 
-## 一句话
+## In one line
 
-记录零成本，安排零负担：随手记下的任务自动进「今天」，没做完的自动往下沉，你只需要做事和打勾。
+Capture costs nothing, planning costs nothing: whatever you jot down lands in
+**today**, unfinished work sinks on its own, and all you do is work and tick.
 
-## 核心模型
+## Core model
 
-一条任务 = **标题 + 状态 + 所属桶**。
+One task = **title + state + bucket**.
 
-- **无日期、无项目、无标签、无备注、无优先级、无子任务。**
-- 状态只有三种：`未完成` / `已完成` / `已归档`。
-- 三个**互斥**的桶：`今天 Today` / `本周 Week` / `以后 Later`。
+- **No dates, projects, tags, notes, priorities or subtasks.**
+- Three states: `open` / `done` / `archived`.
+- Three mutually exclusive buckets: **today** / **this week** / **later**.
 
-### 记录
+### Capture
 
-- 新任务**默认进「今天」**。
-- 记录手段：TUI 内按 `a`；或 shell 里 `tasu add "..."`（不打开 TUI）。
+- New tasks go into **today** by default.
+- Capture from the TUI with `a`, or from the shell with `tasu add "..."` without
+  opening the TUI.
 
-### 自动降级（核心机制）
+### Ageing (the core mechanism)
 
-任务是随时间自动老化的流水线，按**真实日期懒结算**（只在你打开/调用时才结算，无需常驻进程）：
+Tasks are a pipeline that ages against real time, settled **lazily by local
+date** — only when you open or call tasu, so no daemon is needed:
 
-- 每过一天：未完成的 `今天` → `本周`。
-- 每过一周（周一为界）：未完成的 `本周` → `以后`。
-- `以后` 不再自动降级。
+- Each day: unfinished **today** → **this week**.
+- Each week (Monday boundary): unfinished **this week** → **later**.
+- **later** never ages further.
 
-结果：`今天` 每天清空为你当天新记或主动提升的事；越没做完的东西沉得越深。
+The result: today empties every day down to what you added or promoted; the
+less you finish, the deeper it sinks.
 
-### 完成与放弃
+### Completing and dropping
 
-- **完成**（`空格` / `Enter`）：从列表消失，沉入「历史」的 `DONE` 视图。
-- **放弃**（`x`）：明确不做的任务进「历史」的 `DROPPED` 视图，不算完成。可逆。
-- **历史 modal**：`c` 打开，`Tab` 在 `DONE` / `DROPPED` 间切换，保留全部、可搜索，`Enter` 把任一条**恢复回原桶原位置**。
-- 不提供"删除"键：完成或放弃都是可逆的。
+- **Complete** (`space` / `enter`): leaves the list and lands in the `DONE` view
+  of history.
+- **Drop** (`x`): a task you will not do lands in the `DROPPED` view. It is not a
+  completion, and it is reversible.
+- **History overlay** (`c`): `tab` switches between `DONE` and `DROPPED`,
+  everything is kept and searchable, and `enter` restores any entry **to its
+  original bucket and position**.
+- There is no delete key: completing and dropping are both reversible.
 
-## 界面
+## Interface
 
-- **窄屏**：纵向三段堆叠 `TODAY` / `THIS WEEK` / `LATER`。
-- **宽屏**（列数超过阈值）：自动并成三列看板，列间以竖线分隔。
-- **无边框**，靠分节标题、全宽分隔线与缩进表达层次。
-- **冷色调**；颜色只做信号，不做装饰：选中行、`今天`。
-- `THIS WEEK` 段显示 **ISO 周号 / 当年总周数**（如 `41/53`）。
-- 桶内按加入时间排序（新在上）。
-- 捕获后**不打断**当前浏览：底部一闪提示 `saved to today` 即消失。
+- **Narrow**: the three buckets stack vertically (`TODAY` / `THIS WEEK` /
+  `LATER`).
+- **Wide** (past a column threshold): they become three side-by-side columns
+  separated by rules.
+- **No borders**; hierarchy comes from section titles, full-width rules and
+  indentation.
+- A **cold palette**; colour is signal, not decoration: the selected row and
+  `TODAY`.
+- The `THIS WEEK` header shows **ISO week / weeks in the year** (e.g. `41/53`).
+- Within a bucket, newest first.
+- Capture does **not** steal focus: a footer toast `saved to today` flashes and
+  disappears.
 
-## 键位
+## Keys
 
-| 键 | 动作 |
+| Key | Action |
 | --- | --- |
-| `q` / `Esc` | 退出 |
-| `Ctrl`+`c` | 任意模式下退出 |
-| `j` / `k` / `↑` `↓` | 上下移动光标 |
-| `h` / `l` / `←` `→` | 在桶之间左右移动光标（宽屏即切列） |
-| `g` / `G` | 跳到顶 / 底 |
-| `空格` / `Enter` | 完成 |
-| `a` | 记录（进「今天」） |
-| `e` | 编辑标题 |
-| `t` | 提到「今天」 |
-| `[` / `]` | 把选中任务送到更近 / 更远的桶 |
-| `x` | 放弃（进历史的 `DROPPED`） |
-| `c` | 打开历史（`Tab` 切 `DONE` / `DROPPED`） |
-| `tab` | 历史内切换 `DONE` / `DROPPED` |
-| `?` | 帮助 |
+| `j` `k` `↓` `↑` | move the cursor |
+| `h` `l` `←` `→` | move between buckets (columns on a wide screen) |
+| `g` `G` `Home` `End` | top / bottom |
+| `space` `enter` | complete |
+| `a` | capture (into today) |
+| `e` | edit the title |
+| `t` | promote to today |
+| `[` `]` | send the task to the nearer / farther bucket |
+| `x` | drop (into `DROPPED`) |
+| `c` | history (`tab` switches `DONE` / `DROPPED`) |
+| `?` | help |
+| `q` `esc` | quit |
+| `ctrl+c` | quit from any mode |
 
-## 同步
+## Sync
 
-**Git 单写者模型**，目标场景是工作机 / 家用机两台，且**不同时编辑**。
+**Single-writer git**, aimed at a work machine and a home machine that are
+**not edited at the same time**.
 
-- 数据文件位于一个 Git 仓库（默认数据目录可被 `TASU_DATA` 覆盖，仓库路径可配置）。
-- **单分支约定**：所有机器在同一个分支上同步（远端默认分支优先，否则 `main`），不受本机 `init.defaultBranch` 影响。
-- **首次接入不丢数据**：本地和远端都已有任务时做**并集合并**（去重），而不是本地覆盖远端；任一侧为空则保留另一侧。
-- 设置 remote 时先探测：不可达 / 无权限 / 仓库不存在则**不保存并清空**，而不是留一个永远失败的配置。
-- 启动时 `git pull`；变更后 debounce 数秒自动 `add/commit/push`；退出时再 push 一次保底。
-- 离线或 push 失败：静默留待下次重试，不打断用户。
-- **不做并发合并**：单写者前提下"最后写的赢"已足够安全。
+- The data file lives in a git repository (the data directory doubles as the
+  working tree; `TASU_DATA` overrides it and the remote is configurable).
+- **One branch**: every machine syncs on the same branch (the remote's default,
+  otherwise `main`), independent of the host's `init.defaultBranch`.
+- **First connect never loses data**: when both the local and the remote boards
+  have tasks they are **merged (union, deduplicated)** instead of the local side
+  overwriting the remote; if either side is empty it is kept as is.
+- The remote is probed before it is saved: unreachable / unauthorized / missing
+  is **not saved, and clears any previous setting**, rather than leaving a config
+  that always fails.
+- Pull on start; after a change, debounce a few seconds then `add/commit/push`;
+  one more push on exit.
+- Offline or a failed push: stay quiet and retry later, without interrupting.
+- **No concurrent merge**: under a single writer, last-write-wins is safe enough.
 
-## 非目标
+## Non-goals
 
-明确排除，架构中视为不存在：
+Explicitly excluded, treated as non-existent in the architecture:
 
-- 多写者并发合并 / CRDT
-- 系统通知
-- 重复任务
-- 优先级
-- 子任务
-- 截止日期
-- 项目 / 标签
-- 全局热键
-- 多端实时同步（只做基于 Git 的回合制同步）
+- multi-writer merge / CRDT
+- system notifications
+- recurring tasks
+- priorities
+- subtasks
+- due dates
+- projects / tags
+- global hotkey
+- realtime multi-device sync (git-based turn-taking only)
