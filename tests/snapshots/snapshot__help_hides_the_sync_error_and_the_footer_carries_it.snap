@@ -17,7 +17,7 @@ expression: out
            │   a                                       add (to today)   │           
            │   e                                           edit title   │           
            │   t                                        move to today   │           
-           │   [ / ]                   send to previous / next bucket   │           
+           │   []                                move between buckets   │           
            │   x                                       drop (archive)   │           
            │   c                                              history   │           
            │   ?                                            this help   │           

@@ -21,4 +21,4 @@ expression: "render(&model, 84, 20)"
                                                                                     
                                                                                     
                                                                                     
- ? help  q quit  a add  c history  [/] bucket
+ ? help  q quit  a add  c history  [] move

@@ -170,7 +170,7 @@ fn help_modal(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path, syn
         ("a", "add (to today)"),
         ("e", "edit title"),
         ("t", "move to today"),
-        ("[ / ]", "send to previous / next bucket"),
+        ("[]", "move between buckets"),
         ("x", "drop (archive)"),
         ("c", "history"),
         ("?", "this help"),
