@@ -59,18 +59,18 @@ cargo install --path .
 ## Usage
 
 ```bash
-tasu                        # open the app
-tasu add "buy cat food"     # record a task without opening the app
-tasu list [today|week|later]# print the open tasks
-tasu done "buy cat food"    # complete a task
-tasu drop "old idea"        # drop (archive) a task
-tasu move later "someday"   # send a task to another bucket
-tasu history [done|dropped] # print history (both views by default)
-tasu config                 # print the data dir, config file and sync remote
-tasu remote <url>           # set the git sync remote (optional)
-tasu sync                   # pull then push once, and report the result
-tasu update                 # upgrade tasu the way it was installed
-tasu completions bash       # print a shell completion script
+tasu                          # open the app
+tasu add "buy cat food"       # record a task without opening the app
+tasu list [today|week|later]  # print the open tasks
+tasu done "buy cat food"      # complete a task
+tasu drop "old idea"          # drop (archive) a task
+tasu move later "someday"     # send a task to another bucket
+tasu history [done|dropped]   # print history (both views by default)
+tasu config                   # print the data dir, config file and sync remote
+tasu remote <url>             # set the git sync remote (optional)
+tasu sync                     # pull then push once, and report the result
+tasu update                   # upgrade tasu the way it was installed
+tasu completions bash         # print a shell completion script
 ```
 
 The everyday commands have short aliases, shown in `tasu --help`: `a` (add),
@@ -90,27 +90,27 @@ cannot be replaced), it prints the exact command instead of guessing.
 
 ### Keys
 
-| Key | Action |
-| --- | --- |
-| `j` `k` `↓` `↑` | move the cursor |
-| `h` `l` `←` `→` | previous / next section |
-| `g` `G` `Home` `End` | top / bottom |
-| `space` `Enter` | complete |
-| `a` | add (goes into today) |
-| `e` | edit the title |
-| `t` | move to today |
-| `[` `]` | send to the nearer / farther bucket |
-| `x` | drop (archive) |
-| `c` | history |
-| `?` | help |
-| `q` `Esc` | quit |
-| `Ctrl`+`c` | quit from anywhere |
+| Key                  | Action                              |
+| -------------------- | ----------------------------------- |
+| `j` `k` `↓` `↑`      | move the cursor                     |
+| `h` `l` `←` `→`      | previous / next section             |
+| `g` `G` `Home` `End` | top / bottom                        |
+| `space` `Enter`      | complete                            |
+| `a`                  | add (goes into today)               |
+| `e`                  | edit the title                      |
+| `t`                  | move to today                       |
+| `[` `]`              | send to the nearer / farther bucket |
+| `x`                  | drop (archive)                      |
+| `c`                  | history                             |
+| `?`                  | help                                |
+| `q` `Esc`            | quit                                |
+| `Ctrl`+`c`           | quit from anywhere                  |
 
 Narrow terminals stack the buckets vertically; **100 columns or wider** lays
 them out as three side-by-side columns.
 
 `c` opens the history overlay. `Enter` restores a completed or dropped task to
-its original bucket, `Tab` (or `←`/`→`) switches between *done* and *dropped*,
+its original bucket, `Tab` (or `←`/`→`) switches between _done_ and _dropped_,
 and typing filters the list.
 
 ## FAQ
@@ -118,13 +118,13 @@ and typing filters the list.
 **Why is there no due date / project / tag / priority?**
 
 Because the point is that you don't plan. Everything you capture lands in
-*today* and sinks on its own if you don't do it. Adding dates and projects turns
+_today_ and sinks on its own if you don't do it. Adding dates and projects turns
 a two-second capture into a five-minute decision — the exact thing this app
 exists to avoid.
 
 **What happens if I edit on two machines at once?**
 
-Try not to — tasu is a single writer (your work machine *or* your home machine).
+Try not to — tasu is a single writer (your work machine _or_ your home machine).
 If they do diverge, the next sync merges the boards task by task instead of
 getting stuck: tasks are matched by creation time, and a completed or dropped
 copy wins over an open one. Nothing is lost, but a task you edited on both sides
@@ -166,7 +166,7 @@ the current remote, and `tasu remote --clear` turns syncing off.
   detached process and returns to the shell immediately.
 - `tasu add` pulls before it reads and pushes after it writes, so a CLI-only
   machine stays in sync too.
-- Designed for **one writer at a time** (your work machine *or* your home
+- Designed for **one writer at a time** (your work machine _or_ your home
   machine). If the two do diverge, sync merges the boards task by task instead of
   getting stuck on a conflict: tasks are matched by their creation time (stable
   across renames), and a completed or dropped copy wins over an open one.
@@ -188,10 +188,10 @@ git --git-dir /tmp/tasu-remote.git log --oneline
 Environment variables take precedence over the config file. With no `remote`,
 tasu never invokes git.
 
-| Setting | Default | Environment | Config file |
-| --- | --- | --- | --- |
-| Data directory | platform data dir `/tasu` | `TASU_DATA` | `data_dir` |
-| Sync remote | none (local only) | `TASU_REMOTE` | `remote` |
+| Setting        | Default                   | Environment   | Config file |
+| -------------- | ------------------------- | ------------- | ----------- |
+| Data directory | platform data dir `/tasu` | `TASU_DATA`   | `data_dir`  |
+| Sync remote    | none (local only)         | `TASU_REMOTE` | `remote`    |
 
 The config file lives at `$XDG_CONFIG_HOME/tasu/config.json` (i.e.
 `~/.config/tasu/config.json`):
