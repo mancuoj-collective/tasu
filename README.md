@@ -10,18 +10,10 @@ Tasks go into **today**. Whatever you don't finish sinks — today's leftovers
 become **this week's**, and this week's become **later**. There are no due
 dates, projects or tags; the list organizes itself by how fresh each task is.
 
-```
-TODAY
-──────────────────────────────────────
- ○ Nand2Tetris chapter 6
- ○ learn GPUI events
- THIS WEEK  41/53
-──────────────────────────────────────
- ○ write the README
- LATER
-──────────────────────────────────────
- ○ read the ratatui source
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mancuoj-collective/tasu/HEAD/assets/kanban-dark.svg">
+  <img alt="tasu — today / this week / later" src="https://raw.githubusercontent.com/mancuoj-collective/tasu/HEAD/assets/kanban-light.svg">
+</picture>
 
 ## Install
 
@@ -92,8 +84,9 @@ Tasks carry no id, so `done`, `drop` and `move` match an open task by its
 
 `tasu update` detects how tasu was installed and runs the matching upgrade —
 `brew upgrade mancuoj/tap/tasu`, the official installer, or `cargo install tasu`
-— so the binary and the package manager that owns it stay in agreement. For an
-unknown install it prints the right command instead of guessing.
+— so the binary and the package manager that owns it stay in agreement. When it
+cannot upgrade safely (an unknown install, or Windows, where a running `.exe`
+cannot be replaced), it prints the exact command instead of guessing.
 
 ### Keys
 
@@ -120,6 +113,28 @@ them out as three side-by-side columns.
 its original bucket, `Tab` (or `←`/`→`) switches between *done* and *dropped*,
 and typing filters the list.
 
+## FAQ
+
+**Why is there no due date / project / tag / priority?**
+
+Because the point is that you don't plan. Everything you capture lands in
+*today* and sinks on its own if you don't do it. Adding dates and projects turns
+a two-second capture into a five-minute decision — the exact thing this app
+exists to avoid.
+
+**What happens if I edit on two machines at once?**
+
+Try not to — tasu is a single writer (your work machine *or* your home machine).
+If they do diverge, the next sync merges the boards task by task instead of
+getting stuck: tasks are matched by creation time, and a completed or dropped
+copy wins over an open one. Nothing is lost, but a task you edited on both sides
+may take its ordering from either machine.
+
+**Is my data sent anywhere?**
+
+No. There is no tasu server. With no remote configured tasu never even invokes
+git; with one, your tasks go only to your own repository.
+
 ## Sync between machines (optional)
 
 tasu is local-first: with no remote it never invokes git. Point it at a
@@ -139,8 +154,9 @@ the current remote, and `tasu remote --clear` turns syncing off.
 
 - **First run** clones into an empty data directory. If the remote already has
   history (say a README), tasu adopts it and pushes the local board on top.
-- If **both sides** already have a board, they are merged (union, exact
-  duplicates dropped) — neither machine loses tasks.
+- If **both sides** already have a board, they are merged task by task (matched
+  by creation time; a completed or dropped copy wins over an open one) — neither
+  machine loses tasks.
 - **One branch** everywhere: the remote's default branch if it has one,
   otherwise `main`. A machine's `init.defaultBranch` never leaks into the data
   repo.
@@ -204,10 +220,12 @@ cargo clippy --all-targets --all-features -- -D warnings
 
 The pure layers (domain, update, store, sync) are covered by unit and
 end-to-end tests, including a real git round trip. To eyeball the layout without
-a terminal, render sample boards to text:
+a terminal, render sample boards to text, or regenerate the README screenshots as
+SVG:
 
 ```bash
-cargo run --example preview
+cargo run --example preview      # text mock-ups of every screen
+cargo run --example screenshot   # writes assets/kanban-{light,dark}.svg
 ```
 
 [`PRODUCT.md`](PRODUCT.md) is the product contract and

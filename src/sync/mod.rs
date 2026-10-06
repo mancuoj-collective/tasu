@@ -765,7 +765,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let data = dir.path().join("data");
         std::fs::create_dir_all(&data).unwrap();
-        std::fs::write(data.join("todos.json"), "{\"version\":1,\"tasks\":[]}").unwrap();
+        std::fs::write(data.join("todos.json"), "{\"tasks\":[]}").unwrap();
 
         let remote = bare_remote(dir.path());
         ensure_repo(&data, Some(&remote)).unwrap();
@@ -782,7 +782,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let first = dir.path().join("first");
         std::fs::create_dir_all(&first).unwrap();
-        std::fs::write(first.join("todos.json"), "{\"version\":1,\"tasks\":[]}").unwrap();
+        std::fs::write(first.join("todos.json"), "{\"tasks\":[]}").unwrap();
         let remote = bare_remote(dir.path());
         ensure_repo(&first, Some(&remote)).unwrap();
         commit_push(&first, Some(&remote)).unwrap();
@@ -829,7 +829,7 @@ mod tests {
         // First machine with existing local data and no repository yet.
         let data = dir.path().join("data");
         std::fs::create_dir_all(&data).unwrap();
-        std::fs::write(data.join("todos.json"), "{\"version\":1,\"tasks\":[]}").unwrap();
+        std::fs::write(data.join("todos.json"), "{\"tasks\":[]}").unwrap();
 
         ensure_repo(&data, Some(&remote)).unwrap();
         commit_push(&data, Some(&remote)).unwrap();
@@ -857,7 +857,7 @@ mod tests {
         // `init.defaultBranch` must not decide the branch name.
         let data = dir.path().join("data");
         std::fs::create_dir_all(&data).unwrap();
-        std::fs::write(data.join("todos.json"), "{\"version\":1,\"tasks\":[]}").unwrap();
+        std::fs::write(data.join("todos.json"), "{\"tasks\":[]}").unwrap();
 
         ensure_repo(&data, Some(&remote)).unwrap();
         commit_push(&data, Some(&remote)).unwrap();
@@ -958,7 +958,7 @@ mod tests {
         let remote = bare_remote(dir.path());
         let data = dir.path().join("data");
         std::fs::create_dir_all(&data).unwrap();
-        std::fs::write(data.join("todos.json"), "{\"version\":1,\"tasks\":[]}").unwrap();
+        std::fs::write(data.join("todos.json"), "{\"tasks\":[]}").unwrap();
 
         ensure_repo(&data, Some(&remote)).unwrap();
         commit_push(&data, Some(&remote)).unwrap();
@@ -977,7 +977,7 @@ mod tests {
         let remote = seeded_remote(dir.path(), "main");
         let data = dir.path().join("data");
         std::fs::create_dir_all(&data).unwrap();
-        std::fs::write(data.join("todos.json"), "{\"version\":1,\"tasks\":[]}").unwrap();
+        std::fs::write(data.join("todos.json"), "{\"tasks\":[]}").unwrap();
         git(&data, &["init", "-q"]).unwrap();
         git(&data, &["add", "-A"]).unwrap();
         git(
@@ -1006,7 +1006,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let data = dir.path().join("data");
         std::fs::create_dir_all(&data).unwrap();
-        std::fs::write(data.join("todos.json"), "{\"version\":1,\"tasks\":[]}").unwrap();
+        std::fs::write(data.join("todos.json"), "{\"tasks\":[]}").unwrap();
         git(&data, &["init", "-q", "-b", "master"]).unwrap();
         git(&data, &["add", "-A"]).unwrap();
         git(
@@ -1036,7 +1036,7 @@ mod tests {
         let remote = seeded_remote(dir.path(), "trunk");
         let data = dir.path().join("data");
         std::fs::create_dir_all(&data).unwrap();
-        std::fs::write(data.join("todos.json"), "{\"version\":1,\"tasks\":[]}").unwrap();
+        std::fs::write(data.join("todos.json"), "{\"tasks\":[]}").unwrap();
 
         ensure_repo(&data, Some(&remote)).unwrap();
 
@@ -1168,7 +1168,7 @@ mod tests {
 
         let data = dir.path().join("data");
         std::fs::create_dir_all(&data).unwrap();
-        std::fs::write(data.join("todos.json"), "{\"version\":1,\"tasks\":[]}").unwrap();
+        std::fs::write(data.join("todos.json"), "{\"tasks\":[]}").unwrap();
         ensure_repo(&data, Some(&first)).unwrap();
         ensure_repo(&data, Some(&second)).unwrap();
 

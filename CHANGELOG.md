@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- README screenshots as vector SVG (`assets/kanban-{light,dark}.svg`), regenerated
+  with `cargo run --example screenshot`, plus a short FAQ and bug/feature issue
+  templates.
+
+### Changed
+
+- The README now states that `tasu update` cannot replace a running `.exe` on
+  Windows and prints the command instead.
+
 ## [0.12.0] - 2026-10-06
 
 ### Fixed
