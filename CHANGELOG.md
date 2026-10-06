@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-06
+
 ### Added
 
 - README screenshots as vector SVG (`assets/kanban-{light,dark}.svg`), regenerated
@@ -14,6 +16,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The footer and help label the bracket keys `[] move` instead of `[/] bucket`.
 - The README now states that `tasu update` cannot replace a running `.exe` on
   Windows and prints the command instead.
 
@@ -189,7 +192,8 @@ architecture and optional git sync.
 Initial release: a flat terminal todo list with JSON persistence (add, edit,
 toggle, delete) built with ratatui.
 
-[Unreleased]: https://github.com/mancuoj-collective/tasu/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/mancuoj-collective/tasu/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.13.0
 [0.12.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.12.0
 [0.11.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.11.0
 [0.10.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.10.0
