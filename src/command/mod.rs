@@ -285,7 +285,8 @@ fn bucket_label(bucket: Bucket) -> &'static str {
     }
 }
 
-/// `tasu sync`: force one pull-then-push and report what happened.
+/// `tasu sync`: force one pull-then-push and report what happened. A failure
+/// exits non-zero, so scripts can tell.
 pub fn sync(config: &Config) -> Result<()> {
     let Some(url) = config.remote.as_deref() else {
         println!("sync off (local only); set one with: tasu remote <owner/repo>");
@@ -293,12 +294,17 @@ pub fn sync(config: &Config) -> Result<()> {
     };
     println!("syncing {url}");
 
-    if let Err(err) = crate::sync::pull_now(&config.data_dir, Some(url)) {
-        println!("pull failed:\n  {err}");
+    let pull = crate::sync::pull_now(&config.data_dir, Some(url));
+    let push = crate::sync::commit_now(&config.data_dir, Some(url));
+    if let Err(err) = &pull {
+        eprintln!("pull failed:\n  {err}");
     }
-    match crate::sync::commit_now(&config.data_dir, Some(url)) {
+    match &push {
         Ok(()) => println!("push ok"),
-        Err(err) => println!("push failed:\n  {err}"),
+        Err(err) => eprintln!("push failed:\n  {err}"),
+    }
+    if pull.is_err() || push.is_err() {
+        anyhow::bail!("sync failed");
     }
     Ok(())
 }

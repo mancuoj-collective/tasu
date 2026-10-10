@@ -8,6 +8,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `tasu sync` exits non-zero when the pull or push failed, so scripts can tell.
 - A failed save is no longer marked for pushing, so a stale board is never
   published to the remote.
 - A rename is no longer lost when two machines diverge: each task now carries a
