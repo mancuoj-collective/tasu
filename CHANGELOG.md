@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- The board file now has a single atomic writer: the sync layer reads and writes
+  `todos.json` through `Store`, so a sync write can no longer race a reload.
+- A failure to adopt or create the sync repository is reported in the footer
+  instead of being swallowed.
+- Two tasks can no longer share a creation instant (the task identity), which
+  would have made them silently collapse into one on a later merge.
+
 ## [0.13.0] - 2026-10-06
 
 ### Added

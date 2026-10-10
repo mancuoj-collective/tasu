@@ -37,7 +37,7 @@ domain/                            pure logic, zero I/O, `now` injected
 
 ```
 src/
-  main.rs            entry: wires store/sync, runs the loop and its effects
+  main.rs            entry: parse the CLI, run the loop, spawn the exit flush
   cli.rs             clap definition
   config.rs          settings: data dir / remote (env > config file > default)
   command/mod.rs     one-shot commands: add, config, remote, sync
@@ -52,6 +52,7 @@ src/
     model.rs         Model = Board + UiState
     action.rs        Action / Effect enums
     update.rs        update(&mut Model, Action) -> Vec<Effect>
+    runtime.rs       I/O half: Store + Sync worker, debounce, reload, `due`
   ui/
     mod.rs           width-based layout selection + footer + modal dispatch
     theme.rs         cold palette
@@ -88,11 +89,18 @@ Key decisions:
   position. Bucket order is derived from `created_at` (with nanoseconds), so
   **restoring a task means moving it back to its bucket and resetting
   `bucket_since`** — ordering falls back into place with no extra bookkeeping.
+  Because `created_at` *is* the identity, `Board::add` guarantees it is unique:
+  a colliding `now` is nudged forward by a nanosecond, so two tasks can never
+  silently collapse into one on a later merge.
 - **`bucket` survives `done` / `archived`**, so undo and restore have an
   "original bucket" to return to.
 - All times are `chrono::DateTime<Local>`.
 - `store::merge_files(base, other)` merges two serialized boards task by task
   (identity = `created_at`), and returns `None` only if a side is unreadable.
+- **One atomic writer for `todos.json`.** `Store` owns the file and is the only
+  thing that writes it (temp file + rename). The sync layer reads and writes the
+  board through `Store` too, instead of a second plain `fs::write` that could
+  race the reader.
 
 ## Domain and the state machine
 
@@ -152,17 +160,23 @@ its own writes, which is what separates "our write" from "an external one".
 
 - The loop: draw → drain sync results and check mtime → wait up to `TICK`
   (200 ms) for a key → `update` → apply effects.
-- **`Runtime`** (in `main.rs`) owns the `Store`, the optional `Sync` worker and
-  the debounce state (`dirty`, `last_change`, `retry_at`, `in_flight`,
-  `needs_pull`).
-- **Debounced push**: a change sets `dirty`; once nothing is in flight and
-  `DEBOUNCE` (3 s) has passed quietly, the runtime sends a commit+push. A
-  failure marks `needs_pull` and schedules a retry after `RETRY` (30 s), pulling
-  first so a rejected (non-fast-forward) push can recover.
+- **`Runtime`** (in `app/runtime.rs`, part of the library) owns the `Store`, the
+  optional `Sync` worker and the debounce state (`dirty`, `last_change`,
+  `retry_at`, `in_flight`, `needs_pull`). It is the only place that touches the
+  disk, the clock or the network.
+- **Debounced push**: the decision is the pure
+  `due(&SyncState, DEBOUNCE) -> Due` — a function of a few flags and elapsed
+  times, unit-tested without a clock or threads. `Runtime` just performs the
+  I/O: once nothing is in flight and `DEBOUNCE` (3 s) has passed quietly, it
+  sends a commit+push. A failure marks `needs_pull` and schedules a retry after
+  `RETRY` (30 s), pulling first so a rejected (non-fast-forward) push can
+  recover.
 - **Sync worker**: `Sync` spawns one thread that adopts or creates the
   repository, then processes `Pull` / `CommitPush` jobs and returns
-  `Result<(), String>` over a channel. The app never blocks on git. With no
-  remote configured, no git process is ever started.
+  `Result<(), String>` over a channel. It reports its one-shot repository-setup
+  outcome first (`poll_init`), so a broken setup is shown in the footer instead
+  of looking idle. The app never blocks on git. With no remote configured, no
+  git process is ever started.
 - On exit the runtime saves and calls `flush`, a synchronous best-effort push,
   so the last change is not lost when the process ends.
 - No tokio: one slow operation plus one poll is enough for std threads.
@@ -247,9 +261,12 @@ compares histories: if the remote is reachable from `HEAD` there is nothing to
 do; otherwise it resets to the remote and merges the boards **task by task**
 (`store::merge_files`, identity = `created_at`, terminal state wins),
 leaving the merged board for the next `commit_push` (`git add -A && git commit
-... && git push origin HEAD:refs/heads/<branch>`) to publish. With **no remote /
-not a repository** the whole layer degrades silently to local and produces no
-git calls.
+... && git push origin HEAD:refs/heads/<branch>`) to publish. With **no remote**
+the whole layer degrades silently to local and produces no git calls; when a
+remote is set but the repository cannot be adopted or created, that outcome is
+reported once through the worker's init channel rather than swallowed. The board
+file itself is read and written through `Store`, so `todos.json` has a single
+atomic write path shared with the app.
 
 - **Branch contract**: every machine syncs on **one branch** so a host's
   `init.defaultBranch` (often `master` on Windows) never leaks into the data
@@ -280,9 +297,10 @@ repositories):
 - sync: silent when no remote, an offline push that does not block exit, the
   first-connect merge, and branch-name adoption.
 
-Pure layers (domain, update, store, sync) also have unit tests, and the UI has
-`insta` snapshot tests. Git-dependent tests run against real repositories so
-they exercise the real binary.
+Pure layers (domain, update, store, sync) also have unit tests, as does the
+runtime's pure `due` scheduler (debounce, retry backoff, pull-before-push), and
+the UI has `insta` snapshot tests. Git-dependent tests run against real
+repositories so they exercise the real binary.
 
 > Rule of thumb: to isolate a subsystem for testing, first write down *how it
 > could fail*, then write the code. Domain-isolation tests are reserved for hard
