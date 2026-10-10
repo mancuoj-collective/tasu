@@ -157,7 +157,7 @@ fn editing(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effect
                 }
                 Mode::Edit => {
                     if let Some(index) = model.selected() {
-                        model.board.rename(index, title);
+                        model.board.rename(index, title, now);
                     }
                 }
                 _ => {}

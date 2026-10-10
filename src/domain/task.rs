@@ -59,6 +59,12 @@ pub struct Task {
     pub completed_at: Option<DateTime<Local>>,
     #[serde(default)]
     pub archived_at: Option<DateTime<Local>>,
+    /// When the user last changed this task. Used only to order a merge: a
+    /// rename changes no other field, so without this a rename cannot win a tie
+    /// against the other side's copy. Absent in files written before the field
+    /// existed, hence the fallback in [`Task::updated`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<DateTime<Local>>,
 }
 
 impl Task {
@@ -71,10 +77,16 @@ impl Task {
             created_at: now,
             completed_at: None,
             archived_at: None,
+            updated_at: None,
         }
     }
 
     pub fn is_open(&self) -> bool {
         self.state == TaskState::Open
+    }
+
+    /// The last user change, or the creation time for a never-changed task.
+    pub fn updated(&self) -> DateTime<Local> {
+        self.updated_at.unwrap_or(self.created_at)
     }
 }

@@ -23,6 +23,7 @@ fn open(title: &str, bucket: Bucket, since: DateTime<Local>) -> Task {
         created_at: since,
         completed_at: None,
         archived_at: None,
+        updated_at: None,
     }
 }
 
@@ -35,6 +36,7 @@ fn done(title: &str, day: u32) -> Task {
         created_at: dt(day),
         completed_at: Some(dt(day)),
         archived_at: None,
+        updated_at: None,
     }
 }
 
@@ -123,6 +125,7 @@ fn dropped(title: &str, day: u32) -> Task {
         created_at: dt(day),
         completed_at: None,
         archived_at: Some(dt(day)),
+        updated_at: None,
     }
 }
 

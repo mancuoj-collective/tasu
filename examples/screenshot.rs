@@ -50,6 +50,7 @@ fn open(title: &str, bucket: Bucket, day: u32) -> Task {
         created_at: dt(day),
         completed_at: None,
         archived_at: None,
+        updated_at: None,
     }
 }
 

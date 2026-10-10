@@ -8,6 +8,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A rename is no longer lost when two machines diverge: each task now carries a
+  last-changed time, used to order a merge (a rename moved no other field, so it
+  could never win a tie before).
 - Git is now run in the C locale and "is there anything to commit" is decided
   from `git diff --cached --quiet` instead of git's (translated) message, so a
   non-English git no longer turns every no-op commit into a sync failure.

@@ -46,8 +46,8 @@ impl Board {
     /// `created_at` — unique at nanosecond precision and, unlike the title,
     /// stable across renames. For a matching task the one that is further along
     /// wins — a terminal state (`done` / `archived`) over `open`, then the later
-    /// `bucket_since` — so merging is idempotent and two machines that edited
-    /// the same task do not drift into duplicates. A task only on the other side
+    /// change time — so merging is idempotent and two machines that edited the
+    /// same task do not drift into duplicates. A task only on the other side
     /// is added; `self` wins true ties.
     pub fn merged_with(mut self, other: &Board) -> Board {
         self.dedup();
@@ -109,7 +109,7 @@ impl Board {
         now
     }
 
-    pub fn rename(&mut self, index: usize, title: impl Into<String>) -> bool {
+    pub fn rename(&mut self, index: usize, title: impl Into<String>, now: DateTime<Local>) -> bool {
         let title = title.into();
         if title.trim().is_empty() {
             return false;
@@ -117,6 +117,7 @@ impl Board {
         match self.tasks.get_mut(index) {
             Some(task) => {
                 task.title = title;
+                task.updated_at = Some(now);
                 true
             }
             None => false,
@@ -133,6 +134,7 @@ impl Board {
         }
         task.state = TaskState::Done;
         task.completed_at = Some(now);
+        task.updated_at = Some(now);
         true
     }
 
@@ -147,6 +149,7 @@ impl Board {
         task.state = TaskState::Open;
         task.completed_at = None;
         task.bucket_since = now;
+        task.updated_at = Some(now);
         true
     }
 
@@ -159,6 +162,7 @@ impl Board {
         }
         task.state = TaskState::Archived;
         task.archived_at = Some(now);
+        task.updated_at = Some(now);
         true
     }
 
@@ -172,6 +176,7 @@ impl Board {
         task.state = TaskState::Open;
         task.archived_at = None;
         task.bucket_since = now;
+        task.updated_at = Some(now);
         true
     }
 
@@ -189,6 +194,7 @@ impl Board {
         }
         task.bucket = next;
         task.bucket_since = now;
+        task.updated_at = Some(now);
         true
     }
 
@@ -202,6 +208,7 @@ impl Board {
         }
         task.bucket = Bucket::Today;
         task.bucket_since = now;
+        task.updated_at = Some(now);
         true
     }
 
@@ -253,10 +260,11 @@ fn same_task(a: &Task, b: &Task) -> bool {
 }
 
 /// Whether `candidate` is further along than `current`: a terminal state beats
-/// `open`, and within a state a later bucket move wins.
+/// `open`, and within a state the more recently changed copy wins. The change
+/// time is what lets a rename — which moves no other field — win a tie.
 fn is_further(candidate: &Task, current: &Task) -> bool {
     state_rank(candidate.state) > state_rank(current.state)
-        || (candidate.state == current.state && candidate.bucket_since > current.bucket_since)
+        || (candidate.state == current.state && candidate.updated() > current.updated())
 }
 
 fn state_rank(state: TaskState) -> u8 {
@@ -302,10 +310,27 @@ mod tests {
     #[test]
     fn rename_rejects_blank_titles() {
         let mut board = seeded(&["keep me"]);
-        assert!(!board.rename(0, "   "));
+        assert!(!board.rename(0, "   ", at(2026, 10, 6)));
         assert_eq!(board.task(0).unwrap().title, "keep me");
-        assert!(board.rename(0, "renamed"));
+        assert!(board.rename(0, "renamed", at(2026, 10, 6)));
         assert_eq!(board.task(0).unwrap().title, "renamed");
+    }
+
+    #[test]
+    fn a_later_rename_wins_the_merge() {
+        // A rename moves no other field, so without a change time it could not
+        // beat the other side's copy. The later rename must survive whichever
+        // side is the base.
+        let base = Board::from_tasks(vec![Task::new("old name", at(2026, 10, 5))]);
+        let mut renamed = Board::from_tasks(vec![Task::new("old name", at(2026, 10, 5))]);
+        renamed.rename(0, "new name", at(2026, 10, 6));
+
+        for merged in [
+            base.clone().merged_with(&renamed),
+            renamed.clone().merged_with(&base),
+        ] {
+            assert_eq!(merged.task(0).unwrap().title, "new name");
+        }
     }
 
     #[test]

@@ -77,7 +77,8 @@ overridable with `TASU_DATA`).
       "bucket_since": "2026-10-04T09:12:00.123+08:00",
       "created_at":   "2026-10-04T09:12:00.123+08:00",
       "completed_at": null,
-      "archived_at":  null
+      "archived_at":  null,
+      "updated_at":   null           // last user change; absent until the first
     }
   ]
 }
@@ -117,6 +118,7 @@ struct Task {
     created_at: DateTime<Local>,
     completed_at: Option<DateTime<Local>>,
     archived_at: Option<DateTime<Local>>,
+    updated_at: Option<DateTime<Local>>,  // last user change, for merges
 }
 ```
 
@@ -259,7 +261,8 @@ JSON board conflicts as soon as two machines touch it, and then the push is
 rejected and the repo is stranded. Instead `pull` fetches into a private ref and
 compares histories: if the remote is reachable from `HEAD` there is nothing to
 do; otherwise it resets to the remote and merges the boards **task by task**
-(`store::merge_files`, identity = `created_at`, terminal state wins),
+(`store::merge_files`, identity = `created_at`, terminal state wins, then the
+later change time),
 leaving the merged board for the next `commit_push` (`git add -A && git commit
 ... && git push origin HEAD:refs/heads/<branch>`) to publish. With **no remote**
 the whole layer degrades silently to local and produces no git calls; when a
