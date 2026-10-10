@@ -108,7 +108,7 @@ pub fn pull_now(repo: &Path, remote: Option<&str>) -> Result<(), String> {
 /// Check that a remote is reachable and that credentials work, without asking
 /// for input. Empty repositories count as reachable.
 pub fn probe_remote(url: &str) -> Result<(), String> {
-    let mut cmd = Command::new("git");
+    let mut cmd = git_command();
     cmd.args(["ls-remote", url]);
     run_bounded(&mut cmd, NETWORK_TIMEOUT)
 }
@@ -333,7 +333,7 @@ fn remote_default_branch(remote: &str) -> Option<String> {
 /// (`Err`) from a readable one that simply has no default branch (`Ok(None)`).
 /// `ensure_repo` uses the difference to decide whether to retry later.
 fn remote_default_branch_result(remote: &str) -> Result<Option<String>, String> {
-    let mut cmd = Command::new("git");
+    let mut cmd = git_command();
     cmd.args(["ls-remote", "--symref", remote, "HEAD"]);
     let output = run_output(&mut cmd, NETWORK_TIMEOUT)?;
     // "ref: refs/heads/main\tHEAD"
@@ -472,7 +472,7 @@ fn ensure_gitignore(repo: &Path) {
 }
 
 fn clone(url: &str, repo: &Path) -> Result<(), String> {
-    let mut cmd = Command::new("git");
+    let mut cmd = git_command();
     cmd.args(["clone", "--quiet", url]).arg(repo);
     run_bounded(&mut cmd, NETWORK_TIMEOUT)
 }
@@ -545,22 +545,23 @@ fn commit_push_with(repo: &Path, remote: Option<&str>, timeout: Duration) -> Res
     }
     ensure_gitignore(repo);
     git(repo, &["add", "-A"])?;
-    match git(
-        repo,
-        &[
-            "-c",
-            "user.name=tasu",
-            "-c",
-            "user.email=tasu@localhost",
-            "commit",
-            "--quiet",
-            "-m",
-            "tasu: sync",
-        ],
-    ) {
-        Ok(()) => {}
-        Err(message) if message.contains("nothing to commit") => {}
-        Err(message) => return Err(message),
+    // `git commit` fails when there is nothing staged, and its message is
+    // locale-dependent; decide with a machine-readable check instead of parsing
+    // it. Nothing to commit is a no-op, not an error.
+    if !git_ok(repo, &["diff", "--cached", "--quiet"]) {
+        git(
+            repo,
+            &[
+                "-c",
+                "user.name=tasu",
+                "-c",
+                "user.email=tasu@localhost",
+                "commit",
+                "--quiet",
+                "-m",
+                "tasu: sync",
+            ],
+        )?;
     }
     // Push to the explicit branch name instead of a bare `HEAD`, so a stray
     // local branch can never create a second branch on the remote.
@@ -580,8 +581,17 @@ fn commit_push_with(repo: &Path, remote: Option<&str>, timeout: Duration) -> Res
 }
 
 fn git_cmd(repo: &Path, args: &[&str]) -> Command {
-    let mut cmd = Command::new("git");
+    let mut cmd = git_command();
     cmd.arg("-C").arg(repo).args(args);
+    cmd
+}
+
+/// Every git invocation goes through here. Output is forced to the C locale so
+/// git's messages are stable English: tasu classifies them (and the commit path
+/// used to parse one), and a translated git must never change behaviour.
+fn git_command() -> Command {
+    let mut cmd = Command::new("git");
+    cmd.env("LC_ALL", "C").env("LANG", "C");
     cmd
 }
 
@@ -800,6 +810,23 @@ mod tests {
             remote_refs(&remote).contains("refs/heads/"),
             "remote received no branch"
         );
+    }
+
+    #[test]
+    fn pushing_with_nothing_to_commit_is_a_noop() {
+        // Regression: `git commit` fails with "nothing to commit" when nothing
+        // is staged, and that message is locale-dependent. The commit path must
+        // decide with a machine-readable check, so this is Ok, not Err.
+        let dir = tempfile::tempdir().unwrap();
+        let remote = bare_remote(dir.path());
+        let data = dir.path().join("data");
+        std::fs::create_dir_all(&data).unwrap();
+        std::fs::write(data.join("todos.json"), "{\"tasks\":[]}").unwrap();
+
+        ensure_repo(&data, Some(&remote)).unwrap();
+        commit_push(&data, Some(&remote)).unwrap();
+        // Nothing changed since the first push.
+        commit_push(&data, Some(&remote)).unwrap();
     }
 
     #[test]

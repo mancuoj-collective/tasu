@@ -8,6 +8,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Git is now run in the C locale and "is there anything to commit" is decided
+  from `git diff --cached --quiet` instead of git's (translated) message, so a
+  non-English git no longer turns every no-op commit into a sync failure.
 - The board file now has a single atomic writer: the sync layer reads and writes
   `todos.json` through `Store`, so a sync write can no longer race a reload.
 - A failure to adopt or create the sync repository is reported in the footer
