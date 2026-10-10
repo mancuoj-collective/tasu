@@ -33,7 +33,9 @@ pub fn task_line(task: &Task, theme: &Theme, width: u16) -> Line<'static> {
 }
 
 /// Cut `text` to at most `max` display columns, marking the cut with `…`.
-fn truncate(text: &str, max: usize) -> String {
+/// Shared with the footer, which must truncate a possibly non-ASCII error by
+/// width, not by character count.
+pub(crate) fn truncate(text: &str, max: usize) -> String {
     if text.width() <= max {
         return text.to_string();
     }

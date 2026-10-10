@@ -141,7 +141,7 @@ fn toast_line(model: &Model, theme: &Theme) -> Option<Line<'static>> {
 /// A write error takes priority over everything else on the right.
 fn error_line(model: &Model, theme: &Theme) -> Option<Line<'static>> {
     model.ui.error.as_ref().map(|message| {
-        let short: String = message.chars().take(60).collect();
+        let short = components::truncate(message, 60);
         Line::from(Span::styled(format!(" \u{26a0} {short} "), theme.warn()))
     })
 }
