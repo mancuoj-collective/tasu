@@ -6,8 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-11
+
 ### Fixed
 
+- A non-English git no longer turns every no-op commit into a sync failure: git
+  runs in the C locale and "is there anything to commit" is decided from
+  `git diff --cached --quiet`, not from git's translated message.
+- A rename is no longer lost when two machines diverge: each task carries a
+  last-changed time, used to order a merge (a rename moved no other field, so it
+  could never win a tie before).
+- The board file has a single atomic writer: the sync layer reads and writes
+  `todos.json` through `Store`, so a sync write can no longer race a reload.
+- Two tasks can no longer share a creation instant (the task identity), which
+  would have made them silently collapse into one on a later merge.
+- A failed save is no longer marked for pushing, so a stale board is never
+  published to the remote.
+- A failure to adopt or create the sync repository is reported in the footer
+  instead of being swallowed.
 - A board that cannot be parsed during a merge is reported instead of silently
   dropping the other side's tasks.
 - `tasu sync` exits non-zero when the pull or push failed, so scripts can tell.
@@ -19,20 +35,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   failure now leaves the current remote in place.
 - `tasu add` / `done` / `drop` / `move` no longer print a warning when their
   best-effort pull fails offline; run `tasu sync` to see the error.
-- A failed save is no longer marked for pushing, so a stale board is never
-  published to the remote.
-- A rename is no longer lost when two machines diverge: each task now carries a
-  last-changed time, used to order a merge (a rename moved no other field, so it
-  could never win a tie before).
-- Git is now run in the C locale and "is there anything to commit" is decided
-  from `git diff --cached --quiet` instead of git's (translated) message, so a
-  non-English git no longer turns every no-op commit into a sync failure.
-- The board file now has a single atomic writer: the sync layer reads and writes
-  `todos.json` through `Store`, so a sync write can no longer race a reload.
-- A failure to adopt or create the sync repository is reported in the footer
-  instead of being swallowed.
-- Two tasks can no longer share a creation instant (the task identity), which
-  would have made them silently collapse into one on a later merge.
 
 ## [0.13.0] - 2026-10-06
 
@@ -220,7 +222,8 @@ architecture and optional git sync.
 Initial release: a flat terminal todo list with JSON persistence (add, edit,
 toggle, delete) built with ratatui.
 
-[Unreleased]: https://github.com/mancuoj-collective/tasu/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/mancuoj-collective/tasu/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.14.0
 [0.13.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.13.0
 [0.12.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.12.0
 [0.11.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.11.0
