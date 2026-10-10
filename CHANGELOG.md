@@ -12,6 +12,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   silence. The file is moved aside and every front-end says so — the TUI in the
   footer, each CLI command on stderr — so a board that appears to have vanished
   is explained rather than lost without a word.
+- Editing a task can no longer rename a different one. The editor latches the
+  task it opened (`created_at`), so a reload that reorders the rows while the
+  editor is open renames the task the user was editing, not its new neighbour.
 - Connecting to a remote can no longer lose the local board when the merge
   fails. The first-connect graft now reads both boards and merges them *before*
   it adopts the remote's tree, so a board that cannot be read leaves the local

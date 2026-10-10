@@ -59,6 +59,9 @@ pub struct UiState {
     /// A board file that could not be read and was moved aside. Shown in the
     /// footer until the next successful save, so a vanished board is explained.
     pub board_damage: Option<String>,
+    /// `created_at` of the task being edited. Latched when the editor opens so a
+    /// reload during editing cannot retarget the rename to a different task.
+    pub edit_target: Option<DateTime<Local>>,
     /// Tick counter, used to animate the syncing spinner.
     pub tick: u64,
     /// Scroll offset of the help overlay. The renderer clamps it to the content
@@ -80,6 +83,7 @@ impl Default for UiState {
             sync_error: None,
             error: None,
             board_damage: None,
+            edit_target: None,
             tick: 0,
             help_scroll: 0,
         }

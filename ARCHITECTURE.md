@@ -166,6 +166,8 @@ into the current board and saves. **mtime detection** is separate — it catches
 *truly external* write (a one-shot `tasu add`, a hand edit) as `Action::Reload`.
 The runtime tracks `last_mtime` and refreshes it right after its own writes,
 which is what separates "our write" from "an external one".
+- The editor latches the task's `created_at` when it opens, so a `Reload` that
+  reorders the rows mid-edit still renames the task the user opened.
 
 ## Main loop and concurrency
 

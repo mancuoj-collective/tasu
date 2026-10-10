@@ -97,6 +97,7 @@ fn normal(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effect>
         }
         KeyCode::Char('a') => {
             model.ui.input.reset();
+            model.ui.edit_target = None;
             model.ui.mode = Mode::Add;
         }
         KeyCode::Char('e') => {
@@ -104,6 +105,10 @@ fn normal(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effect>
                 && let Some(task) = model.board.task(index)
             {
                 model.ui.input = tui_input::Input::new(task.title.clone());
+                // Latch the task identity, not the row: a reload while the
+                // editor is open may reorder rows, and the rename must still
+                // land on the task the user opened.
+                model.ui.edit_target = Some(task.created_at);
                 model.ui.mode = Mode::Edit;
             }
         }
@@ -174,19 +179,27 @@ fn editing(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effect
                     model.set_toast("saved to today");
                 }
                 Mode::Edit => {
-                    if let Some(index) = model.selected() {
+                    if let Some(target) = model.ui.edit_target
+                        && let Some(index) = model
+                            .board
+                            .tasks()
+                            .iter()
+                            .position(|task| task.created_at == target)
+                    {
                         model.board.rename(index, title, now);
                     }
                 }
                 _ => {}
             }
             model.ui.input.reset();
+            model.ui.edit_target = None;
             model.ui.mode = Mode::Normal;
             model.clamp_cursor();
             vec![Effect::Save]
         }
         KeyCode::Esc => {
             model.ui.input.reset();
+            model.ui.edit_target = None;
             model.ui.mode = Mode::Normal;
             Vec::new()
         }
@@ -459,5 +472,54 @@ mod tests {
             at(2026, 10, 5),
         );
         assert!(effects.is_empty(), "an unchanged merge must not write");
+    }
+
+    #[test]
+    fn a_reload_while_editing_still_renames_the_opened_task() {
+        let mut model = model();
+        model.board.add("oldest", at(2026, 10, 4));
+        model.board.add("target", at(2026, 10, 5));
+        // Newest first, so the cursor sits on "target".
+        assert_eq!(
+            model.board.task(model.selected().unwrap()).unwrap().title,
+            "target"
+        );
+
+        update(&mut model, press(KeyCode::Char('e')), at(2026, 10, 5));
+        assert_eq!(model.ui.mode, Mode::Edit);
+
+        // An external write adds a newer task, reordering the rows underneath
+        // the open editor.
+        let mut reloaded = model.board.clone();
+        reloaded.add("newer", at(2026, 10, 6));
+        update(
+            &mut model,
+            Action::Reload {
+                board: reloaded,
+                damaged: None,
+            },
+            at(2026, 10, 6),
+        );
+
+        model.ui.input = tui_input::Input::new("renamed".to_string());
+        let effects = update(&mut model, press(KeyCode::Enter), at(2026, 10, 6));
+        assert_eq!(effects, vec![Effect::Save]);
+
+        let titles: Vec<&str> = model
+            .board
+            .tasks()
+            .iter()
+            .map(|task| task.title.as_str())
+            .collect();
+        assert!(titles.contains(&"renamed"), "{titles:?}");
+        assert!(
+            !titles.contains(&"target"),
+            "the opened task should have been renamed: {titles:?}"
+        );
+        assert!(
+            titles.contains(&"newer"),
+            "the newer task is untouched: {titles:?}"
+        );
+        assert!(titles.contains(&"oldest"), "{titles:?}");
     }
 }
