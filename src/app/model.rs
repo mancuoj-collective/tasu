@@ -91,7 +91,7 @@ impl Default for UiState {
 }
 
 /// A rendered row: a bucket header or a task.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Row {
     Header(Bucket),
     Task(usize),
@@ -117,49 +117,34 @@ impl Model {
 
     pub const BUCKETS: [Bucket; 3] = [Bucket::Today, Bucket::Week, Bucket::Later];
 
-    /// Display rows: each bucket header followed by its tasks (newest first).
-    pub fn rows(&self) -> Vec<Row> {
-        let mut rows = Vec::new();
-        for bucket in Self::BUCKETS {
-            rows.push(Row::Header(bucket));
-            rows.extend(self.board.open_in(bucket).into_iter().map(Row::Task));
-        }
-        rows
+    /// Display rows, lazily: each bucket header followed by its tasks (newest
+    /// first). Yielding an iterator lets a caller that stops early — a cursor
+    /// lookup, an emptiness check — avoid building buckets it never reaches.
+    pub fn rows(&self) -> impl Iterator<Item = Row> + '_ {
+        Self::BUCKETS.into_iter().flat_map(move |bucket| {
+            std::iter::once(Row::Header(bucket))
+                .chain(self.board.open_in(bucket).into_iter().map(Row::Task))
+        })
     }
 
-    /// Number of selectable (task) rows.
+    /// Number of selectable (task) rows. Every open task sits in exactly one
+    /// bucket, so this is a plain count with no per-bucket index list built.
     pub fn selectable_len(&self) -> usize {
-        self.rows()
+        self.board
+            .tasks()
             .iter()
-            .filter(|row| matches!(row, Row::Task(_)))
+            .filter(|task| task.is_open())
             .count()
     }
 
+    /// The board index of the task under the cursor, if the cursor is on one.
     pub fn selected(&self) -> Option<usize> {
-        let mut seen = 0;
-        for row in self.rows() {
-            if let Row::Task(index) = row {
-                if seen == self.ui.cursor {
-                    return Some(index);
-                }
-                seen += 1;
-            }
-        }
-        None
-    }
-
-    /// Position of the cursor in [`Model::rows`], for scrolling.
-    pub fn cursor_row(&self) -> usize {
-        let mut seen = 0;
-        for (position, row) in self.rows().iter().enumerate() {
-            if matches!(row, Row::Task(_)) {
-                if seen == self.ui.cursor {
-                    return position;
-                }
-                seen += 1;
-            }
-        }
-        0
+        self.rows()
+            .filter_map(|row| match row {
+                Row::Task(index) => Some(index),
+                Row::Header(_) => None,
+            })
+            .nth(self.ui.cursor)
     }
 
     pub fn cursor_down(&mut self) {
@@ -204,14 +189,13 @@ impl Model {
 
     /// The cursor's `(bucket position, row within bucket)`, if any.
     fn cursor_bucket_position(&self) -> Option<(usize, usize)> {
-        let mut seen = 0;
+        let mut remaining = self.ui.cursor;
         for (position, bucket) in Self::BUCKETS.iter().enumerate() {
-            for local in 0..self.board.open_in(*bucket).len() {
-                if seen == self.ui.cursor {
-                    return Some((position, local));
-                }
-                seen += 1;
+            let len = self.board.open_in(*bucket).len();
+            if remaining < len {
+                return Some((position, remaining));
             }
+            remaining -= len;
         }
         None
     }
@@ -253,5 +237,65 @@ impl Model {
             text: text.into(),
             born: self.now,
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::test_time::at;
+
+    /// One open task in each bucket, so the cursor has to cross bucket
+    /// boundaries: `today` (index 1), `week` (index 2), `later` (index 0).
+    fn three_buckets() -> Model {
+        let mut model = Model::new(Board::new(), at(2026, 10, 5));
+        model.board.add("later", at(2026, 10, 4));
+        model.board.add("today", at(2026, 10, 5));
+        model.board.move_bucket(0, 2, at(2026, 10, 5));
+        model.board.add("week", at(2026, 10, 6));
+        model.board.move_bucket(2, 1, at(2026, 10, 6));
+        model
+    }
+
+    #[test]
+    fn rows_are_each_bucket_header_then_its_tasks() {
+        let rows: Vec<Row> = three_buckets().rows().collect();
+        assert_eq!(
+            rows,
+            vec![
+                Row::Header(Bucket::Today),
+                Row::Task(1),
+                Row::Header(Bucket::Week),
+                Row::Task(2),
+                Row::Header(Bucket::Later),
+                Row::Task(0),
+            ]
+        );
+    }
+
+    #[test]
+    fn the_cursor_walks_tasks_across_buckets() {
+        let mut model = three_buckets();
+        assert_eq!(model.selectable_len(), 3);
+
+        assert_eq!(model.selected(), Some(1), "today");
+        model.cursor_down();
+        assert_eq!(model.selected(), Some(2), "week");
+        model.cursor_down();
+        assert_eq!(model.selected(), Some(0), "later");
+        model.cursor_down();
+        assert_eq!(
+            model.selected(),
+            Some(0),
+            "the cursor stops on the last task"
+        );
+    }
+
+    #[test]
+    fn an_empty_board_has_no_selection() {
+        let model = Model::new(Board::new(), at(2026, 10, 5));
+        assert_eq!(model.selectable_len(), 0);
+        assert_eq!(model.selected(), None);
+        assert_eq!(model.rows().count(), 3, "one header per bucket, no tasks");
     }
 }
