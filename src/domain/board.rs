@@ -214,40 +214,40 @@ impl Board {
 
     /// Open tasks in a bucket, newest first.
     pub fn open_in(&self, bucket: Bucket) -> Vec<usize> {
-        let mut indices: Vec<usize> = self
-            .tasks
-            .iter()
-            .enumerate()
-            .filter(|(_, task)| task.state == TaskState::Open && task.bucket == bucket)
-            .map(|(index, _)| index)
-            .collect();
-        indices.sort_by(|&a, &b| self.tasks[b].created_at.cmp(&self.tasks[a].created_at));
-        indices
+        self.indices_newest_first(
+            |task| task.state == TaskState::Open && task.bucket == bucket,
+            |task| Some(task.created_at),
+        )
     }
 
     /// Completed tasks, most recently completed first.
     pub fn done(&self) -> Vec<usize> {
-        let mut indices: Vec<usize> = self
-            .tasks
-            .iter()
-            .enumerate()
-            .filter(|(_, task)| task.state == TaskState::Done)
-            .map(|(index, _)| index)
-            .collect();
-        indices.sort_by(|&a, &b| self.tasks[b].completed_at.cmp(&self.tasks[a].completed_at));
-        indices
+        self.indices_newest_first(
+            |task| task.state == TaskState::Done,
+            |task| task.completed_at,
+        )
     }
 
     /// Archived (dropped) tasks, most recently archived first.
     pub fn archived(&self) -> Vec<usize> {
-        let mut indices: Vec<usize> = self
-            .tasks
-            .iter()
-            .enumerate()
-            .filter(|(_, task)| task.state == TaskState::Archived)
-            .map(|(index, _)| index)
+        self.indices_newest_first(
+            |task| task.state == TaskState::Archived,
+            |task| task.archived_at,
+        )
+    }
+
+    /// Indices of the tasks `keep` accepts, most recent first by `time`. The
+    /// `created_at` key is always present; the history keys are optional, so an
+    /// unset one sorts before a set one.
+    fn indices_newest_first(
+        &self,
+        keep: impl Fn(&Task) -> bool,
+        time: impl Fn(&Task) -> Option<DateTime<Local>>,
+    ) -> Vec<usize> {
+        let mut indices: Vec<usize> = (0..self.tasks.len())
+            .filter(|&index| keep(&self.tasks[index]))
             .collect();
-        indices.sort_by(|&a, &b| self.tasks[b].archived_at.cmp(&self.tasks[a].archived_at));
+        indices.sort_by(|&a, &b| time(&self.tasks[b]).cmp(&time(&self.tasks[a])));
         indices
     }
 }
