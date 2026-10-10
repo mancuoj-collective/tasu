@@ -35,12 +35,20 @@ pub(crate) fn scroll_offset(cursor: usize, total: usize, height: usize) -> usize
         .min(total.saturating_sub(height))
 }
 
-pub fn draw(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path, sync: Option<&str>) {
+/// Draw the whole UI. The only value a render produces is the help overlay's
+/// clamped scroll offset, which the caller stores; nothing here mutates state.
+pub fn draw(
+    f: &mut Frame,
+    model: &Model,
+    theme: &Theme,
+    data_path: &Path,
+    sync: Option<&str>,
+) -> Option<usize> {
     f.render_widget(Block::new().style(theme.root()), f.area());
 
     if f.area().width < MIN_WIDTH || f.area().height < MIN_HEIGHT {
         too_small(f, theme);
-        return;
+        return None;
     }
 
     let body = f.area().inner(Margin::new(1, 0));
@@ -53,7 +61,7 @@ pub fn draw(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path, sync:
         sections::draw(f, model, list, theme);
     }
     footer(f, model, theme, footer_area);
-    modal::draw(f, model, theme, data_path, sync);
+    modal::draw(f, model, theme, data_path, sync)
 }
 
 fn too_small(f: &mut Frame, theme: &Theme) {

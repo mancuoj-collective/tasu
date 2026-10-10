@@ -35,19 +35,23 @@ fn type_str(model: &mut Model, text: &str, now: DateTime<Local>) {
     }
 }
 
-fn render(model: &Model, width: u16, height: u16) -> String {
+fn render(model: &mut Model, width: u16, height: u16) -> String {
     let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+    let mut help_scroll = None;
     terminal
         .draw(|frame| {
-            ui::draw(
+            help_scroll = ui::draw(
                 frame,
-                model,
+                &*model,
                 &ui::theme::Theme::DARK,
                 Path::new("/tmp/tasu/todos.json"),
                 None,
-            )
+            );
         })
         .unwrap();
+    if let Some(offset) = help_scroll {
+        model.ui.help_scroll = offset;
+    }
 
     let buffer = terminal.backend().buffer();
     let area = buffer.area();
@@ -74,7 +78,7 @@ fn capture_shows_on_screen_and_persists() {
     assert_eq!(effects, vec![Effect::Save]);
     store.save(&model.board).unwrap();
 
-    let screen = render(&model, 80, 12);
+    let screen = render(&mut model, 80, 12);
     assert!(screen.contains("TODAY"), "missing TODAY header:\n{screen}");
     assert!(
         screen.contains("learn gpui"),
@@ -93,10 +97,10 @@ fn completing_removes_from_list_and_fills_completed() {
     let mut model = Model::new(board, now);
 
     update(&mut model, press(crossterm::event::KeyCode::Char(' ')), now);
-    assert!(!render(&model, 80, 12).contains("ship it"));
+    assert!(!render(&mut model, 80, 12).contains("ship it"));
 
     update(&mut model, press(crossterm::event::KeyCode::Char('c')), now);
-    assert!(render(&model, 80, 12).contains("ship it"));
+    assert!(render(&mut model, 80, 12).contains("ship it"));
 }
 
 #[test]
@@ -107,7 +111,7 @@ fn stale_task_ages_into_the_week_section() {
 
     update(&mut model, Action::Tick, dt(6));
 
-    let screen = render(&model, 80, 14);
+    let screen = render(&mut model, 80, 14);
     let today = screen.find("TODAY").unwrap();
     let week = screen.find("WEEK").unwrap();
     let later = screen.find("LATER").unwrap();
@@ -122,9 +126,9 @@ fn stale_task_ages_into_the_week_section() {
 fn wide_terminal_uses_three_columns() {
     let mut board = Board::new();
     board.add("one", dt(5));
-    let model = Model::new(board, dt(5));
+    let mut model = Model::new(board, dt(5));
 
-    let screen = render(&model, 120, 14);
+    let screen = render(&mut model, 120, 14);
     let header_row = screen
         .lines()
         .find(|line| line.contains("TODAY"))
@@ -182,18 +186,14 @@ fn help_scroll_moves_back_up_from_the_bottom() {
     // the modal clamps the offset.
     for _ in 0..30 {
         update(&mut model, press(crossterm::event::KeyCode::Down), dt(5));
-        render(&model, 60, 12);
+        render(&mut model, 60, 12);
     }
-    let bottom = model.ui.help_scroll.get();
+    let bottom = model.ui.help_scroll;
     assert!(bottom > 0, "help should have scrolled");
 
     update(&mut model, press(crossterm::event::KeyCode::Up), dt(5));
-    render(&model, 60, 12);
-    assert_eq!(
-        model.ui.help_scroll.get(),
-        bottom - 1,
-        "up should move back"
-    );
+    render(&mut model, 60, 12);
+    assert_eq!(model.ui.help_scroll, bottom - 1, "up should move back");
 }
 
 #[test]

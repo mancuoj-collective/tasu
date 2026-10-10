@@ -68,7 +68,7 @@ fn main() {
     help.ui.mode = Mode::Help;
     println!("\n=== help (84x26) ===");
     print(&help, 84, 26);
-    help.ui.help_scroll.set(6);
+    help.ui.help_scroll = 6;
     println!("\n=== help scrolled (60x12) ===");
     print(&help, 60, 12);
 
@@ -133,13 +133,13 @@ fn print(model: &Model, width: u16, height: u16) {
     let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
     terminal
         .draw(|frame| {
-            ui::draw(
+            let _ = ui::draw(
                 frame,
                 model,
                 &ui::theme::Theme::DARK,
                 std::path::Path::new("/Users/mancuoj/Library/Application Support/tasu/todos.json"),
                 Some("git@github.com:mancuoj/tasu-data.git"),
-            )
+            );
         })
         .unwrap();
 

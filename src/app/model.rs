@@ -1,5 +1,3 @@
-use std::cell::Cell;
-
 use chrono::{DateTime, Local};
 use tui_input::Input;
 
@@ -60,9 +58,9 @@ pub struct UiState {
     pub error: Option<String>,
     /// Tick counter, used to animate the syncing spinner.
     pub tick: u64,
-    /// Scroll offset of the help overlay. Written back, clamped, by the modal
-    /// after each render, so key handling always starts from a valid value.
-    pub help_scroll: Cell<usize>,
+    /// Scroll offset of the help overlay. The renderer clamps it to the content
+    /// and hands the clamped value back, so key handling always starts valid.
+    pub help_scroll: usize,
 }
 
 impl Default for UiState {
@@ -79,7 +77,7 @@ impl Default for UiState {
             sync_error: None,
             error: None,
             tick: 0,
-            help_scroll: Cell::new(0),
+            help_scroll: 0,
         }
     }
 }

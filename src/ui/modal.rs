@@ -33,12 +33,27 @@ const HELP_ART: [&str; 3] = [
     " \u{2580}  \u{2580} \u{2580} \u{2584}\u{2584}\u{2580} \u{2580}\u{2584}\u{2580}",
 ];
 
-pub fn draw(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path, sync: Option<&str>) {
+/// Render the active modal. Returns the help overlay's clamped scroll offset
+/// (only when help is open), so the caller stores it and the renderer never has
+/// to mutate the model.
+pub fn draw(
+    f: &mut Frame,
+    model: &Model,
+    theme: &Theme,
+    data_path: &Path,
+    sync: Option<&str>,
+) -> Option<usize> {
     match model.ui.mode {
-        Mode::Add | Mode::Edit => input_modal(f, model, theme),
-        Mode::Completed => completed_modal(f, model, theme),
-        Mode::Help => help_modal(f, model, theme, data_path, sync),
-        Mode::Normal => {}
+        Mode::Add | Mode::Edit => {
+            input_modal(f, model, theme);
+            None
+        }
+        Mode::Completed => {
+            completed_modal(f, model, theme);
+            None
+        }
+        Mode::Help => Some(help_modal(f, model, theme, data_path, sync)),
+        Mode::Normal => None,
     }
 }
 
@@ -160,7 +175,13 @@ fn search_box(f: &mut Frame, model: &Model, theme: &Theme, area: Rect) {
     f.set_cursor_position((x, inner.y));
 }
 
-fn help_modal(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path, sync: Option<&str>) {
+fn help_modal(
+    f: &mut Frame,
+    model: &Model,
+    theme: &Theme,
+    data_path: &Path,
+    sync: Option<&str>,
+) -> usize {
     let (key_style, label_style) = theme.key_hint();
     let entries = [
         ("j / k / \u{2193} / \u{2191}", "move"),
@@ -244,11 +265,10 @@ fn help_modal(f: &mut Frame, model: &Model, theme: &Theme, data_path: &Path, syn
 
     let inner_height = height.saturating_sub(HELP_CHROME) as usize;
     let max_offset = lines.len().saturating_sub(inner_height);
-    let offset = model.ui.help_scroll.get().min(max_offset);
-    // Write the clamped offset back so the next key press starts from here.
-    model.ui.help_scroll.set(offset);
+    let offset = model.ui.help_scroll.min(max_offset);
     let visible: Vec<Line> = lines.into_iter().skip(offset).collect();
     f.render_widget(Paragraph::new(visible).block(block), area);
+    offset
 }
 
 /// Abbreviate the home directory to `~`.

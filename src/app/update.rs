@@ -118,7 +118,7 @@ fn normal(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effect>
             model.ui.history_view = HistoryView::Done;
         }
         KeyCode::Char('?') => {
-            model.ui.help_scroll.set(0);
+            model.ui.help_scroll = 0;
             model.ui.mode = Mode::Help;
         }
         _ => {}
@@ -237,14 +237,14 @@ fn completed(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effe
 /// modal writes the clamped offset back after rendering, so these updates
 /// always start from a valid position.
 fn help(model: &mut Model, key: KeyEvent) -> Vec<Effect> {
-    let scroll = model.ui.help_scroll.get();
+    let scroll = model.ui.help_scroll;
     match key.code {
         KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('?') => {
             model.ui.mode = Mode::Normal;
-            model.ui.help_scroll.set(0);
+            model.ui.help_scroll = 0;
         }
-        KeyCode::Down | KeyCode::Char('j') => model.ui.help_scroll.set(scroll + 1),
-        KeyCode::Up | KeyCode::Char('k') => model.ui.help_scroll.set(scroll.saturating_sub(1)),
+        KeyCode::Down | KeyCode::Char('j') => model.ui.help_scroll = scroll + 1,
+        KeyCode::Up | KeyCode::Char('k') => model.ui.help_scroll = scroll.saturating_sub(1),
         _ => {}
     }
     Vec::new()
@@ -346,7 +346,7 @@ mod tests {
 
         update(&mut model, press(KeyCode::Down), at(2026, 10, 5));
         update(&mut model, press(KeyCode::Down), at(2026, 10, 5));
-        assert_eq!(model.ui.help_scroll.get(), 2);
+        assert_eq!(model.ui.help_scroll, 2);
 
         // A random key must not dismiss the help.
         update(&mut model, press(KeyCode::Char('x')), at(2026, 10, 5));
@@ -354,7 +354,7 @@ mod tests {
 
         update(&mut model, press(KeyCode::Esc), at(2026, 10, 5));
         assert_eq!(model.ui.mode, Mode::Normal);
-        assert_eq!(model.ui.help_scroll.get(), 0);
+        assert_eq!(model.ui.help_scroll, 0);
     }
 
     #[test]

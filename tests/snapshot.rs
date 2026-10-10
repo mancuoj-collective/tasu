@@ -52,7 +52,9 @@ fn render(model: &Model, width: u16, height: u16) -> String {
 fn render_full(model: &Model, width: u16, height: u16, path: &Path, sync: Option<&str>) -> String {
     let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
     terminal
-        .draw(|frame| ui::draw(frame, model, &ui::theme::Theme::DARK, path, sync))
+        .draw(|frame| {
+            let _ = ui::draw(frame, model, &ui::theme::Theme::DARK, path, sync);
+        })
         .unwrap();
 
     let buffer = terminal.backend().buffer();

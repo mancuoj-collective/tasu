@@ -80,7 +80,7 @@ fn main() {
         let mut terminal = Terminal::new(TestBackend::new(COLS, ROWS)).unwrap();
         terminal
             .draw(|frame| {
-                ui::draw(
+                let _ = ui::draw(
                     frame,
                     &model,
                     &theme,

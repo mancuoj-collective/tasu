@@ -78,8 +78,14 @@ fn run_tui(config: Config) -> Result<()> {
         while !model.should_quit {
             model.ui.sync = runtime.status();
             model.ui.sync_error = runtime.error().map(str::to_string);
-            terminal
-                .draw(|frame| ui::draw(frame, &model, &theme, &board_path, remote.as_deref()))?;
+            let mut help_scroll = None;
+            terminal.draw(|frame| {
+                help_scroll = ui::draw(frame, &model, &theme, &board_path, remote.as_deref());
+            })?;
+            // The renderer hands back the help overlay's clamped offset.
+            if let Some(offset) = help_scroll {
+                model.ui.help_scroll = offset;
+            }
 
             if let Some(action) = runtime.poll_external() {
                 let effects = update(&mut model, action, Local::now());

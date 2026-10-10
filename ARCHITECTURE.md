@@ -187,7 +187,9 @@ its own writes, which is what separates "our write" from "an external one".
 ## UI contract
 
 - `ui::draw(frame, &Model, &Theme, data_path, remote)` renders container → body
-  → footer → modal. It **only reads** `Model`.
+  → footer → modal. It **only reads** `Model`; the single value it returns is the
+  help overlay's clamped scroll offset, which the caller stores (so key handling
+  always starts from a valid position without the renderer mutating state).
 - Below `40×8` it renders a centred "terminal too small" hint instead.
 - `KANBAN_MIN_WIDTH = 100`: at or above it, `kanban` (three columns); below it,
   `sections` (vertical stack).
