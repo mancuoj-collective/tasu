@@ -139,7 +139,7 @@ fn apply_pull(repo: &Path, pulled: Pulled) -> Result<(), String> {
     };
     let store = board_store(repo);
     // Remote is the shared base; the local board fills in and advances.
-    let merged = remote.merged_with(&store.load());
+    let merged = remote.merged_with(&store.load().board);
     store.save(&merged).map_err(|err| err.to_string())
 }
 
@@ -1016,7 +1016,7 @@ mod tests {
 
     fn add_task(repo: &Path, title: &str, day: u32) {
         let store = crate::store::Store::new(repo.join("todos.json"));
-        let mut board = store.load();
+        let mut board = store.load().board;
         board.add(title, crate::domain::test_time::at(2026, 10, day));
         store.save(&board).unwrap();
     }
@@ -1323,6 +1323,7 @@ mod tests {
     fn board_titles(repo: &Path) -> Vec<String> {
         crate::store::Store::new(repo.join("todos.json"))
             .load()
+            .board
             .tasks()
             .iter()
             .map(|task| task.title.clone())

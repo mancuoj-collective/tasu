@@ -27,8 +27,13 @@ pub fn update(model: &mut Model, action: Action, now: DateTime<Local>) -> Vec<Ef
 
     match action {
         Action::Tick => tick(model, now),
-        Action::Reload(board) => {
+        Action::Reload { board, damaged } => {
             model.board = board;
+            // A reloaded file that could not be parsed is empty; say so rather
+            // than letting the board appear to have vanished.
+            if let Some(damage) = damaged {
+                model.ui.board_damage = Some(damage);
+            }
             settle(&mut model.board, now);
             model.clamp_cursor();
             Vec::new()

@@ -9,8 +9,12 @@ pub enum Action {
     Key(KeyEvent),
     /// Periodic wake-up: settles the pipeline, expires the toast.
     Tick,
-    /// The board changed on disk (external write) and was reloaded.
-    Reload(Board),
+    /// The board changed on disk (external write) and was reloaded. `damaged`
+    /// carries a footer message when the reloaded file could not be parsed.
+    Reload {
+        board: Board,
+        damaged: Option<String>,
+    },
     /// The remote board from a finished pull, to merge into the current one. The
     /// app merges and saves it, so the sync worker never writes `todos.json`.
     Merge(Board),

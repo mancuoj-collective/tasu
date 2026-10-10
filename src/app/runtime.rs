@@ -11,8 +11,8 @@ use std::time::{Duration, Instant, SystemTime};
 use chrono::{DateTime, Local};
 
 use crate::config::Config;
-use crate::domain::{Board, settle};
-use crate::store::Store;
+use crate::domain::settle;
+use crate::store::{Loaded, Store};
 use crate::sync::{JobOutcome, Pulled, Sync};
 
 use super::action::{Action, Effect};
@@ -118,15 +118,19 @@ impl Runtime {
 
     /// Load the board, settle it to `now`, persist it if it aged, and refresh
     /// the mtime baseline. Used once, before the loop starts.
-    pub fn load_board(&mut self, now: DateTime<Local>) -> Board {
-        let mut board = self.store.load();
+    pub fn load_board(&mut self, now: DateTime<Local>) -> Loaded {
+        let loaded = self.store.load();
+        let mut board = loaded.board;
         if settle(&mut board, now)
             && let Err(err) = self.store.save(&board)
         {
             eprintln!("tasu: could not save the board: {err}");
         }
         self.sync_mtime();
-        board
+        Loaded {
+            board,
+            damaged: loaded.damaged,
+        }
     }
 
     /// Kick off the startup pull, marking sync as in progress.
@@ -157,6 +161,7 @@ impl Runtime {
                     match self.store.save(&model.board) {
                         Ok(()) => {
                             model.ui.error = None;
+                            model.ui.board_damage = None;
                             // Only a save that actually reached disk may be
                             // pushed; otherwise we would publish a stale board.
                             self.dirty = true;
@@ -245,8 +250,11 @@ impl Runtime {
         let current = self.store.mtime();
         if current != self.last_mtime && current.is_some() {
             self.last_mtime = current;
-            let board = self.store.load();
-            return Some(Action::Reload(board));
+            let loaded = self.store.load();
+            return Some(Action::Reload {
+                board: loaded.board,
+                damaged: loaded.damaged.map(|damage| damage.message()),
+            });
         }
         None
     }

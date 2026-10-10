@@ -10,6 +10,17 @@ use crate::domain::{Board, Bucket, Task, TaskState, settle};
 use crate::store::Store;
 use crate::sync;
 
+/// Load the board for a CLI command. A file that cannot be read has been moved
+/// aside by the store; the command still runs on an empty board, but the user is
+/// told on stderr so the loss is never silent.
+fn load_board(store: &Store) -> Board {
+    let loaded = store.load();
+    if let Some(damage) = &loaded.damaged {
+        eprintln!("tasu: {}", damage.detail());
+    }
+    loaded.board
+}
+
 /// `tasu add "..."`: record a task and push, without opening the TUI. The push
 /// is best-effort: offline still exits successfully.
 pub fn add(config: &Config, words: &[String]) -> Result<()> {
@@ -20,7 +31,7 @@ pub fn add(config: &Config, words: &[String]) -> Result<()> {
 
     let store = Store::new(config.board_path());
     let now = Local::now();
-    let mut board = store.load();
+    let mut board = load_board(&store);
     settle(&mut board, now);
     board.add(title.as_str(), now);
     store.save(&board)?;
@@ -33,7 +44,8 @@ pub fn add(config: &Config, words: &[String]) -> Result<()> {
 /// `tasu list`: print the open tasks, grouped by bucket. Read-only and local —
 /// run `tasu sync` first if you want the latest from the remote.
 pub fn list(config: &Config, bucket: Option<Bucket>, json: bool) -> Result<()> {
-    let mut board = Store::new(config.board_path()).load();
+    let store = Store::new(config.board_path());
+    let mut board = load_board(&store);
     settle(&mut board, Local::now());
 
     let buckets = match bucket {
@@ -64,7 +76,8 @@ pub enum HistoryList {
 /// `tasu history [done|dropped]`: print completed and dropped tasks. With no
 /// view, both sections are shown.
 pub fn history(config: &Config, view: HistoryList, json: bool) -> Result<()> {
-    let board = Store::new(config.board_path()).load();
+    let store = Store::new(config.board_path());
+    let board = load_board(&store);
     let sections = history_sections(&board, view);
 
     if json {
@@ -153,7 +166,7 @@ pub fn move_task(config: &Config, bucket: Bucket, words: &[String]) -> Result<()
 
     let store = Store::new(config.board_path());
     let now = Local::now();
-    let mut board = store.load();
+    let mut board = load_board(&store);
     settle(&mut board, now);
 
     let index = find_open(&board, &title)?;
@@ -181,7 +194,7 @@ fn finish(config: &Config, words: &[String], drop: bool) -> Result<()> {
 
     let store = Store::new(config.board_path());
     let now = Local::now();
-    let mut board = store.load();
+    let mut board = load_board(&store);
     settle(&mut board, now);
 
     let index = find_open(&board, &title)?;
@@ -712,7 +725,7 @@ mod tests {
         super::add(&config, &["buy milk".to_string()]).unwrap();
         super::done(&config, &["buy milk".to_string()]).unwrap();
 
-        let board = Store::new(config.board_path()).load();
+        let board = Store::new(config.board_path()).load().board;
         assert_eq!(board.task(0).unwrap().state, TaskState::Done);
     }
 

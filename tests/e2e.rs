@@ -73,7 +73,7 @@ fn capture_shows_on_screen_and_persists() {
     let dir = tempfile::tempdir().unwrap();
     let store = Store::new(dir.path().join("todos.json"));
     let now = dt(5);
-    let mut model = Model::new(store.load(), now);
+    let mut model = Model::new(store.load().board, now);
 
     update(&mut model, press(crossterm::event::KeyCode::Char('a')), now);
     type_str(&mut model, "learn gpui", now);
@@ -173,7 +173,7 @@ fn cli_add_syncs_to_a_remote_and_back() {
 
     let second = dir.path().join("second");
     clone(&remote, &second);
-    let board = Store::new(second.join("todos.json")).load();
+    let board = Store::new(second.join("todos.json")).load().board;
     assert!(
         board.tasks().iter().any(|task| task.title == "Nand2Tetris"),
         "remote board missing the task"
@@ -229,7 +229,7 @@ fn cli_add_converges_across_two_machines() {
     command::add(&config_b, &["from B".to_string()]).unwrap();
     command::add(&config_a, &["back on A".to_string()]).unwrap();
 
-    let board = Store::new(machine_a.join("todos.json")).load();
+    let board = Store::new(machine_a.join("todos.json")).load().board;
     let titles: Vec<&str> = board
         .tasks()
         .iter()
@@ -316,7 +316,7 @@ fn a_pull_in_flight_does_not_lose_a_task_added_meanwhile() {
     // Machine A clones and adds a task it never pushes, so its history diverges.
     let a = dir.path().join("a");
     clone(&remote, &a);
-    let mut board_a = Store::new(a.join("todos.json")).load();
+    let mut board_a = Store::new(a.join("todos.json")).load().board;
     board_a.add("local only", dt(6));
     Store::new(a.join("todos.json")).save(&board_a).unwrap();
     commit_all(&a, "a");
@@ -324,7 +324,7 @@ fn a_pull_in_flight_does_not_lose_a_task_added_meanwhile() {
     // The remote moves ahead with a task from another machine.
     let b = dir.path().join("b");
     clone(&remote, &b);
-    let mut board_b = Store::new(b.join("todos.json")).load();
+    let mut board_b = Store::new(b.join("todos.json")).load().board;
     board_b.add("from B", dt(7));
     Store::new(b.join("todos.json")).save(&board_b).unwrap();
     commit_all(&b, "b");
@@ -338,7 +338,7 @@ fn a_pull_in_flight_does_not_lose_a_task_added_meanwhile() {
     };
     let mut runtime = Runtime::new(&config);
     let now = dt(8);
-    let mut model = Model::new(runtime.load_board(now), now);
+    let mut model = Model::new(runtime.load_board(now).board, now);
     runtime.start_sync();
 
     update(&mut model, press(KeyCode::Char('a')), now);
@@ -380,6 +380,7 @@ fn a_pull_in_flight_does_not_lose_a_task_added_meanwhile() {
     }
     let disk: Vec<String> = Store::new(a.join("todos.json"))
         .load()
+        .board
         .tasks()
         .iter()
         .map(|task| task.title.clone())
@@ -594,7 +595,7 @@ fn an_external_write_is_reloaded() {
         remote: None,
     };
     let mut runtime = Runtime::new(&config);
-    let mut model = Model::new(runtime.load_board(dt(5)), dt(5));
+    let mut model = Model::new(runtime.load_board(dt(5)).board, dt(5));
 
     // Our own write must not look like an external change.
     runtime.apply(&mut model, vec![Effect::Save]);
@@ -610,7 +611,7 @@ fn an_external_write_is_reloaded() {
     Store::new(config.board_path()).save(&other).unwrap();
 
     match runtime.poll_external() {
-        Some(Action::Reload(board)) => assert!(
+        Some(Action::Reload { board, .. }) => assert!(
             board
                 .tasks()
                 .iter()
@@ -619,6 +620,33 @@ fn an_external_write_is_reloaded() {
         ),
         other => panic!("expected a reload, got {other:?}"),
     }
+}
+
+#[test]
+fn a_corrupt_board_is_reported_in_the_footer() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = Config {
+        data_dir: dir.path().to_path_buf(),
+        remote: None,
+    };
+    std::fs::write(config.board_path(), "{ not json").unwrap();
+
+    let mut runtime = Runtime::new(&config);
+    let now = dt(5);
+    let loaded = runtime.load_board(now);
+    assert!(loaded.board.is_empty(), "a damaged board loads empty");
+    let mut model = Model::new(loaded.board, now);
+    model.ui.board_damage = loaded.damaged.map(|damage| damage.message());
+
+    let screen = render(&mut model, 80, 12);
+    assert!(
+        screen.contains("board unreadable"),
+        "the footer should explain the missing board:\n{screen}"
+    );
+    assert!(
+        screen.contains(".corrupt-"),
+        "the footer should name the backup:\n{screen}"
+    );
 }
 
 // --- the real binary, end to end -------------------------------------------
@@ -697,6 +725,22 @@ fn cli_sync_exits_nonzero_on_an_unreachable_remote() {
     );
 }
 
+#[test]
+fn cli_warns_when_the_board_cannot_be_read() {
+    let dir = tempfile::tempdir().unwrap();
+    let data = dir.path().join("data");
+    let cfg = dir.path().join("cfg");
+    std::fs::create_dir_all(&data).unwrap();
+    std::fs::write(data.join("todos.json"), "{ not json").unwrap();
+
+    // The command still runs on an empty board, but says so on stderr.
+    let out = tasu(&data, &cfg).args(["list"]).output().unwrap();
+    assert!(out.status.success(), "list still succeeds");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("board unreadable"), "{stderr}");
+    assert!(stderr.contains(".corrupt-"), "{stderr}");
+}
+
 // --- sync integration ------------------------------------------------------
 
 #[test]
@@ -735,7 +779,7 @@ fn a_later_rename_survives_a_diverged_sync() {
 
     // B clones it.
     sync::pull_now(&b, Some(&url)).unwrap();
-    let mut board_b = Store::new(b.join("todos.json")).load();
+    let mut board_b = Store::new(b.join("todos.json")).load().board;
     assert_eq!(board_b.tasks().len(), 1, "B did not receive the task");
 
     // A renames it, then B renames it later; the later rename must win.
@@ -748,7 +792,7 @@ fn a_later_rename_survives_a_diverged_sync() {
     sync::pull_now(&b, Some(&url)).unwrap();
     sync::commit_now(&b, Some(&url)).unwrap();
 
-    let merged = Store::new(b.join("todos.json")).load();
+    let merged = Store::new(b.join("todos.json")).load().board;
     assert_eq!(
         merged.task(0).unwrap().title,
         "named on B",

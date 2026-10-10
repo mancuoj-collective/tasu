@@ -14,6 +14,51 @@ struct FileSchema {
     tasks: Vec<Task>,
 }
 
+/// The outcome of reading the board file. `damaged` is set when the file existed
+/// but could not be read, so every caller can tell the user instead of quietly
+/// continuing with an empty board.
+pub struct Loaded {
+    pub board: Board,
+    pub damaged: Option<Damage>,
+}
+
+/// A board file that could not be read and was moved aside, so the failure can
+/// be surfaced rather than swallowed.
+#[derive(Debug, Clone)]
+pub struct Damage {
+    /// Where the unreadable file was moved, when the rename succeeded.
+    pub backup: Option<PathBuf>,
+    /// Why the read failed: a JSON parse error, or an I/O error.
+    pub reason: String,
+}
+
+impl Damage {
+    /// A short line for the footer: the board is unreadable and, when the file
+    /// could be moved aside, the backup's own name (the data directory is shown
+    /// elsewhere, and the footer truncates).
+    pub fn message(&self) -> String {
+        match self.backup.as_ref().and_then(|path| path.file_name()) {
+            Some(name) => format!(
+                "board unreadable \u{b7} saved as {}",
+                name.to_string_lossy()
+            ),
+            None => "board unreadable".to_string(),
+        }
+    }
+
+    /// A fuller line for stderr: why the read failed and where the original went.
+    pub fn detail(&self) -> String {
+        match &self.backup {
+            Some(path) => format!(
+                "board unreadable ({}) \u{b7} saved as {}",
+                self.reason,
+                path.display()
+            ),
+            None => format!("board unreadable ({})", self.reason),
+        }
+    }
+}
+
 /// Single-file JSON persistence. Loading never fails and never destroys data:
 /// an unreadable file is backed up beside itself and an empty board is used.
 pub struct Store {
@@ -29,21 +74,49 @@ impl Store {
         &self.path
     }
 
-    /// Load the board. Missing file yields an empty board; a corrupt file is
-    /// moved aside (`.corrupt-<unix-seconds>`) so it can be inspected later.
-    pub fn load(&self) -> Board {
-        let Ok(text) = fs::read_to_string(&self.path) else {
-            return Board::new();
+    /// Load the board. A missing file is the normal empty board; a file that
+    /// cannot be read is moved aside (`.corrupt-<unix-seconds>`) and reported in
+    /// [`Loaded::damaged`] so the caller can tell the user.
+    pub fn load(&self) -> Loaded {
+        let text = match fs::read_to_string(&self.path) {
+            Ok(text) => text,
+            // A missing file is the ordinary first-run state, not damage.
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                return Loaded {
+                    board: Board::new(),
+                    damaged: None,
+                };
+            }
+            // Any other read failure (permissions, a directory in the way) leaves
+            // the board just as unreadable, so it is reported too.
+            Err(err) => {
+                return Loaded {
+                    board: Board::new(),
+                    damaged: Some(Damage {
+                        backup: None,
+                        reason: err.to_string(),
+                    }),
+                };
+            }
         };
         match serde_json::from_str::<FileSchema>(&text) {
             Ok(schema) => {
                 let mut board = Board::from_tasks(schema.tasks);
                 board.dedup();
-                board
+                Loaded {
+                    board,
+                    damaged: None,
+                }
             }
-            Err(_) => {
-                self.backup();
-                Board::new()
+            Err(err) => {
+                let backup = self.backup();
+                Loaded {
+                    board: Board::new(),
+                    damaged: Some(Damage {
+                        backup,
+                        reason: err.to_string(),
+                    }),
+                }
             }
         }
     }
@@ -84,7 +157,9 @@ impl Store {
             .ok()
     }
 
-    fn backup(&self) {
+    /// Move a corrupt file aside. Returns where it landed, or `None` when the
+    /// rename failed (the file is left in place rather than destroyed).
+    fn backup(&self) -> Option<PathBuf> {
         let file_name = self
             .path
             .file_name()
@@ -97,8 +172,12 @@ impl Store {
         let backup = self
             .path
             .with_file_name(format!("{file_name}.corrupt-{seconds}"));
-        if let Err(err) = fs::rename(&self.path, &backup) {
-            eprintln!("tasu: could not back up {}: {err}", self.path.display());
+        match fs::rename(&self.path, &backup) {
+            Ok(()) => Some(backup),
+            Err(err) => {
+                eprintln!("tasu: could not back up {}: {err}", self.path.display());
+                None
+            }
         }
     }
 }
@@ -194,8 +273,9 @@ mod tests {
     #[test]
     fn missing_file_loads_empty() {
         let dir = tempfile::tempdir().unwrap();
-        let board = store_in(&dir).load();
-        assert!(board.is_empty());
+        let loaded = store_in(&dir).load();
+        assert!(loaded.board.is_empty());
+        assert!(loaded.damaged.is_none(), "a missing file is not damage");
     }
 
     #[test]
@@ -209,9 +289,10 @@ mod tests {
         store.save(&board).unwrap();
         let loaded = store.load();
 
-        assert_eq!(loaded.len(), 2);
-        assert_eq!(loaded.task(0).unwrap().title, "Nand2Tetris 第六章");
-        assert_eq!(loaded.task(1).unwrap().title, "学习 GPUI");
+        assert_eq!(loaded.board.len(), 2);
+        assert_eq!(loaded.board.task(0).unwrap().title, "Nand2Tetris 第六章");
+        assert_eq!(loaded.board.task(1).unwrap().title, "学习 GPUI");
+        assert!(loaded.damaged.is_none());
     }
 
     #[test]
@@ -231,8 +312,13 @@ mod tests {
         let store = store_in(&dir);
         std::fs::write(store.path(), "{ not json").unwrap();
 
-        let board = store.load();
-        assert!(board.is_empty());
+        let loaded = store.load();
+        assert!(loaded.board.is_empty());
+
+        // The damage is reported with where the original went, so a caller can
+        // say so instead of appearing to have lost the board.
+        let damage = loaded.damaged.expect("a corrupt file is damaged");
+        assert!(damage.backup.is_some(), "the original was moved aside");
 
         let backups: Vec<_> = std::fs::read_dir(dir.path())
             .unwrap()
@@ -255,8 +341,8 @@ mod tests {
         board.add("new", at(2026, 10, 6));
         store.save(&board).unwrap();
 
-        assert_eq!(store.load().len(), 1);
-        assert_eq!(store.load().task(0).unwrap().title, "new");
+        assert_eq!(store.load().board.len(), 1);
+        assert_eq!(store.load().board.task(0).unwrap().title, "new");
     }
 
     #[test]

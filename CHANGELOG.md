@@ -8,6 +8,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A board file that cannot be read is no longer treated as an empty board in
+  silence. The file is moved aside and every front-end says so — the TUI in the
+  footer, each CLI command on stderr — so a board that appears to have vanished
+  is explained rather than lost without a word.
 - Connecting to a remote can no longer lose the local board when the merge
   fails. The first-connect graft now reads both boards and merges them *before*
   it adopts the remote's tree, so a board that cannot be read leaves the local

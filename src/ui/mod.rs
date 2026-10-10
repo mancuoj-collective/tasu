@@ -88,14 +88,18 @@ fn footer(f: &mut Frame, model: &Model, theme: &Theme, area: ratatui::layout::Re
     let right_width = right.as_ref().map(line_width).unwrap_or(0);
     let gap = if right_width > 0 { 2 } else { 0 };
 
-    let [left, _gap, right_area] = Layout::horizontal([
+    let [left_area, _gap, right_area] = Layout::horizontal([
         Constraint::Min(1),
         Constraint::Length(gap),
         Constraint::Length(right_width.min(area.width)),
     ])
     .areas(area);
 
-    f.render_widget(Paragraph::new(hint_line(model, theme)), left);
+    // A board that could not be read takes the hint line's place, so it is
+    // unmissable while the sync status stays visible on the right.
+    let left =
+        board_damage_line(model, theme, left_area.width).unwrap_or_else(|| hint_line(model, theme));
+    f.render_widget(Paragraph::new(left), left_area);
     if let Some(line) = right {
         f.render_widget(Paragraph::new(line), right_area);
     }
@@ -144,6 +148,18 @@ fn error_line(model: &Model, theme: &Theme) -> Option<Line<'static>> {
         let short = components::truncate(message, 60);
         Line::from(Span::styled(format!(" \u{26a0} {short} "), theme.warn()))
     })
+}
+
+/// The footer line for a board file that could not be read, or `None` when the
+/// board is intact.
+fn board_damage_line(model: &Model, theme: &Theme, width: u16) -> Option<Line<'static>> {
+    let message = model.ui.board_damage.as_ref()?;
+    // " " + warning glyph + " "
+    let available = (width as usize).saturating_sub(3);
+    Some(Line::from(Span::styled(
+        format!(" \u{26a0} {}", components::truncate(message, available)),
+        theme.warn(),
+    )))
 }
 
 fn line_width(line: &Line) -> u16 {

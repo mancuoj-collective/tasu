@@ -104,6 +104,11 @@ Key decisions:
   worker never writes it: a pull reads the remote board out of the fetched
   commit and hands it back, and the app merges it in and saves. So a background
   pull can never clobber a save the user just made.
+- **An unreadable board is never silent.** `Store::load` returns `Loaded`
+  (`board` + `Option<Damage>`); a file that cannot be parsed is moved aside
+  (`.corrupt-<unix-seconds>`) and a read failure is reported the same way. The
+  TUI shows the damage in the footer and the CLI warns on stderr, so a board that
+  appears to have vanished is always explained.
 
 ## Domain and the state machine
 
@@ -205,6 +210,9 @@ which is what separates "our write" from "an external one".
   (a blinking dot while syncing, `✗ <reason> · run tasu sync` on failure), then
   the toast. Sync failures live only here — the help overlay does not repeat
   them — and never as a raw git dump; the full error is left to `tasu sync`.
+- When `todos.json` could not be read, the footer's **left** side replaces the
+  key hints with the damage notice (the backup's name), so the sync status on the
+  right stays visible. The notice clears on the next successful save.
 - Help overlay: geometry lives in a few constants at the top of `modal.rs`; long
   paths and URLs wrap at their separators and right-align with the key column.
 - Quitting returns to the shell at once: the board is already saved, and the

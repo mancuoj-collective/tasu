@@ -66,8 +66,9 @@ fn run_tui(config: Config) -> Result<()> {
     let mut runtime = Runtime::new(&config);
 
     let now = Local::now();
-    let board = runtime.load_board(now);
-    let mut model = Model::new(board, now);
+    let loaded = runtime.load_board(now);
+    let mut model = Model::new(loaded.board, now);
+    model.ui.board_damage = loaded.damaged.map(|damage| damage.message());
     let theme = Theme::detect();
 
     // Fetch remote state in the background; the mtime watcher reloads it.
