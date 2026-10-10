@@ -237,10 +237,10 @@ fn joined_title(words: &[String]) -> Option<String> {
     }
 }
 
+/// Best-effort pull before a one-shot command. Offline is the normal case, so
+/// this stays quiet; `tasu sync` is where a pull failure is reported.
 fn best_effort_pull(config: &Config) {
-    if let Err(err) = sync::pull_now(&config.data_dir, config.remote.as_deref()) {
-        eprintln!("tasu: pull failed: {err}");
-    }
+    let _ = sync::pull_now(&config.data_dir, config.remote.as_deref());
 }
 
 fn best_effort_push(config: &Config) {

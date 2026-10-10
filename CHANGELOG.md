@@ -11,6 +11,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A board that cannot be parsed during a merge is reported instead of silently
   dropping the other side's tasks.
 - `tasu sync` exits non-zero when the pull or push failed, so scripts can tell.
+
+### Changed
+
+- `tasu add` / `done` / `drop` / `move` no longer print a warning when their
+  best-effort pull fails offline; run `tasu sync` to see the error.
 - A failed save is no longer marked for pushing, so a stale board is never
   published to the remote.
 - A rename is no longer lost when two machines diverge: each task now carries a
