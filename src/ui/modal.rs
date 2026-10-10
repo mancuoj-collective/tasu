@@ -10,6 +10,7 @@ use ratatui::{
 
 use crate::app::{HistoryView, Mode, Model};
 
+use tui_input::Input;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use super::{components, scroll_offset, theme::Theme};
@@ -70,18 +71,14 @@ fn input_modal(f: &mut Frame, model: &Model, theme: &Theme) {
         .border_style(theme.accent())
         .padding(Padding::horizontal(1))
         .title(Span::styled(title, theme.accent()));
-
-    let inner = block.inner(area);
-    let scroll = model.ui.input.visual_scroll(inner.width as usize);
-    f.render_widget(
-        Paragraph::new(model.ui.input.value())
-            .style(theme.text())
-            .scroll((0, scroll as u16))
-            .block(block),
+    input_field(
+        f,
         area,
+        block,
+        &model.ui.input,
+        model.ui.input.value(),
+        theme.text(),
     );
-    let x = inner.x + (model.ui.input.visual_cursor().max(scroll) - scroll) as u16;
-    f.set_cursor_position((x, inner.y));
 }
 
 fn completed_modal(f: &mut Frame, model: &Model, theme: &Theme) {
@@ -160,17 +157,36 @@ fn search_box(f: &mut Frame, model: &Model, theme: &Theme, area: Rect) {
     let block = Block::bordered()
         .border_style(theme.disabled())
         .padding(Padding::horizontal(1));
-    let inner = block.inner(area);
-
     let input = &model.ui.done_filter;
-    let text = if input.value().is_empty() {
-        Paragraph::new("search").style(theme.muted())
+    let (text, style) = if input.value().is_empty() {
+        ("search", theme.muted())
     } else {
-        Paragraph::new(input.value()).style(theme.text())
+        (input.value(), theme.text())
     };
-    let scroll = input.visual_scroll(inner.width as usize);
-    f.render_widget(text.scroll((0, scroll as u16)).block(block), area);
+    input_field(f, area, block, input, text, style);
+}
 
+/// Draw a bordered, single-line input through `block` and put the terminal
+/// cursor at its caret. `text` is what to show — the field's value, or a muted
+/// placeholder when it is empty — and the caret always comes from `input`, so
+/// the two can never disagree.
+fn input_field(
+    f: &mut Frame,
+    area: Rect,
+    block: Block<'static>,
+    input: &Input,
+    text: &str,
+    style: Style,
+) {
+    let inner = block.inner(area);
+    let scroll = input.visual_scroll(inner.width as usize);
+    f.render_widget(
+        Paragraph::new(text)
+            .style(style)
+            .scroll((0, scroll as u16))
+            .block(block),
+        area,
+    );
     let x = inner.x + (input.visual_cursor().max(scroll) - scroll) as u16;
     f.set_cursor_position((x, inner.y));
 }
