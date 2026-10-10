@@ -100,7 +100,7 @@ fn run_tui(config: Config) -> Result<()> {
     });
     // Quitting must not wait on the network: the board is already saved on disk,
     // so hand any pending commit+push to a detached `tasu flush` and return now.
-    if remote.is_some() {
+    if remote.is_some() && runtime.needs_flush() {
         spawn_background_flush();
     }
     result

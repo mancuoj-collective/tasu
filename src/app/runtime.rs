@@ -109,6 +109,13 @@ impl Runtime {
         self.sync_error.as_deref()
     }
 
+    /// Whether the board has changes the worker has not confirmed pushing, so
+    /// quitting should hand a final push to a detached process. A clean quit
+    /// spawns nothing.
+    pub fn needs_flush(&self) -> bool {
+        self.dirty || self.in_flight > 0 || self.needs_pull
+    }
+
     /// Load the board, settle it to `now`, persist it if it aged, and refresh
     /// the mtime baseline. Used once, before the loop starts.
     pub fn load_board(&mut self, now: DateTime<Local>) -> Board {
