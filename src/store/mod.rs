@@ -60,6 +60,22 @@ impl Store {
         atomic_write(&self.path, json.as_bytes())
     }
 
+    /// Read the raw board bytes, or `None` when the file is missing. The sync
+    /// layer merges serialized boards and needs the bytes as-is.
+    pub fn read_bytes(&self) -> Option<Vec<u8>> {
+        fs::read(&self.path).ok()
+    }
+
+    /// Atomically replace the board with raw bytes, through the same temp-file
+    /// path [`Store::save`] uses. Sync must go through here: a second, plain
+    /// `fs::write` on the same file would race the reader.
+    pub fn write_bytes(&self, bytes: &[u8]) -> Result<()> {
+        if let Some(parent) = self.path.parent() {
+            fs::create_dir_all(parent).context("failed to create data directory")?;
+        }
+        atomic_write(&self.path, bytes)
+    }
+
     /// Last modification time, for detecting external writes.
     pub fn mtime(&self) -> Option<SystemTime> {
         fs::metadata(&self.path)
@@ -226,5 +242,15 @@ mod tests {
         assert!(store.mtime().is_none());
         store.save(&Board::new()).unwrap();
         assert!(store.mtime().is_some());
+    }
+
+    #[test]
+    fn raw_bytes_roundtrip_through_the_atomic_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_in(&dir);
+        assert!(store.read_bytes().is_none(), "a missing file reads as None");
+
+        store.write_bytes(b"{\"tasks\":[]}").unwrap();
+        assert_eq!(store.read_bytes().as_deref(), Some(&b"{\"tasks\":[]}"[..]));
     }
 }
