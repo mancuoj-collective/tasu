@@ -118,17 +118,26 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
     fs::rename(&tmp, path).context("failed to replace board file")
 }
 
+/// Which side of a [`merge_files`] call could not be parsed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MergeSide {
+    Base,
+    Other,
+}
+
 /// Merge two serialized boards: `base` wins ties, `other` fills in and advances
-/// matching tasks. Returns `None` when either side is unreadable, so the caller
-/// can fall back to one side rather than guess.
-pub fn merge_files(base: &[u8], other: &[u8]) -> Option<Vec<u8>> {
-    let base: FileSchema = serde_json::from_slice(base).ok()?;
-    let other: FileSchema = serde_json::from_slice(other).ok()?;
+/// matching tasks. Returns `Err` naming the unreadable side, so the caller can
+/// surface it instead of silently dropping that side's tasks.
+pub fn merge_files(base: &[u8], other: &[u8]) -> Result<Vec<u8>, MergeSide> {
+    let base: FileSchema = serde_json::from_slice(base).map_err(|_| MergeSide::Base)?;
+    let other: FileSchema = serde_json::from_slice(other).map_err(|_| MergeSide::Other)?;
     let merged = Board::from_tasks(base.tasks).merged_with(&Board::from_tasks(other.tasks));
     let schema = FileSchema {
         tasks: merged.into_tasks(),
     };
-    serde_json::to_vec_pretty(&schema).ok()
+    // Serializing our own schema cannot fail; label it as `Base` only so the
+    // type is total.
+    serde_json::to_vec_pretty(&schema).map_err(|_| MergeSide::Base)
 }
 
 #[cfg(test)]
@@ -157,10 +166,10 @@ mod tests {
     }
 
     #[test]
-    fn merging_refuses_input_it_cannot_safely_merge() {
+    fn merging_names_the_side_it_cannot_read() {
         let ok = board_bytes(&[("a", 5)]);
-        assert!(merge_files(b"not json", &ok).is_none());
-        assert!(merge_files(&ok, b"neither is this").is_none());
+        assert_eq!(merge_files(b"not json", &ok), Err(MergeSide::Base));
+        assert_eq!(merge_files(&ok, b"neither is this"), Err(MergeSide::Other));
     }
 
     fn store_in(dir: &tempfile::TempDir) -> Store {

@@ -97,7 +97,8 @@ Key decisions:
   "original bucket" to return to.
 - All times are `chrono::DateTime<Local>`.
 - `store::merge_files(base, other)` merges two serialized boards task by task
-  (identity = `created_at`), and returns `None` only if a side is unreadable.
+  (identity = `created_at`), and returns `Err` naming the side that could not be
+  read, so a merge never silently drops tasks.
 - **One atomic writer for `todos.json`.** `Store` owns the file and is the only
   thing that writes it (temp file + rename). The sync layer reads and writes the
   board through `Store` too, instead of a second plain `fs::write` that could

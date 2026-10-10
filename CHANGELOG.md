@@ -8,6 +8,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A board that cannot be parsed during a merge is reported instead of silently
+  dropping the other side's tasks.
 - `tasu sync` exits non-zero when the pull or push failed, so scripts can tell.
 - A failed save is no longer marked for pushing, so a stale board is never
   published to the remote.

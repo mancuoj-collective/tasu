@@ -5,7 +5,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::store::Store;
+use crate::store::{MergeSide, Store};
 
 /// Network operations are bounded so a hung connection cannot freeze a caller.
 const NETWORK_TIMEOUT: Duration = Duration::from_secs(20);
@@ -195,6 +195,16 @@ fn board_store(repo: &Path) -> Store {
     Store::new(repo.join("todos.json"))
 }
 
+/// Name the side of a failed board merge, so a sync result says which file could
+/// not be read instead of silently dropping its tasks.
+fn unreadable_board(side: MergeSide, base: &str, other: &str) -> String {
+    let name = match side {
+        MergeSide::Base => base,
+        MergeSide::Other => other,
+    };
+    format!("{name} board could not be read; sync stopped to avoid dropping tasks")
+}
+
 fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), String> {
     if repo.join(".git").exists() {
         ensure_gitignore(repo);
@@ -281,7 +291,10 @@ fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), String> {
         None
     };
     let board = match (local_board, remote_board) {
-        (Some(local), Some(remote)) => crate::store::merge_files(&local, &remote).or(Some(local)),
+        (Some(local), Some(remote)) => Some(
+            crate::store::merge_files(&local, &remote)
+                .map_err(|side| unreadable_board(side, "local", "remote"))?,
+        ),
         (board, None) => board,
         (None, board) => board,
     };
@@ -521,7 +534,10 @@ fn pull(repo: &Path, remote: Option<&str>) -> Result<(), String> {
     let _ = git(repo, &["reset", "--hard", "refs/tasu/remote"]);
     let board = match (local_board, remote_board) {
         // Remote is the shared base; the local board fills in and advances.
-        (Some(local), Some(remote)) => crate::store::merge_files(&remote, &local).or(Some(remote)),
+        (Some(local), Some(remote)) => Some(
+            crate::store::merge_files(&remote, &local)
+                .map_err(|side| unreadable_board(side, "remote", "local"))?,
+        ),
         (Some(local), None) => Some(local),
         (None, board) => board,
     };
