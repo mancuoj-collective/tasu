@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Context, Result};
-use chrono::Local;
+use chrono::{DateTime, Local};
 
 use crate::config::Config;
 use crate::domain::{Board, Bucket, Task, TaskState, settle};
@@ -21,6 +21,16 @@ fn load_board(store: &Store) -> Board {
     loaded.board
 }
 
+/// Open the local board for a one-shot command: the `Store` to write it back
+/// with, and the board settled to `now`. Every command that mutates the board
+/// settles it first, so the aging pipeline is applied before the change.
+fn open_board(config: &Config, now: DateTime<Local>) -> (Store, Board) {
+    let store = Store::new(config.board_path());
+    let mut board = load_board(&store);
+    settle(&mut board, now);
+    (store, board)
+}
+
 /// `tasu add "..."`: record a task and push, without opening the TUI. The push
 /// is best-effort: offline still exits successfully.
 pub fn add(config: &Config, words: &[String]) -> Result<()> {
@@ -29,10 +39,8 @@ pub fn add(config: &Config, words: &[String]) -> Result<()> {
     };
     best_effort_pull(config);
 
-    let store = Store::new(config.board_path());
     let now = Local::now();
-    let mut board = load_board(&store);
-    settle(&mut board, now);
+    let (store, mut board) = open_board(config, now);
     board.add(title.as_str(), now);
     store.save(&board)?;
     println!("+ {title}");
@@ -44,9 +52,7 @@ pub fn add(config: &Config, words: &[String]) -> Result<()> {
 /// `tasu list`: print the open tasks, grouped by bucket. Read-only and local —
 /// run `tasu sync` first if you want the latest from the remote.
 pub fn list(config: &Config, bucket: Option<Bucket>, json: bool) -> Result<()> {
-    let store = Store::new(config.board_path());
-    let mut board = load_board(&store);
-    settle(&mut board, Local::now());
+    let (_, board) = open_board(config, Local::now());
 
     let buckets = match bucket {
         Some(bucket) => vec![bucket],
@@ -76,8 +82,7 @@ pub enum HistoryList {
 /// `tasu history [done|dropped]`: print completed and dropped tasks. With no
 /// view, both sections are shown.
 pub fn history(config: &Config, view: HistoryList, json: bool) -> Result<()> {
-    let store = Store::new(config.board_path());
-    let board = load_board(&store);
+    let board = load_board(&Store::new(config.board_path()));
     let sections = history_sections(&board, view);
 
     if json {
@@ -164,10 +169,8 @@ pub fn move_task(config: &Config, bucket: Bucket, words: &[String]) -> Result<()
     };
     best_effort_pull(config);
 
-    let store = Store::new(config.board_path());
     let now = Local::now();
-    let mut board = load_board(&store);
-    settle(&mut board, now);
+    let (store, mut board) = open_board(config, now);
 
     let index = find_open(&board, &title)?;
     let current = board.task(index).map_or(0, |task| task.bucket.index());
@@ -192,10 +195,8 @@ fn finish(config: &Config, words: &[String], drop: bool) -> Result<()> {
     };
     best_effort_pull(config);
 
-    let store = Store::new(config.board_path());
     let now = Local::now();
-    let mut board = load_board(&store);
-    settle(&mut board, now);
+    let (store, mut board) = open_board(config, now);
 
     let index = find_open(&board, &title)?;
     let changed = if drop {
