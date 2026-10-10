@@ -295,18 +295,23 @@ atomic write path shared with the app.
 End-to-end first (ratatui `TestBackend` + temp directories + local bare
 repositories):
 
-- keypress → screen contents / `todos.json` / git history;
+- keypress → screen contents / `todos.json` / git history: capture, rename,
+  complete, drop, restore from either history view, bucket moves, cursor jumps
+  across buckets, history search, the toast and per-mode hints, the empty and
+  too-small screens, and cursor-visible scrolling;
 - time boundaries: day rollover, ISO-week rollover (including week 1 across a
   year), `settle` idempotence, frozen done/archived tasks;
-- moving between buckets, undo back to the original bucket and position,
-  restoring dropped tasks, the history `DONE`/`DROPPED` views;
-- sync: silent when no remote, an offline push that does not block exit, the
-  first-connect merge, and branch-name adoption.
+- the `Runtime` reloads the board when the file changes underneath it, and does
+  not mistake its own write for an external one;
+- the real built binary (`CARGO_BIN_EXE_tasu`) is driven for `list --json`, an
+  ambiguous title being refused, and a non-zero exit from a failed `tasu sync`;
+- sync: silent when no remote, the first-connect merge, branch-name adoption,
+  two machines converging, and a diverged merge keeping the later rename.
 
 Pure layers (domain, update, store, sync) also have unit tests, as does the
 runtime's pure `due` scheduler (debounce, retry backoff, pull-before-push), and
 the UI has `insta` snapshot tests. Git-dependent tests run against real
-repositories so they exercise the real binary.
+repositories, so they exercise the real git binary.
 
 > Rule of thumb: to isolate a subsystem for testing, first write down *how it
 > could fail*, then write the code. Domain-isolation tests are reserved for hard
