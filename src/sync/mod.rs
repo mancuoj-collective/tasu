@@ -5,6 +5,8 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crate::store::Store;
+
 /// Network operations are bounded so a hung connection cannot freeze a caller.
 const NETWORK_TIMEOUT: Duration = Duration::from_secs(20);
 const PUSH_TIMEOUT: Duration = Duration::from_secs(8);
@@ -22,6 +24,9 @@ const DEFAULT_BRANCH: &str = "main";
 pub struct Sync {
     jobs: Sender<Job>,
     results: Receiver<Result<(), String>>,
+    /// One-shot outcome of adopting/creating the repository, sent before any
+    /// job runs so a broken setup is visible instead of looking idle.
+    init: Receiver<Result<(), String>>,
 }
 
 enum Job {
@@ -33,13 +38,15 @@ impl Sync {
     pub fn new(repo: PathBuf, remote: Option<String>) -> Self {
         let (jobs_tx, jobs_rx) = mpsc::channel::<Job>();
         let (results_tx, results_rx) = mpsc::channel::<Result<(), String>>();
+        let (init_tx, init_rx) = mpsc::channel::<Result<(), String>>();
 
         // The worker owns the repo and remote; the app only talks to it over
         // the channels.
         thread::spawn(move || {
-            // Adopt or create the repository once, before the first job.
-            if ensure_repo(&repo, remote.as_deref()).is_err() {
-                // Fall through: local-only operation still works.
+            // Adopt or create the repository once, before the first job, and
+            // report the outcome so a failure is not silently swallowed.
+            if init_tx.send(ensure_repo(&repo, remote.as_deref())).is_err() {
+                return;
             }
             while let Ok(job) = jobs_rx.recv() {
                 let result = match job {
@@ -55,6 +62,7 @@ impl Sync {
         Self {
             jobs: jobs_tx,
             results: results_rx,
+            init: init_rx,
         }
     }
 
@@ -75,6 +83,12 @@ impl Sync {
 
     pub fn poll(&self) -> Option<Result<(), String>> {
         self.results.try_recv().ok()
+    }
+
+    /// The one-shot repository-setup result, once the worker has produced it.
+    /// `None` until then; after the first call it returns `None` again.
+    pub fn poll_init(&self) -> Option<Result<(), String>> {
+        self.init.try_recv().ok()
     }
 }
 
@@ -174,6 +188,13 @@ impl Failure {
     }
 }
 
+/// The board file inside the sync working tree. Reads and writes go through
+/// `Store`, so `todos.json` has exactly one (atomic) write path shared with the
+/// app, instead of a second plain `fs::write` that could race the reader.
+fn board_store(repo: &Path) -> Store {
+    Store::new(repo.join("todos.json"))
+}
+
 fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), String> {
     if repo.join(".git").exists() {
         ensure_gitignore(repo);
@@ -220,7 +241,7 @@ fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), String> {
     // README). The local board is kept aside, the remote's history is adopted,
     // then the board is committed on top and pushed. No unrelated-history merge,
     // which proved unreliable across git builds.
-    let local_board = std::fs::read(repo.join("todos.json")).ok();
+    let local_board = board_store(repo).read_bytes();
 
     // Name the branch before the first commit: `git init` alone would use the
     // host's default (e.g. `master`), splitting the remote into two branches.
@@ -265,7 +286,9 @@ fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), String> {
         (None, board) => board,
     };
     if let Some(bytes) = board.filter(|bytes| !bytes.is_empty()) {
-        std::fs::write(repo.join("todos.json"), bytes).map_err(|err| err.to_string())?;
+        board_store(repo)
+            .write_bytes(&bytes)
+            .map_err(|err| err.to_string())?;
     }
     ensure_gitignore(repo);
     let _ = git(repo, &["add", "-A"]);
@@ -493,7 +516,7 @@ fn pull(repo: &Path, remote: Option<&str>) -> Result<(), String> {
     // The remote is ahead, or the two histories diverged. Rebase would conflict
     // on `todos.json`; instead adopt the remote's tree and overlay the local
     // board, merging task by task so nothing is lost and the repo never sticks.
-    let local_board = std::fs::read(repo.join("todos.json")).ok();
+    let local_board = board_store(repo).read_bytes();
     let remote_board = git_bytes(repo, &["show", "refs/tasu/remote:todos.json"]);
     let _ = git(repo, &["reset", "--hard", "refs/tasu/remote"]);
     let board = match (local_board, remote_board) {
@@ -503,7 +526,9 @@ fn pull(repo: &Path, remote: Option<&str>) -> Result<(), String> {
         (None, board) => board,
     };
     if let Some(bytes) = board.filter(|bytes| !bytes.is_empty()) {
-        std::fs::write(repo.join("todos.json"), bytes).map_err(|err| err.to_string())?;
+        board_store(repo)
+            .write_bytes(&bytes)
+            .map_err(|err| err.to_string())?;
     }
     Ok(())
 }
