@@ -5,6 +5,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crate::domain::Board;
 use crate::store::{MergeSide, Store};
 
 /// Network operations are bounded so a hung connection cannot freeze a caller.
@@ -23,7 +24,7 @@ const DEFAULT_BRANCH: &str = "main";
 /// by the network. Without a remote, nothing here ever shells out to git.
 pub struct Sync {
     jobs: Sender<Job>,
-    results: Receiver<Result<(), String>>,
+    results: Receiver<JobOutcome>,
     /// One-shot outcome of adopting/creating the repository, sent before any
     /// job runs so a broken setup is visible instead of looking idle.
     init: Receiver<Result<(), String>>,
@@ -34,10 +35,27 @@ enum Job {
     CommitPush,
 }
 
+/// What a finished pull produced, handed back to the app.
+pub enum Pulled {
+    /// Level with or ahead of the remote: nothing to merge.
+    UpToDate,
+    /// The remote is ahead or the histories diverged. The local branch has been
+    /// moved to the remote tip so the next push fast-forwards, and the remote's
+    /// board (when the remote has one) is returned for the caller to merge.
+    Merge(Option<Board>),
+}
+
+/// The outcome of one worker job.
+pub enum JobOutcome {
+    Pulled(Pulled),
+    Pushed,
+    Failed(String),
+}
+
 impl Sync {
     pub fn new(repo: PathBuf, remote: Option<String>) -> Self {
         let (jobs_tx, jobs_rx) = mpsc::channel::<Job>();
-        let (results_tx, results_rx) = mpsc::channel::<Result<(), String>>();
+        let (results_tx, results_rx) = mpsc::channel::<JobOutcome>();
         let (init_tx, init_rx) = mpsc::channel::<Result<(), String>>();
 
         // The worker owns the repo and remote; the app only talks to it over
@@ -49,11 +67,17 @@ impl Sync {
                 return;
             }
             while let Ok(job) = jobs_rx.recv() {
-                let result = match job {
-                    Job::Pull => pull(&repo, remote.as_deref()),
-                    Job::CommitPush => commit_push(&repo, remote.as_deref()),
+                let outcome = match job {
+                    Job::Pull => match pull(&repo, remote.as_deref()) {
+                        Ok(pulled) => JobOutcome::Pulled(pulled),
+                        Err(err) => JobOutcome::Failed(err),
+                    },
+                    Job::CommitPush => match commit_push(&repo, remote.as_deref()) {
+                        Ok(()) => JobOutcome::Pushed,
+                        Err(err) => JobOutcome::Failed(err),
+                    },
                 };
-                if results_tx.send(result).is_err() {
+                if results_tx.send(outcome).is_err() {
                     break;
                 }
             }
@@ -66,8 +90,9 @@ impl Sync {
         }
     }
 
-    /// Fetch the latest remote state; the changed file is picked up by the
-    /// mtime watcher, which reloads the board.
+    /// Fetch the latest remote state. The remote's board comes back through
+    /// [`Sync::poll`] for the app to merge, so the worker never writes
+    /// `todos.json` and cannot race the app's own save.
     pub fn pull(&self) -> Result<(), String> {
         self.jobs
             .send(Job::Pull)
@@ -81,7 +106,7 @@ impl Sync {
             .map_err(|_| "sync worker stopped".to_string())
     }
 
-    pub fn poll(&self) -> Option<Result<(), String>> {
+    pub fn poll(&self) -> Option<JobOutcome> {
         self.results.try_recv().ok()
     }
 
@@ -102,7 +127,20 @@ pub fn commit_now(repo: &Path, remote: Option<&str>) -> Result<(), String> {
 /// CLI-only machine does not diverge from the remote.
 pub fn pull_now(repo: &Path, remote: Option<&str>) -> Result<(), String> {
     ensure_repo(repo, remote)?;
-    pull(repo, remote)
+    apply_pull(repo, pull(repo, remote)?)
+}
+
+/// Merge a pull result into the on-disk board. The one-shot CLI is a single
+/// process, so it writes the file directly; the TUI instead hands the board to
+/// its model, which stays the file's only writer.
+fn apply_pull(repo: &Path, pulled: Pulled) -> Result<(), String> {
+    let Pulled::Merge(Some(remote)) = pulled else {
+        return Ok(());
+    };
+    let store = board_store(repo);
+    // Remote is the shared base; the local board fills in and advances.
+    let merged = remote.merged_with(&store.load());
+    store.save(&merged).map_err(|err| err.to_string())
 }
 
 /// Check that a remote is reachable and that credentials work, without asking
@@ -498,17 +536,19 @@ fn clone(url: &str, repo: &Path) -> Result<(), String> {
 
 /// Bring the local branch up to date with the remote without ever producing a
 /// rebase conflict. The board is the whole state, so history carries no extra
-/// meaning; the local board is merged **task by task** into the remote's.
-fn pull(repo: &Path, remote: Option<&str>) -> Result<(), String> {
+/// meaning: the remote's board is handed back to be merged **task by task**, and
+/// the branch is moved with `--soft`, leaving the working tree — the app's
+/// `todos.json` in particular — exactly as the app has it.
+fn pull(repo: &Path, remote: Option<&str>) -> Result<Pulled, String> {
     if remote.is_none() {
-        return Ok(());
+        return Ok(Pulled::UpToDate);
     }
     // Nothing to pull until the first commit exists (fresh remote).
     if !git_ok(repo, &["rev-parse", "--verify", "--quiet", "HEAD"]) {
-        return Ok(());
+        return Ok(Pulled::UpToDate);
     }
     let Some(branch) = current_branch(repo) else {
-        return Ok(());
+        return Ok(Pulled::UpToDate);
     };
 
     // Fetch the remote branch into a private ref (remote-tracking refs are not
@@ -529,30 +569,31 @@ fn pull(repo: &Path, remote: Option<&str>) -> Result<(), String> {
         repo,
         &["merge-base", "--is-ancestor", "refs/tasu/remote", "HEAD"],
     ) {
-        return Ok(());
+        return Ok(Pulled::UpToDate);
     }
 
-    // The remote is ahead, or the two histories diverged. Rebase would conflict
-    // on `todos.json`; instead adopt the remote's tree and overlay the local
-    // board, merging task by task so nothing is lost and the repo never sticks.
-    let local_board = board_store(repo).read_bytes();
-    let remote_board = git_bytes(repo, &["show", "refs/tasu/remote:todos.json"]);
-    let _ = git(repo, &["reset", "--hard", "refs/tasu/remote"]);
-    let board = match (local_board, remote_board) {
-        // Remote is the shared base; the local board fills in and advances.
-        (Some(local), Some(remote)) => Some(
-            crate::store::merge_files(&remote, &local)
-                .map_err(|side| unreadable_board(side, "remote", "local"))?,
-        ),
-        (Some(local), None) => Some(local),
-        (None, board) => board,
+    // The remote is ahead, or the two histories diverged. Read its board out of
+    // the commit instead of checking the commit out, so `todos.json` is never
+    // written behind the app's back; the caller merges it in and saves it, and
+    // is therefore the file's only writer. A board that cannot be read is an
+    // error, never a silent empty list.
+    let remote_board = match git_bytes(repo, &["show", "refs/tasu/remote:todos.json"]) {
+        Some(bytes) => Some(parse_board(&bytes)?),
+        None => None,
     };
-    if let Some(bytes) = board.filter(|bytes| !bytes.is_empty()) {
-        board_store(repo)
-            .write_bytes(&bytes)
-            .map_err(|err| err.to_string())?;
-    }
-    Ok(())
+    // `--soft` moves the branch (and HEAD) without touching the index or the
+    // working tree, so the next commit fast-forwards from the remote tip while
+    // the app's file is preserved for the caller to merge.
+    git(repo, &["reset", "--soft", "refs/tasu/remote"])?;
+    Ok(Pulled::Merge(remote_board))
+}
+
+/// Parse a board read out of the repository. A board that cannot be parsed is
+/// an error, never a silent empty list: that would drop a machine's tasks.
+fn parse_board(bytes: &[u8]) -> Result<Board, String> {
+    crate::store::board_from_bytes(bytes).ok_or_else(|| {
+        "the remote board could not be read; sync stopped to avoid dropping tasks".to_string()
+    })
 }
 
 fn commit_push(repo: &Path, remote: Option<&str>) -> Result<(), String> {
@@ -1198,7 +1239,7 @@ mod tests {
         git(&b, &["push", "-q", "origin", "main"]).unwrap();
 
         // A pulls. The histories diverge; the boards must merge, not conflict.
-        pull(&a, Some(&remote)).unwrap();
+        pull_applied(&a, &remote);
         let titles = board_titles(&a);
         for title in ["base", "from A", "from B"] {
             assert!(
@@ -1209,11 +1250,74 @@ mod tests {
 
         // And it converges: A pushes, B pulls, both see everything.
         commit_push(&a, Some(&remote)).unwrap();
-        pull(&b, Some(&remote)).unwrap();
+        pull_applied(&b, &remote);
         assert!(
             board_titles(&b).iter().any(|seen| seen == "from A"),
             "B did not get A"
         );
+    }
+
+    /// Pull and apply, the way the one-shot CLI does. The TUI instead hands the
+    /// returned board to its model, which is the file's only writer.
+    fn pull_applied(repo: &Path, remote: &str) {
+        apply_pull(repo, pull(repo, Some(remote)).unwrap()).unwrap();
+    }
+
+    #[test]
+    fn pull_reads_the_remote_board_without_touching_the_local_file() {
+        // Regression: the worker used to reset `todos.json` to the remote's
+        // version itself, which could clobber a save the app made while the pull
+        // was in flight. A pull must leave the local file alone and hand the
+        // remote board back for the caller to merge.
+        let dir = tempfile::tempdir().unwrap();
+        let remote = bare_remote(dir.path());
+
+        let seed = dir.path().join("seed");
+        std::fs::create_dir_all(&seed).unwrap();
+        write_board(&seed, &[("base", 5)]);
+        git(&seed, &["init", "-q", "-b", "main"]).unwrap();
+        git(&seed, &["add", "-A"]).unwrap();
+        commit(&seed, "base");
+        git(&seed, &["remote", "add", "origin", &remote]).unwrap();
+        git(&seed, &["push", "-q", "origin", "main"]).unwrap();
+        let _ = Command::new("git")
+            .arg("--git-dir")
+            .arg(&remote)
+            .args(["symbolic-ref", "HEAD", "refs/heads/main"])
+            .status();
+
+        // A local machine with its own unpushed task.
+        let a = dir.path().join("a");
+        clone_repo(&remote, &a);
+        add_task(&a, "local only", 6);
+        commit(&a, "a");
+
+        // The remote moves ahead with a different task.
+        let b = dir.path().join("b");
+        clone_repo(&remote, &b);
+        add_task(&b, "from B", 7);
+        commit(&b, "b");
+        git(&b, &["push", "-q", "origin", "main"]).unwrap();
+
+        let pulled = pull(&a, Some(&remote)).unwrap();
+        let Pulled::Merge(Some(remote_board)) = pulled else {
+            panic!("expected the remote board to be handed back");
+        };
+
+        // The local file is untouched: the app's own task is still there and the
+        // remote's task has not been written behind its back.
+        let local = board_titles(&a);
+        assert!(local.iter().any(|t| t == "local only"), "{local:?}");
+        assert!(!local.iter().any(|t| t == "from B"), "{local:?}");
+
+        // The returned board carries the remote side, and merging yields the
+        // union without either task being lost.
+        let titles: Vec<_> = remote_board
+            .tasks()
+            .iter()
+            .map(|task| task.title.as_str())
+            .collect();
+        assert!(titles.contains(&"from B"), "{titles:?}");
     }
 
     fn board_titles(repo: &Path) -> Vec<String> {

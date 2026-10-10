@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
@@ -103,11 +104,17 @@ impl Store {
 }
 
 fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
+    // A unique temp name: two writers sharing one `todos.json.tmp` could rename
+    // each other's half-written file into place. The counter alone would do, but
+    // the pid keeps separate processes clear too.
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+    let seq = SEQ.fetch_add(1, Ordering::Relaxed);
     let tmp = path.with_file_name(format!(
-        "{}.tmp",
+        "{}.{}.{seq}.tmp",
         path.file_name()
             .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "todos.json".to_string())
+            .unwrap_or_else(|| "todos.json".to_string()),
+        std::process::id(),
     ));
     fs::write(&tmp, bytes).context("failed to write temporary file")?;
     if fs::rename(&tmp, path).is_ok() {
@@ -116,6 +123,14 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
     // Windows cannot rename over an existing file.
     let _ = fs::remove_file(path);
     fs::rename(&tmp, path).context("failed to replace board file")
+}
+
+/// Parse raw board bytes, for a caller that merges a board read elsewhere (the
+/// sync layer reads the remote copy). `None` when the bytes are not a board.
+pub fn board_from_bytes(bytes: &[u8]) -> Option<Board> {
+    serde_json::from_slice::<FileSchema>(bytes)
+        .ok()
+        .map(|schema| Board::from_tasks(schema.tasks))
 }
 
 /// Which side of a [`merge_files`] call could not be parsed.

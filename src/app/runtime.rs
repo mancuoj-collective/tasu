@@ -13,7 +13,7 @@ use chrono::{DateTime, Local};
 use crate::config::Config;
 use crate::domain::{Board, settle};
 use crate::store::Store;
-use crate::sync::Sync;
+use crate::sync::{JobOutcome, Pulled, Sync};
 
 use super::action::{Action, Effect};
 use super::model::{Model, SyncStatus};
@@ -187,14 +187,24 @@ impl Runtime {
                 self.sync_error = Some(err);
             }
 
-            while let Some(result) = sync.poll() {
+            while let Some(outcome) = sync.poll() {
                 self.in_flight = self.in_flight.saturating_sub(1);
-                match result {
-                    Ok(()) => {
+                match outcome {
+                    JobOutcome::Pulled(Pulled::UpToDate) | JobOutcome::Pushed => {
                         self.sync_status = SyncStatus::Idle;
                         self.sync_error = None;
                     }
-                    Err(err) => {
+                    JobOutcome::Pulled(Pulled::Merge(board)) => {
+                        self.sync_status = SyncStatus::Idle;
+                        self.sync_error = None;
+                        // Hand the remote board to the model; it merges and
+                        // saves, so the worker never writes the board and
+                        // cannot race a concurrent save.
+                        if let Some(board) = board {
+                            return Some(Action::Merge(board));
+                        }
+                    }
+                    JobOutcome::Failed(err) => {
                         self.dirty = true;
                         self.needs_pull = true;
                         self.retry_at = Some(Instant::now() + RETRY);

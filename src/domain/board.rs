@@ -4,7 +4,7 @@ use super::task::{Bucket, Task, TaskState};
 
 /// The whole task collection. Every operation takes `now` so the domain stays
 /// free of the system clock and is deterministic under test.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct Board {
     tasks: Vec<Task>,
 }

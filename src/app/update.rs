@@ -33,6 +33,19 @@ pub fn update(model: &mut Model, action: Action, now: DateTime<Local>) -> Vec<Ef
             model.clamp_cursor();
             Vec::new()
         }
+        // A pull handed us the remote board. Merge it into the current one (the
+        // remote as the base, so a local edit still advances), then save: this
+        // thread is the file's only writer, so nothing can clobber it.
+        Action::Merge(remote) => {
+            let merged = remote.merged_with(&model.board);
+            if merged == model.board {
+                return Vec::new();
+            }
+            model.board = merged;
+            settle(&mut model.board, now);
+            model.clamp_cursor();
+            vec![Effect::Save]
+        }
         Action::Key(key) => match model.ui.mode {
             Mode::Normal => normal(model, key, now),
             Mode::Add | Mode::Edit => editing(model, key, now),
@@ -408,5 +421,38 @@ mod tests {
         let effects = update(&mut model, press(KeyCode::Enter), at(2026, 10, 5));
         assert_eq!(effects, vec![Effect::Save]);
         assert_eq!(model.board.task(0).unwrap().state, TaskState::Open);
+    }
+
+    #[test]
+    fn a_pull_merge_keeps_local_tasks_and_saves() {
+        let mut model = model();
+        model.board.add("local task", at(2026, 10, 5));
+
+        let mut remote = crate::domain::Board::new();
+        remote.add("remote task", at(2026, 10, 4));
+
+        let effects = update(&mut model, Action::Merge(remote), at(2026, 10, 5));
+        assert_eq!(effects, vec![Effect::Save]);
+
+        let titles: Vec<&str> = model
+            .board
+            .tasks()
+            .iter()
+            .map(|task| task.title.as_str())
+            .collect();
+        assert!(titles.contains(&"local task"), "{titles:?}");
+        assert!(titles.contains(&"remote task"), "{titles:?}");
+    }
+
+    #[test]
+    fn a_pull_merge_that_changes_nothing_does_not_save() {
+        let mut model = model();
+        model.board.add("only task", at(2026, 10, 5));
+        let effects = update(
+            &mut model,
+            Action::Merge(crate::domain::Board::new()),
+            at(2026, 10, 5),
+        );
+        assert!(effects.is_empty(), "an unchanged merge must not write");
     }
 }

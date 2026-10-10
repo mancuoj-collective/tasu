@@ -11,6 +11,9 @@ pub enum Action {
     Tick,
     /// The board changed on disk (external write) and was reloaded.
     Reload(Board),
+    /// The remote board from a finished pull, to merge into the current one. The
+    /// app merges and saves it, so the sync worker never writes `todos.json`.
+    Merge(Board),
 }
 
 /// Side effects `update` asks the runtime to perform. `update` never does I/O.

@@ -99,10 +99,11 @@ Key decisions:
 - `store::merge_files(base, other)` merges two serialized boards task by task
   (identity = `created_at`), and returns `Err` naming the side that could not be
   read, so a merge never silently drops tasks.
-- **One atomic writer for `todos.json`.** `Store` owns the file and is the only
-  thing that writes it (temp file + rename). The sync layer reads and writes the
-  board through `Store` too, instead of a second plain `fs::write` that could
-  race the reader.
+- **One atomic writer for `todos.json`.** The app thread (`Runtime`) is the only
+  thing that writes the file (through `Store`, temp file + rename). The sync
+  worker never writes it: a pull reads the remote board out of the fetched
+  commit and hands it back, and the app merges it in and saves. So a background
+  pull can never clobber a save the user just made.
 
 ## Domain and the state machine
 
@@ -154,10 +155,12 @@ fn settle(board: &mut Board, now: DateTime<Local>) -> bool {
 | `Save` | Atomically write `todos.json`, mark sync dirty, refresh `last_mtime` |
 | `Quit` | Stop the loop; save a final time and flush one last push |
 
-The startup pull is not triggered by `update`: the runtime sends one background
-pull, and the file it changes is picked up by **mtime detection** as
-`Action::Reload`. The runtime tracks `last_mtime` and refreshes it right after
-its own writes, which is what separates "our write" from "an external one".
+A pull is not carried as an `Effect`: the runtime sends one background pull, and
+the remote board it returns comes back as `Action::Merge`, which the model merges
+into the current board and saves. **mtime detection** is separate — it catches a
+*truly external* write (a one-shot `tasu add`, a hand edit) as `Action::Reload`.
+The runtime tracks `last_mtime` and refreshes it right after its own writes,
+which is what separates "our write" from "an external one".
 
 ## Main loop and concurrency
 
@@ -175,11 +178,11 @@ its own writes, which is what separates "our write" from "an external one".
   `RETRY` (30 s), pulling first so a rejected (non-fast-forward) push can
   recover.
 - **Sync worker**: `Sync` spawns one thread that adopts or creates the
-  repository, then processes `Pull` / `CommitPush` jobs and returns
-  `Result<(), String>` over a channel. It reports its one-shot repository-setup
-  outcome first (`poll_init`), so a broken setup is shown in the footer instead
-  of looking idle. The app never blocks on git. With no remote configured, no
-  git process is ever started.
+  repository, then processes `Pull` / `CommitPush` jobs and returns a
+  `JobOutcome` (`Pulled` / `Pushed` / `Failed`) over a channel. It reports its
+  one-shot repository-setup outcome first (`poll_init`), so a broken setup is
+  shown in the footer instead of looking idle. The app never blocks on git. With
+  no remote configured, no git process is ever started.
 - On exit the runtime saves and calls `flush`, a synchronous best-effort push,
   so the last change is not lost when the process ends.
 - No tokio: one slow operation plus one poll is enough for std threads.
@@ -263,16 +266,18 @@ Git single-writer model (see `PRODUCT.md`). **Pull never rebases** — rebasing 
 JSON board conflicts as soon as two machines touch it, and then the push is
 rejected and the repo is stranded. Instead `pull` fetches into a private ref and
 compares histories: if the remote is reachable from `HEAD` there is nothing to
-do; otherwise it resets to the remote and merges the boards **task by task**
-(`store::merge_files`, identity = `created_at`, terminal state wins, then the
-later change time),
-leaving the merged board for the next `commit_push` (`git add -A && git commit
-... && git push origin HEAD:refs/heads/<branch>`) to publish. With **no remote**
-the whole layer degrades silently to local and produces no git calls; when a
-remote is set but the repository cannot be adopted or created, that outcome is
-reported once through the worker's init channel rather than swallowed. The board
-file itself is read and written through `Store`, so `todos.json` has a single
-atomic write path shared with the app.
+do; otherwise it reads the remote board out of the fetched commit and moves the
+branch to the remote tip with `git reset --soft` — which touches neither the
+index nor the working tree — then hands the board back as `Pulled::Merge`. The
+**caller** merges it task by task (`Board::merged_with`, identity = `created_at`,
+terminal state wins, then the later change time) and saves; the next
+`commit_push` (`git add -A && git commit ... && git push origin
+HEAD:refs/heads/<branch>`) then fast-forwards from the remote tip and publishes
+the union. The worker therefore never writes `todos.json`, so it cannot race the
+app's own save. With **no remote** the whole layer degrades silently to local
+and produces no git calls; when a remote is set but the repository cannot be
+adopted or created, that outcome is reported once through the worker's init
+channel rather than swallowed.
 
 - **Branch contract**: every machine syncs on **one branch** so a host's
   `init.defaultBranch` (often `master` on Windows) never leaks into the data

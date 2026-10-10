@@ -12,6 +12,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   fails. The first-connect graft now reads both boards and merges them *before*
   it adopts the remote's tree, so a board that cannot be read leaves the local
   files untouched instead of having them reset away first.
+- A background pull can no longer clobber a task captured at the same moment.
+  The sync worker no longer writes `todos.json` at all: it reads the remote
+  board out of the fetched commit and hands it to the app, which merges it into
+  the current board and saves. The file now has exactly one writer, so a pull
+  racing a save used to lose the save silently.
 
 ## [0.14.0] - 2026-10-11
 
