@@ -18,10 +18,6 @@ impl Board {
         Self { tasks }
     }
 
-    pub fn into_tasks(self) -> Vec<Task> {
-        self.tasks
-    }
-
     pub fn tasks(&self) -> &[Task] {
         &self.tasks
     }

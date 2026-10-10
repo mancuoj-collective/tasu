@@ -127,11 +127,8 @@ impl Store {
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent).context("failed to create data directory")?;
         }
-        let schema = FileSchema {
-            tasks: board.tasks().to_vec(),
-        };
-        let json = serde_json::to_string_pretty(&schema).context("failed to serialize board")?;
-        atomic_write(&self.path, json.as_bytes())
+        let json = serialize(board).context("failed to serialize board")?;
+        atomic_write(&self.path, &json)
     }
 
     /// Read the raw board bytes, or `None` when the file is missing. The sync
@@ -212,6 +209,15 @@ pub fn board_from_bytes(bytes: &[u8]) -> Option<Board> {
         .map(|schema| Board::from_tasks(schema.tasks))
 }
 
+/// Serialize a board to the on-disk file shape. The one place that knows that
+/// layout, so `Store::save` and `merge_files` cannot drift apart.
+fn serialize(board: &Board) -> serde_json::Result<Vec<u8>> {
+    let schema = FileSchema {
+        tasks: board.tasks().to_vec(),
+    };
+    serde_json::to_vec_pretty(&schema)
+}
+
 /// Which side of a [`merge_files`] call could not be parsed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MergeSide {
@@ -223,15 +229,11 @@ pub enum MergeSide {
 /// matching tasks. Returns `Err` naming the unreadable side, so the caller can
 /// surface it instead of silently dropping that side's tasks.
 pub fn merge_files(base: &[u8], other: &[u8]) -> Result<Vec<u8>, MergeSide> {
-    let base: FileSchema = serde_json::from_slice(base).map_err(|_| MergeSide::Base)?;
-    let other: FileSchema = serde_json::from_slice(other).map_err(|_| MergeSide::Other)?;
-    let merged = Board::from_tasks(base.tasks).merged_with(&Board::from_tasks(other.tasks));
-    let schema = FileSchema {
-        tasks: merged.into_tasks(),
-    };
-    // Serializing our own schema cannot fail; label it as `Base` only so the
+    let base = board_from_bytes(base).ok_or(MergeSide::Base)?;
+    let other = board_from_bytes(other).ok_or(MergeSide::Other)?;
+    // Serializing our own board cannot fail; label it as `Base` only so the
     // type is total.
-    serde_json::to_vec_pretty(&schema).map_err(|_| MergeSide::Base)
+    serialize(&base.merged_with(&other)).map_err(|_| MergeSide::Base)
 }
 
 #[cfg(test)]
