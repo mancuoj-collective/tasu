@@ -116,8 +116,12 @@ impl Board {
         }
         match self.tasks.get_mut(index) {
             Some(task) => {
-                task.title = title;
-                task.updated_at = Some(now);
+                // Only a real change is a change: re-saving an unchanged title
+                // must not bump the merge order (or force a commit).
+                if task.title != title {
+                    task.title = title;
+                    task.updated_at = Some(now);
+                }
                 true
             }
             None => false,
@@ -314,6 +318,13 @@ mod tests {
         assert_eq!(board.task(0).unwrap().title, "keep me");
         assert!(board.rename(0, "renamed", at(2026, 10, 6)));
         assert_eq!(board.task(0).unwrap().title, "renamed");
+    }
+
+    #[test]
+    fn renaming_to_the_same_title_does_not_bump_the_change_time() {
+        let mut board = Board::from_tasks(vec![Task::new("same", at(2026, 10, 5))]);
+        assert!(board.rename(0, "same", at(2026, 10, 6)));
+        assert_eq!(board.task(0).unwrap().updated_at, None);
     }
 
     #[test]
