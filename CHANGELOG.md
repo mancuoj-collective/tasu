@@ -14,6 +14,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `tasu remote` only clears the configured remote when the probe fails
+  definitively (missing repository or bad credentials); a transient network
+  failure now leaves the current remote in place.
 - `tasu add` / `done` / `drop` / `move` no longer print a warning when their
   best-effort pull fails offline; run `tasu sync` to see the error.
 - A failed save is no longer marked for pushing, so a stale board is never
