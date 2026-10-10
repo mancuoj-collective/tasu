@@ -148,12 +148,16 @@ impl Runtime {
             match effect {
                 Effect::Save => {
                     match self.store.save(&model.board) {
-                        Ok(()) => model.ui.error = None,
+                        Ok(()) => {
+                            model.ui.error = None;
+                            // Only a save that actually reached disk may be
+                            // pushed; otherwise we would publish a stale board.
+                            self.dirty = true;
+                            self.last_change = Instant::now();
+                        }
                         Err(err) => model.ui.error = Some(format!("could not save: {err}")),
                     }
                     self.sync_mtime();
-                    self.dirty = true;
-                    self.last_change = Instant::now();
                 }
                 Effect::Quit => {
                     model.should_quit = true;

@@ -8,6 +8,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A failed save is no longer marked for pushing, so a stale board is never
+  published to the remote.
 - A rename is no longer lost when two machines diverge: each task now carries a
   last-changed time, used to order a merge (a rename moved no other field, so it
   could never win a tie before).
