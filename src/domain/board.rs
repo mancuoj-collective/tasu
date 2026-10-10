@@ -90,9 +90,23 @@ impl Board {
     }
 
     /// Add a task to `Today`. Returns its index.
+    ///
+    /// `created_at` is the task identity, so two tasks must never share an
+    /// instant: the caller's `now` is nudged forward by a nanosecond until it
+    /// is unique. Otherwise a bulk add (or two adds on a coarse clock) would
+    /// silently collapse into one task on the next merge.
     pub fn add(&mut self, title: impl Into<String>, now: DateTime<Local>) -> usize {
-        self.tasks.push(Task::new(title, now));
+        let created = self.unique_instant(now);
+        self.tasks.push(Task::new(title, created));
         self.tasks.len() - 1
+    }
+
+    fn unique_instant(&self, mut now: DateTime<Local>) -> DateTime<Local> {
+        let step = chrono::TimeDelta::nanoseconds(1);
+        while self.tasks.iter().any(|task| task.created_at == now) {
+            now += step;
+        }
+        now
     }
 
     pub fn rename(&mut self, index: usize, title: impl Into<String>) -> bool {
@@ -349,14 +363,29 @@ mod tests {
     #[test]
     fn dedup_collapses_same_instant_copies() {
         // Two copies of one task at the same instant (an older sync could leave
-        // this) collapse to the further-along one.
-        let mut board = Board::new();
-        board.add("dup", at(2026, 10, 5));
-        board.add("dup", at(2026, 10, 5));
+        // this) collapse to the further-along one. Built directly, because
+        // `add` now guarantees distinct instants.
+        let mut board = Board::from_tasks(vec![
+            Task::new("dup", at(2026, 10, 5)),
+            Task::new("dup", at(2026, 10, 5)),
+        ]);
         board.complete(1, at(2026, 10, 6));
         board.dedup();
         assert_eq!(board.len(), 1);
         assert_eq!(board.task(0).unwrap().state, TaskState::Done);
+    }
+
+    #[test]
+    fn add_never_reuses_an_instant() {
+        let mut board = Board::new();
+        board.add("one", at(2026, 10, 5));
+        board.add("two", at(2026, 10, 5));
+        assert_ne!(
+            board.task(0).unwrap().created_at,
+            board.task(1).unwrap().created_at
+        );
+        board.dedup();
+        assert_eq!(board.len(), 2, "distinct instants must not collapse");
     }
 
     #[test]
