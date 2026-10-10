@@ -174,13 +174,13 @@ impl Model {
         };
         let mut target = position as i32 + delta;
         while (0..Self::BUCKETS.len() as i32).contains(&target) {
-            let indices = self.board.open_in(Self::BUCKETS[target as usize]);
-            if !indices.is_empty() {
+            let count = self.board.open_count(Self::BUCKETS[target as usize]);
+            if count > 0 {
                 let base: usize = Self::BUCKETS[..target as usize]
                     .iter()
-                    .map(|bucket| self.board.open_in(*bucket).len())
+                    .map(|bucket| self.board.open_count(*bucket))
                     .sum();
-                self.ui.cursor = base + local.min(indices.len() - 1);
+                self.ui.cursor = base + local.min(count - 1);
                 return;
             }
             target += delta;
@@ -191,7 +191,7 @@ impl Model {
     fn cursor_bucket_position(&self) -> Option<(usize, usize)> {
         let mut remaining = self.ui.cursor;
         for (position, bucket) in Self::BUCKETS.iter().enumerate() {
-            let len = self.board.open_in(*bucket).len();
+            let len = self.board.open_count(*bucket);
             if remaining < len {
                 return Some((position, remaining));
             }

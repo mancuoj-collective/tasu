@@ -220,6 +220,15 @@ impl Board {
         )
     }
 
+    /// Number of open tasks in a bucket, without building the index list. The
+    /// cursor math only needs the count, and this keeps it allocation-free.
+    pub fn open_count(&self, bucket: Bucket) -> usize {
+        self.tasks
+            .iter()
+            .filter(|task| task.state == TaskState::Open && task.bucket == bucket)
+            .count()
+    }
+
     /// Completed tasks, most recently completed first.
     pub fn done(&self) -> Vec<usize> {
         self.indices_newest_first(
