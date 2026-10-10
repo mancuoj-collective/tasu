@@ -284,8 +284,11 @@ atomic write path shared with the app.
   Git config (`tasu.remote`): it runs once per remote, not on every launch.
 - **First-connect merge**: when the local and remote boards both exist, the graft
   path calls `store::merge_files` to merge them task by task instead of letting
-  the local side overwrite the remote. If one side is missing it is kept as is.
-  After the merge, normal single-writer pull/push resumes.
+  the local side overwrite the remote. The merge runs **before** the remote's
+  tree is adopted (`git reset --hard`), so a board that cannot be read returns an
+  error with the local files — `todos.json` included — still untouched. If one
+  side is missing it is kept as is. After the merge, normal single-writer
+  pull/push resumes.
 - **Error classification**: `sync::Failure::classify` maps git's stderr to
   `NotFound` / `Auth` / `Network` / `Other`, shared by the `tasu remote`
   message and the in-app footer.

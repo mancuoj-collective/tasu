@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Connecting to a remote can no longer lose the local board when the merge
+  fails. The first-connect graft now reads both boards and merges them *before*
+  it adopts the remote's tree, so a board that cannot be read leaves the local
+  files untouched instead of having them reset away first.
+
 ## [0.14.0] - 2026-10-11
 
 ### Fixed

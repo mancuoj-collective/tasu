@@ -248,11 +248,10 @@ fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), String> {
     }
 
     // Existing local data (first machine, or a remote that already has a
-    // README). The local board is kept aside, the remote's history is adopted,
-    // then the board is committed on top and pushed. No unrelated-history merge,
-    // which proved unreliable across git builds.
-    let local_board = board_store(repo).read_bytes();
-
+    // README). The remote's history is adopted, the boards are merged, then the
+    // result is committed on top and pushed. No unrelated-history merge, which
+    // proved unreliable across git builds.
+    //
     // Name the branch before the first commit: `git init` alone would use the
     // host's default (e.g. `master`), splitting the remote into two branches.
     let branch = target_branch(url);
@@ -261,8 +260,7 @@ fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), String> {
     let _ = git(repo, &["remote", "add", "origin", url]);
 
     // Fetch the remote's current tip into a private ref, independent of
-    // remote-tracking branches (which are not always created), then adopt its
-    // tree as the base.
+    // remote-tracking branches (which are not always created).
     let fetched = git(
         repo,
         &[
@@ -278,18 +276,19 @@ fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), String> {
             &["fetch", "--quiet", "origin", "+HEAD:refs/tasu/remote"],
         )
         .is_ok();
-    if fetched {
-        let _ = git(repo, &["reset", "--hard", "refs/tasu/remote"]);
-    }
 
-    // The remote may already carry a board. When both sides have one, union them
-    // so connecting a remote never silently drops the other machine's tasks;
-    // otherwise keep whichever side has data.
+    // Read both boards and merge them **before** the working tree is touched.
+    // The remote may already carry a board; when both sides have one they are
+    // unioned so connecting a remote never silently drops the other machine's
+    // tasks, otherwise the side that has data is kept. If a board cannot be
+    // read, the merge errors and we return with the local files — `todos.json`
+    // included — exactly as they were, because nothing has been reset yet.
     let remote_board = if fetched {
         git_bytes(repo, &["show", "refs/tasu/remote:todos.json"])
     } else {
         None
     };
+    let local_board = board_store(repo).read_bytes();
     let board = match (local_board, remote_board) {
         (Some(local), Some(remote)) => Some(
             crate::store::merge_files(&local, &remote)
@@ -298,6 +297,13 @@ fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), String> {
         (board, None) => board,
         (None, board) => board,
     };
+
+    // The merge succeeded, so it is safe to adopt the remote's tree. The board
+    // is written back on top of it, so the merged result — not the remote's
+    // board — is what gets committed.
+    if fetched {
+        let _ = git(repo, &["reset", "--hard", "refs/tasu/remote"]);
+    }
     if let Some(bytes) = board.filter(|bytes| !bytes.is_empty()) {
         board_store(repo)
             .write_bytes(&bytes)
@@ -1217,6 +1223,44 @@ mod tests {
             .iter()
             .map(|task| task.title.clone())
             .collect()
+    }
+
+    #[test]
+    fn a_failed_graft_merge_leaves_the_local_board_in_place() {
+        // Regression: the graft used to `reset --hard` to the remote's tree
+        // *before* merging, so a board that could not be read took the local
+        // board down with it. The merge must happen first, while the local files
+        // are still untouched.
+        let dir = tempfile::tempdir().unwrap();
+        let remote = bare_remote(dir.path());
+
+        // The remote carries a `todos.json` that is not a board at all.
+        let seed = dir.path().join("seed");
+        std::fs::create_dir_all(&seed).unwrap();
+        std::fs::write(seed.join("todos.json"), "{ not a board").unwrap();
+        git(&seed, &["init", "-q", "-b", "main"]).unwrap();
+        commit(&seed, "seed");
+        git(&seed, &["remote", "add", "origin", &remote]).unwrap();
+        git(&seed, &["push", "-q", "origin", "main"]).unwrap();
+        let _ = Command::new("git")
+            .arg("--git-dir")
+            .arg(&remote)
+            .args(["symbolic-ref", "HEAD", "refs/heads/main"])
+            .status();
+
+        // A local machine with a real board that must survive the failure.
+        let data = dir.path().join("data");
+        std::fs::create_dir_all(&data).unwrap();
+        write_board(&data, &[("keep me", 5)]);
+
+        let err = ensure_repo(&data, Some(&remote)).unwrap_err();
+        assert!(err.contains("could not be read"), "{err}");
+
+        let titles = board_titles(&data);
+        assert!(
+            titles.iter().any(|title| title == "keep me"),
+            "the local board was lost: {titles:?}"
+        );
     }
 
     #[test]
