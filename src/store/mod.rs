@@ -179,12 +179,15 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
         std::process::id(),
     ));
     fs::write(&tmp, bytes).context("failed to write temporary file")?;
-    if fs::rename(&tmp, path).is_ok() {
-        return Ok(());
+    // Never delete the destination first: a failed rename must leave the previous
+    // board intact, not open a window with no `todos.json` at all. `fs::rename`
+    // already replaces an existing file on Windows (`MOVEFILE_REPLACE_EXISTING`),
+    // so the old remove-then-rename fallback was both unnecessary and lossy.
+    if let Err(err) = fs::rename(&tmp, path) {
+        let _ = fs::remove_file(&tmp);
+        return Err(err).context("failed to replace board file");
     }
-    // Windows cannot rename over an existing file.
-    let _ = fs::remove_file(path);
-    fs::rename(&tmp, path).context("failed to replace board file")
+    Ok(())
 }
 
 /// Parse raw board bytes, for a caller that merges a board read elsewhere (the
