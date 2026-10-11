@@ -14,23 +14,51 @@ pub(super) fn wrap_text(text: &str, width: usize) -> Vec<String> {
 
     for paragraph in text.split('\n') {
         let mut line = String::new();
+        // Display width of `line`, tracked incrementally instead of re-measuring
+        // the growing string for every atom: `full` counts trailing spaces,
+        // `trimmed` does not.
+        let mut full = 0usize;
+        let mut trimmed = 0usize;
         for atom in atoms(paragraph) {
-            if !line.is_empty() && format!("{line}{atom}").trim_end().width() > width {
+            // Appending a non-blank atom makes the line's trailing spaces count;
+            // appending only blanks leaves the trimmed width alone.
+            let atom_content = atom.trim_end().width();
+            let combined = if atom_content == 0 {
+                trimmed
+            } else {
+                full + atom_content
+            };
+            if !line.is_empty() && combined > width {
                 out.push(std::mem::take(&mut line));
+                full = 0;
+                trimmed = 0;
             }
             let mut rest = atom.as_str();
             while !rest.is_empty() {
-                let room = width.saturating_sub(line.trim_end().width());
+                let room = width.saturating_sub(trimmed);
                 if room == 0 {
                     out.push(std::mem::take(&mut line));
+                    full = 0;
+                    trimmed = 0;
                     continue;
                 }
                 let (chunk, tail) = split_at_width(rest, room);
+                let chunk_width = chunk.width();
+                let chunk_trim = chunk.trim_end().width();
+                full += chunk_width;
+                // A chunk with content turns any previous trailing spaces into
+                // interior ones, so the trimmed width is the new full width
+                // minus this chunk's own trailing spaces.
+                if chunk_trim > 0 {
+                    trimmed = full - (chunk_width - chunk_trim);
+                }
                 line.push_str(&chunk);
                 rest = tail;
                 if !rest.is_empty() {
                     // The chunk filled the line; flush before continuing.
                     out.push(std::mem::take(&mut line));
+                    full = 0;
+                    trimmed = 0;
                 }
             }
         }
@@ -144,5 +172,14 @@ mod tests {
     #[test]
     fn empty_text_still_yields_one_line() {
         assert_eq!(wrap_text("", 10), vec![String::new()]);
+    }
+
+    #[test]
+    fn a_trailing_space_counts_when_the_next_word_would_overflow() {
+        // "foo bar" is 7 cells; at width 6 it must wrap even though the
+        // non-blank widths (3 + 3) would fit, because the space counts.
+        let lines = wrap_text("foo bar", 6);
+        assert_eq!(trimmed(&lines), vec!["foo", "bar"]);
+        assert!(widths(&lines).iter().all(|&w| w <= 6), "{lines:?}");
     }
 }
