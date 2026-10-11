@@ -86,8 +86,9 @@ pub(super) fn text(repo: &Path, args: &[&str]) -> Option<String> {
 }
 
 /// Run a network-bound command with a deadline, killing it if it overruns, and
-/// return its stdout. Only for small outputs (`ls-remote`, `push --quiet`), since
-/// the pipes are read after the process exits.
+/// return its stdout. The pipes are drained on their own threads while the
+/// deadline is enforced, so a command that writes more than the pipe buffer
+/// cannot block on the write and be killed as if it had timed out.
 pub(super) fn bounded(cmd: &mut Command, timeout: Duration) -> Result<String, Error> {
     let mut child = cmd
         .stdin(Stdio::null())
@@ -96,18 +97,25 @@ pub(super) fn bounded(cmd: &mut Command, timeout: Duration) -> Result<String, Er
         .spawn()
         .map_err(|err| Error::io(err.to_string()))?;
 
+    let mut stdout = child.stdout.take().expect("stdout was piped");
+    let mut stderr = child.stderr.take().expect("stderr was piped");
+    let out_reader = thread::spawn(move || {
+        let mut text = String::new();
+        let _ = stdout.read_to_string(&mut text);
+        text
+    });
+    let err_reader = thread::spawn(move || {
+        let mut text = String::new();
+        let _ = stderr.read_to_string(&mut text);
+        text
+    });
+
     let deadline = Instant::now() + timeout;
     loop {
         match child.try_wait() {
             Ok(Some(status)) => {
-                let mut stdout = String::new();
-                let mut stderr = String::new();
-                if let Some(mut out) = child.stdout.take() {
-                    let _ = out.read_to_string(&mut stdout);
-                }
-                if let Some(mut err) = child.stderr.take() {
-                    let _ = err.read_to_string(&mut stderr);
-                }
+                let stdout = out_reader.join().unwrap_or_default();
+                let stderr = err_reader.join().unwrap_or_default();
                 if status.success() {
                     return Ok(stdout);
                 }
@@ -122,6 +130,8 @@ pub(super) fn bounded(cmd: &mut Command, timeout: Duration) -> Result<String, Er
                 if Instant::now() >= deadline {
                     let _ = child.kill();
                     let _ = child.wait();
+                    let _ = out_reader.join();
+                    let _ = err_reader.join();
                     return Err(Error::new("git command timed out"));
                 }
                 thread::sleep(Duration::from_millis(50));
