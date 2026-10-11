@@ -157,7 +157,7 @@ fn board_damage_line(model: &Model, theme: &Theme, width: u16) -> Option<Line<'s
     let problem = model.ui.board_damage.as_ref()?;
     let text = problem_text(problem);
     Some(Line::from(Span::styled(
-        components::truncate(&text, width as usize),
+        text::truncate(&text, width as usize),
         theme.warn(),
     )))
 }

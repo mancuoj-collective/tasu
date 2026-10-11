@@ -1,10 +1,11 @@
 use chrono::{DateTime, Datelike, Local, NaiveDate};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
-use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+use unicode_width::UnicodeWidthStr;
 
 use crate::domain::{Bucket, Task, TaskState};
 
+use super::text::truncate;
 use super::theme::Theme;
 
 /// A task row: indent, marker, title. The title is truncated with an ellipsis
@@ -30,30 +31,6 @@ pub fn task_line(task: &Task, theme: &Theme, width: u16) -> Line<'static> {
         Span::styled(format!("{mark} "), mark_style),
         Span::styled(title, title_style),
     ])
-}
-
-/// Cut `text` to at most `max` display columns, marking the cut with `…`.
-/// Shared with the footer, which must truncate a possibly non-ASCII error by
-/// width, not by character count.
-pub(crate) fn truncate(text: &str, max: usize) -> String {
-    if text.width() <= max {
-        return text.to_string();
-    }
-    if max <= 1 {
-        return "\u{2026}".to_string();
-    }
-    let mut out = String::new();
-    let mut used = 0;
-    for ch in text.chars() {
-        let width = ch.width().unwrap_or(0);
-        if used + width > max - 1 {
-            break;
-        }
-        used += width;
-        out.push(ch);
-    }
-    out.push('\u{2026}');
-    out
 }
 
 /// Two lines that open a section: a label (with the ISO week for `THIS WEEK`),
@@ -108,33 +85,4 @@ fn week_meta(now: DateTime<Local>) -> String {
         .map(|day| day.iso_week().week())
         .unwrap_or(current);
     format!("{current}/{last}")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::truncate;
-    use unicode_width::UnicodeWidthStr;
-
-    #[test]
-    fn short_text_is_untouched() {
-        assert_eq!(truncate("hello", 10), "hello");
-    }
-
-    #[test]
-    fn long_text_is_cut_with_an_ellipsis() {
-        assert_eq!(truncate("hello world", 5), "hell\u{2026}");
-        assert_eq!(truncate("你好世界", 5), "你好\u{2026}");
-    }
-
-    #[test]
-    fn truncation_never_exceeds_the_budget() {
-        for text in ["hello world", "你好世界", "a b c d e f"] {
-            for max in 1..=8 {
-                assert!(
-                    truncate(text, max).width() <= max,
-                    "truncate({text:?}, {max}) overflowed"
-                );
-            }
-        }
-    }
 }

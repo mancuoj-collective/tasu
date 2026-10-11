@@ -1,5 +1,5 @@
-//! Plain-text wrapping for the overlays. Pure: every function takes text and a
-//! width in display cells and returns the pieces.
+//! Plain-text layout for the UI: wrapping and truncation to display cells.
+//! Pure: every function takes text and a width and returns the pieces.
 
 use ratatui::{
     layout::Alignment,
@@ -112,6 +112,35 @@ fn split_at_width(text: &str, width: usize) -> (String, &str) {
     (text[..end].to_string(), &text[end..])
 }
 
+/// Cut `text` to at most `max` display columns, marking the cut with `…`.
+/// Shared by the task rows and the footer, which must truncate a possibly
+/// non-ASCII string by width, not by character count.
+pub(crate) fn truncate(text: &str, max: usize) -> String {
+    if text.width() <= max {
+        return text.to_string();
+    }
+    // An ellipsis needs a cell of its own; with no room, return nothing rather
+    // than a one-cell `…` that overflows the budget.
+    if max == 0 {
+        return String::new();
+    }
+    if max == 1 {
+        return "\u{2026}".to_string();
+    }
+    let mut out = String::new();
+    let mut used = 0;
+    for ch in text.chars() {
+        let width = ch.width().unwrap_or(0);
+        if used + width > max - 1 {
+            break;
+        }
+        used += width;
+        out.push(ch);
+    }
+    out.push('\u{2026}');
+    out
+}
+
 /// Append a labelled, wrapped block to `lines`. The first line begins with
 /// `prefix`; continuation lines are indented under it. Long tokens without
 /// spaces (paths, URLs) are hard-broken, so nothing is ever cut off.
@@ -146,7 +175,7 @@ pub(super) fn push_block(
 
 #[cfg(test)]
 mod tests {
-    use super::wrap_text;
+    use super::{truncate, wrap_text};
     use unicode_width::UnicodeWidthStr;
 
     fn widths(lines: &[String]) -> Vec<usize> {
@@ -218,5 +247,28 @@ mod tests {
         let lines = wrap_text("foo bar", 6);
         assert_eq!(trimmed(&lines), vec!["foo", "bar"]);
         assert!(widths(&lines).iter().all(|&w| w <= 6), "{lines:?}");
+    }
+
+    #[test]
+    fn short_text_is_untouched() {
+        assert_eq!(truncate("hello", 10), "hello");
+    }
+
+    #[test]
+    fn long_text_is_cut_with_an_ellipsis() {
+        assert_eq!(truncate("hello world", 5), "hell\u{2026}");
+        assert_eq!(truncate("你好世界", 5), "你好\u{2026}");
+    }
+
+    #[test]
+    fn truncation_never_exceeds_the_budget() {
+        for text in ["hello world", "你好世界", "a b c d e f"] {
+            for max in 0..=8 {
+                assert!(
+                    truncate(text, max).width() <= max,
+                    "truncate({text:?}, {max}) overflowed"
+                );
+            }
+        }
     }
 }
