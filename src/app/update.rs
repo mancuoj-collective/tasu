@@ -7,7 +7,7 @@ use tui_input::backend::crossterm::EventHandler;
 use crate::domain::settle;
 
 use super::action::{Action, Effect};
-use super::model::{HistoryView, Mode, Model};
+use super::model::{HistoryView, Mode, Model, Problem};
 
 /// The toast lingers this long before a `Tick` clears it.
 const TOAST_TTL: Duration = Duration::from_secs(3);
@@ -176,6 +176,7 @@ fn editing(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effect
             if title.is_empty() {
                 return Vec::new();
             }
+            let mut changed = true;
             match model.ui.mode {
                 Mode::Add => {
                     model.board.add(title, now);
@@ -183,14 +184,28 @@ fn editing(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effect
                     model.set_toast("saved to today");
                 }
                 Mode::Edit => {
-                    if let Some(target) = model.ui.edit_target
-                        && let Some(index) = model
+                    let target = model.ui.edit_target;
+                    let index = target.and_then(|created| {
+                        model
                             .board
                             .tasks()
                             .iter()
-                            .position(|task| task.created_at == target)
-                    {
-                        model.board.rename(index, title, now);
+                            .position(|task| task.created_at == created)
+                    });
+                    match index {
+                        Some(index) => {
+                            model.board.rename(index, title, now);
+                        }
+                        None => {
+                            // The task the editor opened is gone (a reload
+                            // replaced it). Say so rather than dropping the
+                            // typed title with no hint.
+                            model.ui.error = Some(Problem::new(
+                                "edit target gone",
+                                "the task was replaced before the rename was applied",
+                            ));
+                            changed = false;
+                        }
                     }
                 }
                 _ => {}
@@ -199,7 +214,11 @@ fn editing(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effect
             model.ui.edit_target = None;
             model.ui.mode = Mode::Normal;
             model.clamp_cursor();
-            vec![Effect::Save]
+            if changed {
+                vec![Effect::Save]
+            } else {
+                Vec::new()
+            }
         }
         KeyCode::Esc => {
             model.ui.input.reset();
@@ -593,6 +612,37 @@ mod tests {
         assert!(
             model.ui.board_damage.is_none(),
             "a reloaded healthy board must clear the stale problem"
+        );
+    }
+
+    #[test]
+    fn renaming_a_task_a_reload_removed_is_reported_not_dropped() {
+        let mut model = model();
+        model.board.add("target", at(2026, 10, 5));
+
+        update(&mut model, press(KeyCode::Char('e')), at(2026, 10, 5));
+        assert_eq!(model.ui.mode, Mode::Edit);
+
+        // A reload replaces the board without the task the editor opened.
+        let mut reloaded = crate::domain::Board::new();
+        reloaded.add("different", at(2026, 10, 6));
+        update(
+            &mut model,
+            Action::Reload {
+                board: reloaded,
+                damaged: None,
+            },
+            at(2026, 10, 6),
+        );
+
+        model.ui.input = tui_input::Input::new("renamed".to_string());
+        let effects = update(&mut model, press(KeyCode::Enter), at(2026, 10, 6));
+
+        assert!(effects.is_empty(), "nothing changed, so nothing to save");
+        assert_eq!(model.ui.mode, Mode::Normal);
+        assert!(
+            model.ui.error.is_some(),
+            "the vanished edit target must be reported, not dropped silently"
         );
     }
 }
