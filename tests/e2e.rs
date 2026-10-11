@@ -614,6 +614,28 @@ fn an_external_write_is_reloaded() {
 }
 
 #[test]
+fn a_clean_quit_does_not_rewrite_the_board() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = Config {
+        data_dir: dir.path().to_path_buf(),
+        remote: None,
+    };
+    let mut runtime = Runtime::new(&config);
+    let mut model = Model::new(runtime.load_board(dt(5)).board, dt(5));
+
+    // Save once, so the board is on disk.
+    runtime.apply(&mut model, vec![Effect::Save]);
+    let path = config.board_path();
+    let before = std::fs::metadata(&path).unwrap().modified().unwrap();
+
+    // A clean quit must not touch the file.
+    runtime.apply(&mut model, vec![Effect::Quit]);
+    let after = std::fs::metadata(&path).unwrap().modified().unwrap();
+    assert_eq!(before, after, "a clean quit must not rewrite the board");
+    assert!(runtime.quit_error().is_none());
+}
+
+#[test]
 fn a_corrupt_board_is_reported_and_its_backup_is_readable() {
     let dir = tempfile::tempdir().unwrap();
     let config = Config {

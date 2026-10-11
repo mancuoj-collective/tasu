@@ -23,6 +23,10 @@ pub struct Runtime {
     sync: Option<Sync>,
     tracker: SyncTracker,
     last_mtime: Option<SystemTime>,
+    /// A board change that did not reach disk (a failed save). Quit retries it;
+    /// otherwise the final save is skipped, so a clean quit does not rewrite an
+    /// unchanged board.
+    unsaved: bool,
     /// A save that failed while quitting. The terminal is already leaving the
     /// alternate screen by then, so the caller reports it after the UI closes.
     quit_error: Option<String>,
@@ -39,6 +43,7 @@ impl Runtime {
             tracker: SyncTracker::new(sync.is_some(), Instant::now()),
             sync,
             last_mtime: None,
+            unsaved: false,
             quit_error: None,
         }
     }
@@ -106,6 +111,7 @@ impl Runtime {
                         Ok(()) => {
                             model.ui.error = None;
                             model.ui.board_damage = None;
+                            self.unsaved = false;
                             // Only a save that actually reached disk may be
                             // pushed; otherwise we would publish a stale board.
                             self.tracker.changed(Instant::now());
@@ -114,15 +120,23 @@ impl Runtime {
                             // The whole chain, so the details overlay shows the
                             // cause and not only the outermost context.
                             model.ui.error =
-                                Some(Problem::new("could not save", format!("{err:#}")))
+                                Some(Problem::new("could not save", format!("{err:#}")));
+                            self.unsaved = true;
                         }
                     }
                     self.sync_mtime();
                 }
                 Effect::Quit => {
                     model.should_quit = true;
-                    if let Err(err) = self.store.save(&model.board) {
-                        self.quit_error = Some(format!("could not save the board: {err}"));
+                    // Only retry when something did not reach disk; a clean quit
+                    // must not rewrite an unchanged board.
+                    if self.unsaved {
+                        match self.store.save(&model.board) {
+                            Ok(()) => self.unsaved = false,
+                            Err(err) => {
+                                self.quit_error = Some(format!("could not save the board: {err}"));
+                            }
+                        }
                     }
                 }
             }
