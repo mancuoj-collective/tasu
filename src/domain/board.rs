@@ -110,22 +110,23 @@ impl Board {
         now
     }
 
+    /// Rename the task at `index`. Returns whether the title actually changed, so
+    /// it reads the same as every other mutator: a blank title or an unchanged
+    /// one is a no-op and returns `false`.
     pub fn rename(&mut self, index: usize, title: impl Into<String>, now: DateTime<Local>) -> bool {
         let title = title.into();
         if title.trim().is_empty() {
             return false;
         }
         match self.tasks.get_mut(index) {
-            Some(task) => {
-                // Only a real change is a change: re-saving an unchanged title
-                // must not bump the merge order (or force a commit).
-                if task.title != title {
-                    task.title = title;
-                    task.updated_at = Some(now);
-                }
+            // Only a real change is a change: re-saving an unchanged title must
+            // not bump the merge order (or force a commit).
+            Some(task) if task.title != title => {
+                task.title = title;
+                task.updated_at = Some(now);
                 true
             }
-            None => false,
+            _ => false,
         }
     }
 
@@ -333,7 +334,10 @@ mod tests {
     #[test]
     fn renaming_to_the_same_title_does_not_bump_the_change_time() {
         let mut board = Board::from_tasks(vec![Task::new("same", at(2026, 10, 5))]);
-        assert!(board.rename(0, "same", at(2026, 10, 6)));
+        assert!(
+            !board.rename(0, "same", at(2026, 10, 6)),
+            "renaming to the same title is not a change"
+        );
         assert_eq!(board.task(0).unwrap().updated_at, None);
     }
 
