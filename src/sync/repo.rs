@@ -36,7 +36,7 @@ pub(super) fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), Error
         return Ok(());
     };
 
-    std::fs::create_dir_all(repo).map_err(|err| Error::new(err.to_string()))?;
+    std::fs::create_dir_all(repo).map_err(|err| Error::io(err.to_string()))?;
     if is_empty_dir(repo) {
         clone(url, repo)?;
         return adopt_clone(repo, url);
@@ -117,7 +117,7 @@ fn graft(repo: &Path, url: &str) -> Result<(), Error> {
     let board = match (local_board, remote_board) {
         (Some(local), Some(remote)) => Some(
             merge_files(&local, &remote)
-                .map_err(|side| Error::new(unreadable_board(side, "local", "remote")))?,
+                .map_err(|side| Error::io(unreadable_board(side, "local", "remote")))?,
         ),
         (board, None) => board,
         (None, board) => board,
@@ -132,7 +132,7 @@ fn graft(repo: &Path, url: &str) -> Result<(), Error> {
     if let Some(bytes) = board.filter(|bytes| !bytes.is_empty()) {
         board_store(repo)
             .write_bytes(&bytes)
-            .map_err(|err| Error::new(err.to_string()))?;
+            .map_err(|err| Error::io(err.to_string()))?;
     }
     commit_all(repo, "tasu: local")?;
     mark_settled(repo, url)
@@ -322,7 +322,7 @@ pub(super) fn ensure_gitignore(repo: &Path) -> Result<(), Error> {
         Ok(text) => text,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => String::new(),
         Err(err) => {
-            return Err(Error::new(format!(
+            return Err(Error::io(format!(
                 "could not read {}: {err}",
                 path.display()
             )));
@@ -341,7 +341,7 @@ pub(super) fn ensure_gitignore(repo: &Path) -> Result<(), Error> {
     }
     if changed {
         std::fs::write(&path, &text)
-            .map_err(|err| Error::new(format!("could not write {}: {err}", path.display())))?;
+            .map_err(|err| Error::io(format!("could not write {}: {err}", path.display())))?;
     }
     Ok(())
 }

@@ -8,11 +8,23 @@ pub struct Error {
 }
 
 impl Error {
+    /// A git failure: the detail is git's stderr, classified into a kind so
+    /// callers can branch on the likely cause.
     pub fn new(detail: impl Into<String>) -> Self {
         let detail = detail.into();
         Self {
             kind: Failure::classify(&detail),
             detail,
+        }
+    }
+
+    /// A non-git failure (filesystem, a process that could not be spawned, a
+    /// stopped worker). Always `Other`, so a local I/O error that happens to say
+    /// "permission denied" is never mistaken for a git authentication problem.
+    pub fn io(detail: impl Into<String>) -> Self {
+        Self {
+            kind: Failure::Other,
+            detail: detail.into(),
         }
     }
 
@@ -127,5 +139,13 @@ mod tests {
             Failure::Network
         );
         assert_eq!(Failure::classify("something else"), Failure::Other);
+    }
+
+    #[test]
+    fn io_errors_are_not_mistaken_for_git_auth() {
+        // A local filesystem error that happens to mention "permission denied"
+        // must not be classified as a git credential problem.
+        let err = super::Error::io("could not create dir: Permission denied (os error 13)");
+        assert_eq!(err.kind(), Failure::Other);
     }
 }

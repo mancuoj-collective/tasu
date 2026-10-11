@@ -96,14 +96,14 @@ impl Sync {
     pub fn pull(&self) -> Result<(), Error> {
         self.jobs
             .send(Job::Pull)
-            .map_err(|_| Error::new("sync worker stopped"))
+            .map_err(|_| Error::io("sync worker stopped"))
     }
 
     /// Stage, commit and push. Debounced by the caller.
     pub fn commit_push(&self) -> Result<(), Error> {
         self.jobs
             .send(Job::CommitPush)
-            .map_err(|_| Error::new("sync worker stopped"))
+            .map_err(|_| Error::io("sync worker stopped"))
     }
 
     /// The next finished job, `Ok(None)` when the worker has nothing yet. A
@@ -113,7 +113,7 @@ impl Sync {
         match self.results.try_recv() {
             Ok(outcome) => Ok(Some(outcome)),
             Err(mpsc::TryRecvError::Empty) => Ok(None),
-            Err(mpsc::TryRecvError::Disconnected) => Err(Error::new("sync worker stopped")),
+            Err(mpsc::TryRecvError::Disconnected) => Err(Error::io("sync worker stopped")),
         }
     }
 
@@ -125,7 +125,7 @@ impl Sync {
         match self.init.try_recv() {
             Ok(result) => Ok(Some(result)),
             Err(mpsc::TryRecvError::Empty) => Ok(None),
-            Err(mpsc::TryRecvError::Disconnected) => Err(Error::new("sync worker stopped")),
+            Err(mpsc::TryRecvError::Disconnected) => Err(Error::io("sync worker stopped")),
         }
     }
 }
@@ -161,7 +161,7 @@ fn apply_pull(repo: &Path, pulled: Pulled) -> Result<Option<Damage>, Error> {
     let merged = remote.merged_with(&loaded.board);
     store
         .save(&merged)
-        .map_err(|err| Error::new(err.to_string()))?;
+        .map_err(|err| Error::io(err.to_string()))?;
     Ok(loaded.damaged)
 }
 
@@ -231,7 +231,7 @@ fn pull(repo: &Path, remote: Option<&str>) -> Result<Pulled, Error> {
 /// an error, never a silent empty list: that would drop a machine's tasks.
 fn parse_board(bytes: &[u8]) -> Result<Board, Error> {
     crate::store::board_from_bytes(bytes).ok_or_else(|| {
-        Error::new("the remote board could not be read; sync stopped to avoid dropping tasks")
+        Error::io("the remote board could not be read; sync stopped to avoid dropping tasks")
     })
 }
 

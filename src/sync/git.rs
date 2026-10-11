@@ -30,7 +30,7 @@ pub(super) fn in_repo(repo: &Path, args: &[&str]) -> Command {
 pub(super) fn run(repo: &Path, args: &[&str]) -> Result<(), Error> {
     let output = in_repo(repo, args)
         .output()
-        .map_err(|err| Error::new(err.to_string()))?;
+        .map_err(|err| Error::io(err.to_string()))?;
     if output.status.success() {
         return Ok(());
     }
@@ -70,7 +70,7 @@ pub(super) fn bounded(cmd: &mut Command, timeout: Duration) -> Result<String, Er
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|err| Error::new(err.to_string()))?;
+        .map_err(|err| Error::io(err.to_string()))?;
 
     let deadline = Instant::now() + timeout;
     loop {
@@ -102,7 +102,7 @@ pub(super) fn bounded(cmd: &mut Command, timeout: Duration) -> Result<String, Er
                 }
                 thread::sleep(Duration::from_millis(50));
             }
-            Err(err) => return Err(Error::new(err.to_string())),
+            Err(err) => return Err(Error::io(err.to_string())),
         }
     }
 }
