@@ -47,6 +47,8 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - name: Run clippy action
         uses: clechasseur/rs-clippy-check@v6.1.0
+        with:
+          args: --all-targets --all-features -- -D warnings
   doc:
     # run docs generation on nightly rather than stable. This enables features like
     # https://doc.rust-lang.org/beta/unstable-book/language-features/doc-cfg.html which allows an
@@ -69,7 +71,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       # if your project needs OpenSSL, uncomment this to fix Windows builds.
       # it's commented out by default as the install command takes 5-10m.
