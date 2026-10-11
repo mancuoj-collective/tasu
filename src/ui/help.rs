@@ -109,14 +109,40 @@ pub fn draw(f: &mut Frame, model: &Model, theme: &Theme, chrome: &Chrome) -> usi
     )
 }
 
-/// Abbreviate the home directory to `~`.
+/// Abbreviate the home directory to `~`. Only at a path boundary, so a sibling
+/// whose name merely starts with the home name (`/Users/alex` vs `/Users/al`)
+/// is not mangled into `~ex`.
 fn display_path(path: &Path) -> String {
     let text = path.display().to_string();
     if let Some(home) = dirs::home_dir() {
         let home = home.display().to_string();
-        if let Some(rest) = text.strip_prefix(&home) {
-            return format!("~{rest}");
+        if text == home {
+            return "~".to_string();
+        }
+        if let Some(rest) = text.strip_prefix(&format!("{home}/")) {
+            return format!("~/{rest}");
         }
     }
     text
+}
+
+#[cfg(test)]
+mod tests {
+    use super::display_path;
+    use std::path::Path;
+
+    #[test]
+    fn only_a_path_boundary_is_abbreviated() {
+        let home = dirs::home_dir().expect("a home directory");
+        assert_eq!(display_path(&home), "~");
+        assert_eq!(
+            display_path(&home.join("data/tasu.json")),
+            "~/data/tasu.json"
+        );
+
+        // A sibling whose name starts with the home name must be left alone.
+        let sibling = format!("{}-other/data", home.display());
+        let sibling = Path::new(&sibling);
+        assert_eq!(display_path(sibling), sibling.display().to_string());
+    }
 }
