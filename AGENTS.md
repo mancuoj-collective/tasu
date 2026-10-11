@@ -21,8 +21,9 @@ than hiding it.
 ## Engineering
 
 - **Tests travel with the change.** User-facing behaviour gets an end-to-end case
-  in `tests/e2e.rs`; pure logic gets a unit test; a visual change updates the
-  `insta` snapshots. Before committing run `cargo fmt`,
+  in `tests/tui.rs`, `tests/cli.rs` or `tests/sync.rs`; pure logic gets a unit
+  test; a visual change updates the `insta` snapshots. Before committing run
+  `cargo fmt`,
   `cargo clippy --all-targets --all-features -- -D warnings` and `cargo test`.
 - **No backwards compatibility.** Only the author runs tasu, so delete compat
   scaffolding (old config locations, schema versions, migration shims) instead of
