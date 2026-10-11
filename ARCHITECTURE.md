@@ -228,15 +228,16 @@ which is what separates "our write" from "an external one".
 - Toast: a brief `saved to today` after capture, gone after ~3 s, never
   stealing the cursor.
 - The footer's right side shows, in priority order: a write error, sync status
-  (a blinking dot while syncing, `✗ <reason> · run tasu sync` on failure), then
-  the toast. Sync failures live only here — the help overlay does not repeat
-  them — and never as a raw git dump; the full error is left to `tasu sync`.
-- A write error and a board that could not be read each keep a `Problem`
-  (`summary` + `detail`). The footer shows only the short `summary` with a
-  `· ! details` affordance, so a long IO error or backup path never crowds it
-  out; pressing `!` opens the details overlay, which wraps the full `detail`
-  (backup path included) and scrolls like help. `!` is inert when nothing is
-  wrong. Both clear on the next successful save.
+  (a blinking dot while syncing, `✗ <summary> · ! details` on failure), then
+  the toast. Every failure reads the same way.
+- Every failure — a write error, a board that could not be read, a sync
+  failure — keeps a `Problem` (`summary` + `detail`). The footer shows only the
+  short `summary` with a `· ! details` affordance, so a long IO error, a backup
+  path or a git dump never crowds it out; pressing `!` opens the details
+  overlay, which wraps the full `detail` and scrolls like help. `!` is inert
+  when nothing is wrong. A sync failure's overlay detail ends with the
+  `run tasu sync` retry hint. Every problem clears when its cause does (a
+  successful save, a successful sync).
 - When `todos.json` could not be read, the footer's **left** side replaces the
   key hints with the damage summary, so the sync status on the right stays
   visible.
@@ -333,8 +334,9 @@ channel rather than swallowed.
   side is missing it is kept as is. After the merge, normal single-writer
   pull/push resumes.
 - **Error classification**: `sync::Failure::classify` maps git's stderr to
-  `NotFound` / `Auth` / `Network` / `Other`, shared by the `tasu remote`
-  message and the in-app footer.
+  `NotFound` / `Auth` / `Network` / `Other`. `SyncTracker` keeps the classified
+  phrase as the footer summary and the whole git error as the details `detail`,
+  so the footer stays one line and `!` shows the rest.
 
 ## Testing
 
