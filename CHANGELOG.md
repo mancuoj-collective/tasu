@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-11
+
 ### Added
 
 - A failure shown in the footer — a write error, an unreadable board, or a
