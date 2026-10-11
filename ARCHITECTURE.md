@@ -213,7 +213,13 @@ which is what separates "our write" from "an external one".
   broken setup is shown in the footer instead of looking idle. The app never
   blocks on git. With no remote configured, no git process is ever started.
 - On exit the runtime saves and calls `flush`, a synchronous best-effort push,
-  so the last change is not lost when the process ends.
+  so the last change is not lost when the process ends. **Known race**: if a
+  worker job is still in flight when the process ends, the detached `tasu flush`
+  and the worker can touch the same repository at once (an index lock, or a
+  rejected push). The flush is best-effort and silent by design, so that failure
+  is not surfaced; the next launch's pull reconciles whatever the flush missed.
+  Fixing it would mean either blocking quit on the network or dropping an
+  in-flight push, so it is left as a documented limitation.
 - No tokio: one slow operation plus one poll is enough for std threads.
 
 ## UI contract
