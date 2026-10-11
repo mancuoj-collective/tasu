@@ -272,31 +272,34 @@ fn completed(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effe
 /// modal writes the clamped offset back after rendering, so these updates
 /// always start from a valid position.
 fn help(model: &mut Model, key: KeyEvent) -> Vec<Effect> {
-    let scroll = model.ui.overlay_scroll;
-    match key.code {
-        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('?') => {
-            model.ui.mode = Mode::Normal;
-            model.ui.overlay_scroll = 0;
-        }
-        KeyCode::Down | KeyCode::Char('j') => model.ui.overlay_scroll = scroll + 1,
-        KeyCode::Up | KeyCode::Char('k') => model.ui.overlay_scroll = scroll.saturating_sub(1),
-        _ => {}
-    }
-    Vec::new()
+    overlay(model, key, |code| {
+        matches!(code, KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('?'))
+    })
 }
 
 /// The details overlay: the full text of whatever went wrong, scrollable, closed
-/// the same way help is. Same scroll handling, since only one overlay is open.
+/// the same way help is.
 fn details(model: &mut Model, key: KeyEvent) -> Vec<Effect> {
+    overlay(model, key, |code| {
+        matches!(code, KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('!'))
+    })
+}
+
+/// Scroll (or close) whichever overlay is open. The two overlays differ only in
+/// their close key, so the handling lives in one place.
+fn overlay(model: &mut Model, key: KeyEvent, close: impl Fn(KeyCode) -> bool) -> Vec<Effect> {
     let scroll = model.ui.overlay_scroll;
-    match key.code {
-        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('!') => {
-            model.ui.mode = Mode::Normal;
-            model.ui.overlay_scroll = 0;
+    if close(key.code) {
+        model.ui.mode = Mode::Normal;
+        model.ui.overlay_scroll = 0;
+    } else {
+        match key.code {
+            KeyCode::Down | KeyCode::Char('j') => model.ui.overlay_scroll = scroll + 1,
+            KeyCode::Up | KeyCode::Char('k') => {
+                model.ui.overlay_scroll = scroll.saturating_sub(1);
+            }
+            _ => {}
         }
-        KeyCode::Down | KeyCode::Char('j') => model.ui.overlay_scroll = scroll + 1,
-        KeyCode::Up | KeyCode::Char('k') => model.ui.overlay_scroll = scroll.saturating_sub(1),
-        _ => {}
     }
     Vec::new()
 }
