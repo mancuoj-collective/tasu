@@ -192,9 +192,9 @@ fn hint_line(model: &Model, theme: &Theme) -> Line<'static> {
         if index > 0 {
             spans.push(Span::styled("  ", theme.disabled()));
         }
-        spans.push(Span::styled((*key).to_string(), key_style));
+        spans.push(Span::styled(*key, key_style));
         spans.push(Span::raw(" "));
-        spans.push(Span::styled((*label).to_string(), label_style));
+        spans.push(Span::styled(*label, label_style));
     }
     Line::from(spans)
 }
