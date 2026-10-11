@@ -29,11 +29,9 @@ pub fn update(model: &mut Model, action: Action, now: DateTime<Local>) -> Vec<Ef
         Action::Tick => tick(model, now),
         Action::Reload { board, damaged } => {
             model.board = board;
-            // A reloaded file that could not be parsed is empty; say so rather
-            // than letting the board appear to have vanished.
-            if let Some(problem) = damaged {
-                model.ui.board_damage = Some(problem);
-            }
+            // The file on disk is the truth: mirror the damage either way, so a
+            // reload of a healed board clears a stale "board unreadable" problem.
+            model.ui.board_damage = damaged;
             settle(&mut model.board, now);
             model.clamp_cursor();
             Vec::new()
@@ -573,5 +571,25 @@ mod tests {
             "the newer task is untouched: {titles:?}"
         );
         assert!(titles.contains(&"oldest"), "{titles:?}");
+    }
+
+    #[test]
+    fn a_clean_reload_clears_a_stale_damage_problem() {
+        let mut model = model();
+        model.ui.board_damage = Some(Problem::new("board unreadable", "old parse error"));
+
+        update(
+            &mut model,
+            Action::Reload {
+                board: crate::domain::Board::new(),
+                damaged: None,
+            },
+            at(2026, 10, 6),
+        );
+
+        assert!(
+            model.ui.board_damage.is_none(),
+            "a reloaded healthy board must clear the stale problem"
+        );
     }
 }
