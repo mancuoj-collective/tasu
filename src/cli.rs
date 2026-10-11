@@ -34,6 +34,15 @@ pub enum HistoryName {
     Dropped,
 }
 
+impl From<HistoryName> for crate::command::HistoryList {
+    fn from(value: HistoryName) -> Self {
+        match value {
+            HistoryName::Done => Self::Done,
+            HistoryName::Dropped => Self::Dropped,
+        }
+    }
+}
+
 #[derive(Debug, Subcommand)]
 pub enum Command {
     /// Add a task to today without opening the TUI.

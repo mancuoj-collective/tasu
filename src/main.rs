@@ -8,7 +8,7 @@ use clap::Parser;
 use crossterm::event;
 
 use tasu::app::{Action, Model, Problem, Runtime};
-use tasu::cli::{Cli, Command, HistoryName};
+use tasu::cli::{Cli, Command};
 use tasu::command;
 use tasu::config::Config;
 use tasu::domain::Bucket;
@@ -41,11 +41,8 @@ fn run() -> Result<()> {
         }
         Some(Command::History { view, json }) => command::history(
             &config,
-            match view {
-                None => command::HistoryList::Both,
-                Some(HistoryName::Done) => command::HistoryList::Done,
-                Some(HistoryName::Dropped) => command::HistoryList::Dropped,
-            },
+            view.map(command::HistoryList::from)
+                .unwrap_or(command::HistoryList::Both),
             json,
         ),
         Some(Command::Done { title }) => command::done(&config, &title),
