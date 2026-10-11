@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- The help overlay abbreviates the home directory on Windows as well as Unix.
+  The boundary check used a hard-coded `/`, so on Windows the `~` abbreviation
+  never applied.
+
 ## [0.16.0] - 2026-10-11
 
 ### Changed
