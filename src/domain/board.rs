@@ -14,8 +14,13 @@ impl Board {
         Self::default()
     }
 
+    /// Build a board from stored tasks. Deduplicates, so the `created_at`
+    /// identity invariant — the one `add` also upholds — holds for anything that
+    /// enters through here, instead of relying on each caller to call `dedup`.
     pub fn from_tasks(tasks: Vec<Task>) -> Self {
-        Self { tasks }
+        let mut board = Self { tasks };
+        board.dedup();
+        board
     }
 
     pub fn tasks(&self) -> &[Task] {
@@ -419,16 +424,29 @@ mod tests {
     #[test]
     fn dedup_collapses_same_instant_copies() {
         // Two copies of one task at the same instant (an older sync could leave
-        // this) collapse to the further-along one. Built directly, because
-        // `add` now guarantees distinct instants.
-        let mut board = Board::from_tasks(vec![
-            Task::new("dup", at(2026, 10, 5)),
-            Task::new("dup", at(2026, 10, 5)),
-        ]);
+        // this) collapse to the further-along one. Built directly, because both
+        // `add` and `from_tasks` now guarantee distinct instants.
+        let mut board = Board {
+            tasks: vec![
+                Task::new("dup", at(2026, 10, 5)),
+                Task::new("dup", at(2026, 10, 5)),
+            ],
+        };
         board.complete(1, at(2026, 10, 6));
         board.dedup();
         assert_eq!(board.len(), 1);
         assert_eq!(board.task(0).unwrap().state, TaskState::Done);
+    }
+
+    #[test]
+    fn from_tasks_collapses_duplicates() {
+        // The constructor upholds the identity invariant, so a caller cannot
+        // introduce two tasks with one creation time through it.
+        let board = Board::from_tasks(vec![
+            Task::new("dup", at(2026, 10, 5)),
+            Task::new("dup", at(2026, 10, 5)),
+        ]);
+        assert_eq!(board.len(), 1);
     }
 
     #[test]

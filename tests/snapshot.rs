@@ -39,12 +39,17 @@ fn task(title: &str, bucket: Bucket, since: DateTime<Local>) -> Task {
 }
 
 fn board() -> Board {
-    Board::from_tasks(vec![
+    let mut tasks = vec![
         task("Nand2Tetris chapter 6", Bucket::Today, dt(8)),
         task("learn GPUI events", Bucket::Today, dt(8)),
         task("write the README", Bucket::Week, dt(6)),
         task("read the ratatui source", Bucket::Later, dt(2)),
-    ])
+    ];
+    // `created_at` is the task identity, so the two Today tasks need distinct
+    // instants even though they share a bucket; only the newest-first order
+    // matters to the render.
+    tasks[1].created_at -= chrono::TimeDelta::nanoseconds(1);
+    Board::from_tasks(tasks)
 }
 
 #[test]

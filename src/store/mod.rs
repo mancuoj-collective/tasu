@@ -87,14 +87,10 @@ impl Store {
             }
         };
         match serde_json::from_str::<FileSchema>(&text) {
-            Ok(schema) => {
-                let mut board = Board::from_tasks(schema.tasks);
-                board.dedup();
-                Loaded {
-                    board,
-                    damaged: None,
-                }
-            }
+            Ok(schema) => Loaded {
+                board: Board::from_tasks(schema.tasks),
+                damaged: None,
+            },
             Err(err) => {
                 let reason = err.to_string();
                 let (backup, reason) = match self.backup() {
@@ -201,9 +197,7 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
 /// sync layer reads the remote copy). `None` when the bytes are not a board.
 pub fn board_from_bytes(bytes: &[u8]) -> Option<Board> {
     let schema = serde_json::from_slice::<FileSchema>(bytes).ok()?;
-    let mut board = Board::from_tasks(schema.tasks);
-    board.dedup();
-    Some(board)
+    Some(Board::from_tasks(schema.tasks))
 }
 
 /// Serialize a board to the on-disk file shape. The one place that knows that
