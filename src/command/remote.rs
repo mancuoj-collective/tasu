@@ -6,7 +6,7 @@ use std::io::IsTerminal;
 use anyhow::Result;
 
 use crate::config::Config;
-use crate::sync::{self, Failure};
+use crate::sync::{self, Kind};
 
 /// `tasu remote`: show, set or clear the sync remote. Accepts a full URL, a
 /// local path, or a GitHub `owner/repo` shorthand.
@@ -28,7 +28,7 @@ pub fn remote(config: &Config, spec: Option<&str>, clear: bool) -> Result<()> {
             // credentials) is cleared. A transient failure (offline) leaves the
             // current remote untouched, so a network blip cannot wipe a working
             // setting.
-            let cleared = matches!(err.kind(), Failure::NotFound | Failure::Auth);
+            let cleared = matches!(err.kind(), Kind::NotFound | Kind::Auth);
             if cleared {
                 Config::set_remote(None)?;
             }
@@ -110,7 +110,7 @@ fn unreachable(url: &str, error: &sync::Error, cleared: bool) -> String {
         styled("1;31", &format!("{headline} \u{b7} {}", kind.reason())),
     );
     message.push_str(&format!("  {url}\n"));
-    if kind == Failure::Other
+    if kind == Kind::Other
         && let Some(line) = error
             .detail()
             .lines()

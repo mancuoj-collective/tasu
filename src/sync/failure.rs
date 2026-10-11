@@ -3,7 +3,7 @@
 /// on [`Error::kind`] instead of parsing git's text again.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Error {
-    kind: Failure,
+    kind: Kind,
     detail: String,
 }
 
@@ -13,7 +13,7 @@ impl Error {
     pub fn new(detail: impl Into<String>) -> Self {
         let detail = detail.into();
         Self {
-            kind: Failure::classify(&detail),
+            kind: Kind::classify(&detail),
             detail,
         }
     }
@@ -23,12 +23,12 @@ impl Error {
     /// "permission denied" is never mistaken for a git authentication problem.
     pub fn io(detail: impl Into<String>) -> Self {
         Self {
-            kind: Failure::Other,
+            kind: Kind::Other,
             detail: detail.into(),
         }
     }
 
-    pub fn kind(&self) -> Failure {
+    pub fn kind(&self) -> Kind {
         self.kind
     }
 
@@ -46,14 +46,14 @@ impl std::fmt::Display for Error {
 /// A short, human-readable reason a sync failed, inferred from git's stderr.
 /// Used to lead with the likely cause instead of a raw error dump.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Failure {
+pub enum Kind {
     NotFound,
     Auth,
     Network,
     Other,
 }
 
-impl Failure {
+impl Kind {
     pub fn classify(error: &str) -> Self {
         let error = error.to_ascii_lowercase();
         let has = |needle: &str| error.contains(needle);
@@ -120,25 +120,25 @@ impl Failure {
 
 #[cfg(test)]
 mod tests {
-    use super::Failure;
+    use super::Kind;
 
     #[test]
     fn classifies_common_git_failures() {
         assert_eq!(
-            Failure::classify("remote: Repository not found."),
-            Failure::NotFound
+            Kind::classify("remote: Repository not found."),
+            Kind::NotFound
         );
         assert_eq!(
-            Failure::classify(
+            Kind::classify(
                 "fatal: could not read Username for 'https://github.com': terminal prompts disabled"
             ),
-            Failure::Auth
+            Kind::Auth
         );
         assert_eq!(
-            Failure::classify("fatal: unable to access 'x': Could not resolve host: github.com"),
-            Failure::Network
+            Kind::classify("fatal: unable to access 'x': Could not resolve host: github.com"),
+            Kind::Network
         );
-        assert_eq!(Failure::classify("something else"), Failure::Other);
+        assert_eq!(Kind::classify("something else"), Kind::Other);
     }
 
     #[test]
@@ -146,6 +146,6 @@ mod tests {
         // A local filesystem error that happens to mention "permission denied"
         // must not be classified as a git credential problem.
         let err = super::Error::io("could not create dir: Permission denied (os error 13)");
-        assert_eq!(err.kind(), Failure::Other);
+        assert_eq!(err.kind(), Kind::Other);
     }
 }

@@ -10,7 +10,7 @@ use std::time::Duration;
 use crate::domain::Board;
 use crate::store::Damage;
 
-pub use failure::{Error, Failure};
+pub use failure::{Error, Kind};
 use repo::{board_store, commit_all, current_branch, ensure_repo};
 
 /// Network operations are bounded so a hung connection cannot freeze a caller.
@@ -47,7 +47,10 @@ pub enum Pulled {
 
 /// The outcome of one worker job.
 pub enum JobOutcome {
-    Pulled(Pulled),
+    /// The pull was level with or ahead of the remote.
+    UpToDate,
+    /// A pull handed back the remote's board (when it has one) to merge and save.
+    Merged(Option<Board>),
     Pushed,
     Failed(Error),
 }
@@ -69,7 +72,8 @@ impl Sync {
             while let Ok(job) = jobs_rx.recv() {
                 let outcome = match job {
                     Job::Pull => match pull(&repo, remote.as_deref()) {
-                        Ok(pulled) => JobOutcome::Pulled(pulled),
+                        Ok(Pulled::UpToDate) => JobOutcome::UpToDate,
+                        Ok(Pulled::Merge(board)) => JobOutcome::Merged(board),
                         Err(err) => JobOutcome::Failed(err),
                     },
                     Job::CommitPush => match commit_push(&repo, remote.as_deref()) {

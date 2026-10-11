@@ -55,7 +55,7 @@ src/
     mod.rs           Sync worker thread + result channel; pull, commit+push
     git.rs           the only place git is spawned: C locale, deadlines, stderr
     repo.rs          adopt / clone / graft, branch resolution, .gitignore
-    failure.rs       Failure: classify git stderr for the footer and `tasu remote`
+    failure.rs       Kind: classify git stderr for the footer and `tasu remote`
   app/
     model.rs         Model = Board + UiState
     action.rs        Action / Effect enums
@@ -208,10 +208,10 @@ which is what separates "our write" from "an external one".
   silent — the next launch's pull retries the change.
 - **Sync worker**: `Sync` spawns one thread that adopts or creates the
   repository, then processes `Pull` / `CommitPush` jobs and returns a
-  `JobOutcome` (`Pulled` / `Pushed` / `Failed`) over a channel. It reports its
-  one-shot repository-setup outcome first (`poll_init`), so a broken setup is
-  shown in the footer instead of looking idle. The app never blocks on git. With
-  no remote configured, no git process is ever started.
+  `JobOutcome` (`UpToDate` / `Merged` / `Pushed` / `Failed`) over a channel.
+  It reports its one-shot repository-setup outcome first (`poll_init`), so a
+  broken setup is shown in the footer instead of looking idle. The app never
+  blocks on git. With no remote configured, no git process is ever started.
 - On exit the runtime saves and calls `flush`, a synchronous best-effort push,
   so the last change is not lost when the process ends.
 - No tokio: one slow operation plus one poll is enough for std threads.
@@ -341,7 +341,7 @@ channel rather than swallowed.
   error with the local files — `todos.json` included — still untouched. If one
   side is missing it is kept as is. After the merge, normal single-writer
   pull/push resumes.
-- **Error classification**: `sync::Failure::classify` maps git's stderr to
+- **Error classification**: `sync::Kind::classify` maps git's stderr to
   `NotFound` / `Auth` / `Network` / `Other`. `SyncTracker` keeps the classified
   phrase as the footer summary and the whole git error as the details `detail`,
   so the footer stays one line and `!` shows the rest.

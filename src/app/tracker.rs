@@ -6,7 +6,7 @@
 use std::time::{Duration, Instant};
 
 use crate::domain::Board;
-use crate::sync::{Error, JobOutcome, Pulled};
+use crate::sync::{Error, JobOutcome};
 
 use super::model::{Problem, SyncStatus};
 
@@ -133,12 +133,12 @@ impl SyncTracker {
     pub fn on_outcome(&mut self, outcome: JobOutcome, now: Instant) -> Option<Board> {
         self.in_flight = self.in_flight.saturating_sub(1);
         match outcome {
-            JobOutcome::Pulled(Pulled::UpToDate) | JobOutcome::Pushed => {
+            JobOutcome::UpToDate | JobOutcome::Pushed => {
                 self.status = SyncStatus::Idle;
                 self.problem = None;
                 None
             }
-            JobOutcome::Pulled(Pulled::Merge(board)) => {
+            JobOutcome::Merged(board) => {
                 self.status = SyncStatus::Idle;
                 self.problem = None;
                 board
@@ -269,7 +269,7 @@ mod tests {
         tracker.changed(t0);
         tracker.pull_queued();
 
-        let board = tracker.on_outcome(JobOutcome::Pulled(Pulled::Merge(Some(Board::new()))), t0);
+        let board = tracker.on_outcome(JobOutcome::Merged(Some(Board::new())), t0);
 
         assert!(board.is_some());
         assert_eq!(tracker.status(), SyncStatus::Idle);
