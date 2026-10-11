@@ -731,6 +731,25 @@ fn cli_rejects_an_ambiguous_title() {
 }
 
 #[test]
+fn cli_move_to_the_same_bucket_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let data = dir.path().join("data");
+    let cfg = dir.path().join("cfg");
+
+    let out = tasu(&data, &cfg).args(["add", "stay"]).output().unwrap();
+    assert!(out.status.success());
+
+    // It is already in today; a move there must not claim to have moved it.
+    let out = tasu(&data, &cfg)
+        .args(["move", "today", "stay"])
+        .output()
+        .unwrap();
+    assert!(!out.status.success(), "a no-op move must be refused");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("already in"), "{stderr}");
+}
+
+#[test]
 fn cli_sync_exits_nonzero_on_an_unreachable_remote() {
     let dir = tempfile::tempdir().unwrap();
     let data = dir.path().join("data");

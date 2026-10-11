@@ -157,7 +157,14 @@ pub fn move_task(config: &Config, bucket: Bucket, words: &[String]) -> Result<()
     let title = required_title(words)?;
     change_board(config, |board, now| {
         let index = find_open(board, &title)?;
-        board.set_bucket(index, bucket, now);
+        if !board.set_bucket(index, bucket, now) {
+            // Already there: report it rather than claiming a move and forcing a
+            // pointless save and push.
+            anyhow::bail!(
+                "{title:?} is already in {}",
+                bucket_label(bucket).to_lowercase()
+            );
+        }
         Ok(format!(
             "\u{2192} moved {title:?} to {}",
             bucket_label(bucket).to_lowercase()
