@@ -137,10 +137,8 @@ fn print(model: &Model, width: u16, height: u16) {
     terminal
         .draw(|frame| {
             let chrome = ui::Chrome {
-                data_path: std::path::Path::new(
-                    "/Users/mancuoj/Library/Application Support/tasu/todos.json",
-                ),
-                remote: Some("git@github.com:mancuoj/tasu-data.git"),
+                data_path: std::path::Path::new("~/.local/share/tasu/todos.json"),
+                remote: Some("git@github.com:you/tasu-data.git"),
             };
             let _ = ui::draw(frame, model, &ui::theme::Theme::DARK, &chrome);
         })
