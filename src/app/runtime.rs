@@ -136,17 +136,28 @@ impl Runtime {
         let mut actions = Vec::new();
         if let Some(sync) = &self.sync {
             // The repository could not be adopted or created: surface it rather
-            // than letting the app look healthy while nothing actually syncs.
-            if let Some(Err(err)) = sync.poll_init() {
-                self.tracker.failed(&err);
+            // than letting the app look healthy while nothing actually syncs. A
+            // dead worker is surfaced the same way.
+            match sync.poll_init() {
+                Ok(Some(Err(err))) | Err(err) => self.tracker.failed(&err),
+                Ok(_) => {}
             }
 
             let now = Instant::now();
-            while let Some(outcome) = sync.poll() {
+            loop {
                 // Hand the remote board to the model; it merges and saves, so the
                 // worker never writes the board and cannot race a concurrent save.
-                if let Some(board) = self.tracker.on_outcome(outcome, now) {
-                    actions.push(Action::Merge(board));
+                match sync.poll() {
+                    Ok(Some(outcome)) => {
+                        if let Some(board) = self.tracker.on_outcome(outcome, now) {
+                            actions.push(Action::Merge(board));
+                        }
+                    }
+                    Ok(None) => break,
+                    Err(err) => {
+                        self.tracker.failed(&err);
+                        break;
+                    }
                 }
             }
 

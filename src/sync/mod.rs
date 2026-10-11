@@ -106,14 +106,27 @@ impl Sync {
             .map_err(|_| Error::new("sync worker stopped"))
     }
 
-    pub fn poll(&self) -> Option<JobOutcome> {
-        self.results.try_recv().ok()
+    /// The next finished job, `Ok(None)` when the worker has nothing yet. A
+    /// disconnected channel means the worker thread is gone, which is reported
+    /// as an error rather than looking like an idle worker forever.
+    pub fn poll(&self) -> Result<Option<JobOutcome>, Error> {
+        match self.results.try_recv() {
+            Ok(outcome) => Ok(Some(outcome)),
+            Err(mpsc::TryRecvError::Empty) => Ok(None),
+            Err(mpsc::TryRecvError::Disconnected) => Err(Error::new("sync worker stopped")),
+        }
     }
 
     /// The one-shot repository-setup result, once the worker has produced it.
-    /// `None` until then; after the first call it returns `None` again.
-    pub fn poll_init(&self) -> Option<Result<(), Error>> {
-        self.init.try_recv().ok()
+    /// `Ok(None)` until then, and after the first call. A disconnected channel
+    /// means the worker died before it could report, which is surfaced the same
+    /// way.
+    pub fn poll_init(&self) -> Result<Option<Result<(), Error>>, Error> {
+        match self.init.try_recv() {
+            Ok(result) => Ok(Some(result)),
+            Err(mpsc::TryRecvError::Empty) => Ok(None),
+            Err(mpsc::TryRecvError::Disconnected) => Err(Error::new("sync worker stopped")),
+        }
     }
 }
 
