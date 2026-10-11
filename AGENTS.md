@@ -8,6 +8,15 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/):
 `type(scope): subject`, with a body explaining the *why* for anything
 non-trivial. Do not rewrite already-published history.
 
+Commit small. One logical change per commit (a refactor, a fix, a test, a
+doc), so each can be reviewed, bisected and reverted on its own. Before
+committing, split a change that touches several concerns into separate
+commits; use `git add -p` when one file mixes concerns. Order them so that
+each commit builds and passes `cargo test` by itself: a commit that depends
+on a later one is not allowed, even when the modules are coupled. If a
+change cannot be split without breaking the build in between, say so in the
+commit body rather than hiding the coupling.
+
 ## Engineering
 
 - **Tests travel with the change.** User-facing behaviour gets an end-to-end case
