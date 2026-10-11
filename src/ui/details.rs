@@ -8,20 +8,22 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Clear, Padding, Paragraph},
 };
+use unicode_width::UnicodeWidthStr;
 
 use crate::app::Model;
 
 use super::help::push_block;
 use super::modal::centered;
-use super::theme::Theme;
+use super::text::wrap_text;
+use super::{PROBLEM_MARK, theme::Theme};
 
 const DETAILS_MAX_WIDTH: u16 = 78;
 const DETAILS_PAD_X: u16 = 2;
 const DETAILS_PAD_Y: u16 = 1;
 /// Border (2) plus vertical padding, matching `help`.
 const DETAILS_CHROME: u16 = 2 + DETAILS_PAD_Y * 2;
-/// Facts and the next step sit under the summary's glyph.
-const DETAILS_INDENT: &str = "    ";
+/// Facts and the next step align under the summary text, past the marker.
+const DETAILS_INDENT: &str = "  ";
 
 /// Draw the overlay and return the clamped scroll offset, so the caller can
 /// store it (the same contract as the help overlay).
@@ -39,7 +41,7 @@ pub fn draw(f: &mut Frame, model: &Model, theme: &Theme) -> usize {
         // A heading the colour-blind and no-colour terminals can still read: a
         // glyph and bold weight, not only the warning hue.
         lines.push(Line::from(Span::styled(
-            format!("\u{26a0} {}", problem.summary),
+            format!("{PROBLEM_MARK} {}", problem.summary),
             theme.warn().bold(),
         )));
         // The facts wrap onto their own indented lines, so nothing is elided.
@@ -52,14 +54,7 @@ pub fn draw(f: &mut Frame, model: &Model, theme: &Theme) -> usize {
             Alignment::Left,
         );
         if let Some(hint) = &problem.hint {
-            push_block(
-                &mut lines,
-                DETAILS_INDENT,
-                &format!("\u{2192} {hint}"),
-                theme.text(),
-                inner,
-                Alignment::Left,
-            );
+            push_hint(&mut lines, hint, theme, inner);
         }
     }
     if lines.is_empty() {
@@ -82,4 +77,23 @@ pub fn draw(f: &mut Frame, model: &Model, theme: &Theme) -> usize {
     let visible: Vec<Line> = lines.into_iter().skip(offset).collect();
     f.render_widget(Paragraph::new(visible).block(block), area);
     offset
+}
+
+/// The next step, marked with an accent arrow and muted text so it reads as
+/// advice rather than another fact. Wraps under the arrow.
+fn push_hint(lines: &mut Vec<Line<'static>>, hint: &str, theme: &Theme, inner: usize) {
+    const ARROW: &str = "\u{2192} ";
+    let indent = DETAILS_INDENT.width();
+    let body = inner.saturating_sub(indent + ARROW.width()).max(1);
+    for (index, chunk) in wrap_text(hint, body).into_iter().enumerate() {
+        let chunk = chunk.trim_end();
+        let mut spans = vec![Span::raw(DETAILS_INDENT.to_string())];
+        if index == 0 {
+            spans.push(Span::styled(ARROW, theme.accent()));
+        } else {
+            spans.push(Span::raw(" ".repeat(ARROW.width())));
+        }
+        spans.push(Span::styled(chunk.to_string(), theme.muted()));
+        lines.push(Line::from(spans));
+    }
 }

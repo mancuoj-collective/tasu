@@ -117,7 +117,7 @@ fn footer(f: &mut Frame, model: &Model, theme: &Theme, area: ratatui::layout::Re
 /// nothing.
 fn status_line(model: &Model, theme: &Theme) -> Option<Line<'static>> {
     if let Some(problem) = &model.ui.sync_problem {
-        return Some(problem_line("\u{2717}", problem, theme));
+        return Some(problem_line(problem, theme));
     }
     match model.ui.sync {
         SyncStatus::Syncing => {
@@ -148,28 +148,32 @@ fn error_line(model: &Model, theme: &Theme) -> Option<Line<'static>> {
         .ui
         .error
         .as_ref()
-        .map(|problem| problem_line("\u{26a0}", problem, theme))
+        .map(|problem| problem_line(problem, theme))
 }
 
 /// The footer line for a board file that could not be read, or `None` when the
 /// board is intact. The backup path and the reason are in the details overlay.
 fn board_damage_line(model: &Model, theme: &Theme, width: u16) -> Option<Line<'static>> {
     let problem = model.ui.board_damage.as_ref()?;
-    let text = problem_text("\u{26a0}", problem);
+    let text = problem_text(problem);
     Some(Line::from(Span::styled(
         components::truncate(&text, width as usize),
         theme.warn(),
     )))
 }
 
+/// One marker for every problem, shared by the footer line and the overlay
+/// heading, so the same failure looks the same wherever it is shown.
+pub(crate) const PROBLEM_MARK: &str = "\u{26a0}";
+
 /// A footer line for a problem: the short summary and the key that opens the
 /// details overlay, so every failure reads the same way.
-fn problem_line(glyph: &str, problem: &Problem, theme: &Theme) -> Line<'static> {
-    Line::from(Span::styled(problem_text(glyph, problem), theme.warn()))
+fn problem_line(problem: &Problem, theme: &Theme) -> Line<'static> {
+    Line::from(Span::styled(problem_text(problem), theme.warn()))
 }
 
-fn problem_text(glyph: &str, problem: &Problem) -> String {
-    format!(" {glyph} {} \u{b7} ! details ", problem.summary)
+fn problem_text(problem: &Problem) -> String {
+    format!(" {PROBLEM_MARK} {} \u{b7} ! details ", problem.summary)
 }
 
 fn line_width(line: &Line) -> u16 {

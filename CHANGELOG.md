@@ -9,10 +9,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - The problems overlay (`!`) reads as a list of headings, not a wall of text:
-  the summary is a bold glyph heading, the facts are indented under it, a backup
-  path sits on its own line, and a next step (`→ run tasu sync to retry now`)
-  ends the entry. The summary is no longer repeated in the body, and the overlay
-  is titled `problems`.
+  the summary is a bold `⚠` heading, the facts align under the summary text (a
+  backup path on its own line), and a next step ends the entry as a muted line
+  behind an accent `→`. The summary is no longer repeated in the body, and the
+  overlay is titled `problems`. The footer uses the same `⚠` marker, so one
+  failure looks the same in both views.
 
 ## [0.15.0] - 2026-10-11
 

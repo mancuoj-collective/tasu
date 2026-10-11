@@ -13,11 +13,11 @@ expression: "render(&model, 84, 26)"
    ┌ problems ──────────────────────────────────────────────────────────────────┐   
  LA│                                                                            │   
  ──│  ⚠ could not save                                                          │── 
-  ○│      failed to write temporary file: Permission denied (os error 13)       │   
+  ○│    failed to write temporary file: Permission denied (os error 13)         │   
    │                                                                            │   
    │  ⚠ offline                                                                 │   
-   │      fatal: unable to access: Could not resolve host: github.com           │   
-   │      → run `tasu sync` to retry now                                        │   
+   │    fatal: unable to access: Could not resolve host: github.com             │   
+   │    → run `tasu sync` to retry now                                          │   
    │                                                                            │   
    └────────────────────────────────────────────────────────────────────────────┘   
                                                                                     

@@ -228,15 +228,17 @@ which is what separates "our write" from "an external one".
 - Toast: a brief `saved to today` after capture, gone after ~3 s, never
   stealing the cursor.
 - The footer's right side shows, in priority order: a write error, sync status
-  (a blinking dot while syncing, `✗ <summary> · ! details` on failure), then
-  the toast. Every failure reads the same way.
+  (a blinking dot while syncing, `⚠ <summary> · ! details` on failure), then
+  the toast. Every failure reads the same way, with the same marker the overlay
+  uses.
 - Every failure — a write error, a board that could not be read, a sync
   failure — keeps a `Problem`: a short `summary`, the `detail` facts, and an
   optional `hint` next step. The footer shows only the `summary` with a
   `· ! details` affordance, so a long IO error, a backup path or a git dump
   never crowds it out. Pressing `!` opens the problems overlay, titled
   `problems`: a bold glyph heading per `summary`, the `detail` facts wrapped and
-  indented (a backup path on its own line), and the `hint` last, after an `→`.
+  indented to the summary text (a backup path on its own line), and the `hint`
+  last, after an accent `→`.
   `detail` never repeats `summary`. `!` is inert when nothing is wrong. Every
   problem clears when its cause does (a successful save, a successful sync).
 - When `todos.json` could not be read, the footer's **left** side replaces the
