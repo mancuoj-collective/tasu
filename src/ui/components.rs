@@ -24,7 +24,14 @@ pub fn task_line(task: &Task, theme: &Theme, width: u16) -> Line<'static> {
 
     // " " + mark + " "
     let available = (width as usize).saturating_sub(3);
-    let title = truncate(&task.title, available);
+    // A control character (a newline from `tasu add`) would count as zero width
+    // and break the row's alignment; flatten it to a space.
+    let title: String = task
+        .title
+        .chars()
+        .map(|ch| if ch.is_control() { ' ' } else { ch })
+        .collect();
+    let title = truncate(&title, available);
 
     Line::from(vec![
         Span::raw(" "),
@@ -85,4 +92,25 @@ fn week_meta(now: DateTime<Local>) -> String {
         .map(|day| day.iso_week().week())
         .unwrap_or(current);
     format!("{current}/{last}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Theme, task_line};
+    use crate::domain::{Task, test_time::at};
+
+    #[test]
+    fn a_control_character_in_a_title_is_flattened() {
+        let task = Task::new("two\nlines", at(2026, 10, 5));
+        let line = task_line(&task, &Theme::DARK, 40);
+        let text: String = line
+            .spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect();
+        assert!(
+            !text.contains('\n'),
+            "a newline must not reach the row: {text:?}"
+        );
+    }
 }
