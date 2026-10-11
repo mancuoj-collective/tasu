@@ -124,92 +124,81 @@ impl Board {
         }
     }
 
-    /// Complete an open task. Keeps bucket info so [`Board::restore`] can undo.
-    pub fn complete(&mut self, index: usize, now: DateTime<Local>) -> bool {
+    /// Apply `change` to the task at `index`, provided it is in the `required`
+    /// state. The change reports whether it altered anything; only then is the
+    /// task stamped as changed, so every user edit records its time in one place
+    /// (merging orders by that time).
+    fn edit(
+        &mut self,
+        index: usize,
+        required: TaskState,
+        now: DateTime<Local>,
+        change: impl FnOnce(&mut Task, DateTime<Local>) -> bool,
+    ) -> bool {
         let Some(task) = self.tasks.get_mut(index) else {
             return false;
         };
-        if task.state != TaskState::Open {
+        if task.state != required || !change(task, now) {
             return false;
         }
-        task.state = TaskState::Done;
-        task.completed_at = Some(now);
         task.updated_at = Some(now);
         true
+    }
+
+    /// Complete an open task. Keeps bucket info so [`Board::restore`] can undo.
+    pub fn complete(&mut self, index: usize, now: DateTime<Local>) -> bool {
+        self.edit(index, TaskState::Open, now, |task, now| {
+            task.state = TaskState::Done;
+            task.completed_at = Some(now);
+            true
+        })
     }
 
     /// Undo a completion: reopen in the original bucket, at the original position.
     pub fn restore(&mut self, index: usize, now: DateTime<Local>) -> bool {
-        let Some(task) = self.tasks.get_mut(index) else {
-            return false;
-        };
-        if task.state != TaskState::Done {
-            return false;
-        }
-        task.state = TaskState::Open;
-        task.completed_at = None;
-        task.bucket_since = now;
-        task.updated_at = Some(now);
-        true
+        self.edit(index, TaskState::Done, now, |task, now| {
+            task.state = TaskState::Open;
+            task.completed_at = None;
+            task.bucket_since = now;
+            true
+        })
     }
 
     pub fn archive(&mut self, index: usize, now: DateTime<Local>) -> bool {
-        let Some(task) = self.tasks.get_mut(index) else {
-            return false;
-        };
-        if task.state != TaskState::Open {
-            return false;
-        }
-        task.state = TaskState::Archived;
-        task.archived_at = Some(now);
-        task.updated_at = Some(now);
-        true
+        self.edit(index, TaskState::Open, now, |task, now| {
+            task.state = TaskState::Archived;
+            task.archived_at = Some(now);
+            true
+        })
     }
 
     pub fn unarchive(&mut self, index: usize, now: DateTime<Local>) -> bool {
-        let Some(task) = self.tasks.get_mut(index) else {
-            return false;
-        };
-        if task.state != TaskState::Archived {
-            return false;
-        }
-        task.state = TaskState::Open;
-        task.archived_at = None;
-        task.bucket_since = now;
-        task.updated_at = Some(now);
-        true
+        self.edit(index, TaskState::Archived, now, |task, now| {
+            task.state = TaskState::Open;
+            task.archived_at = None;
+            task.bucket_since = now;
+            true
+        })
     }
 
-    /// Shift an open task `delta` steps along the pipeline.
+    /// Shift an open task `delta` steps along the pipeline, clamped at both ends.
     pub fn move_bucket(&mut self, index: usize, delta: i32, now: DateTime<Local>) -> bool {
-        let Some(task) = self.tasks.get_mut(index) else {
-            return false;
-        };
-        if task.state != TaskState::Open {
-            return false;
-        }
-        let next = task.bucket.shift(delta);
-        if next == task.bucket {
-            return false;
-        }
-        task.bucket = next;
-        task.bucket_since = now;
-        task.updated_at = Some(now);
-        true
+        self.edit(index, TaskState::Open, now, |task, now| {
+            let next = task.bucket.shift(delta);
+            place(task, next, now)
+        })
+    }
+
+    /// Put an open task in `bucket`. A no-op when it is already there.
+    pub fn set_bucket(&mut self, index: usize, bucket: Bucket, now: DateTime<Local>) -> bool {
+        self.edit(index, TaskState::Open, now, |task, now| {
+            place(task, bucket, now)
+        })
     }
 
     /// Pull an open task directly into `Today`.
     pub fn pin_today(&mut self, index: usize, now: DateTime<Local>) -> bool {
-        let Some(task) = self.tasks.get_mut(index) else {
-            return false;
-        };
-        if task.state != TaskState::Open || task.bucket == Bucket::Today {
-            return false;
-        }
-        task.bucket = Bucket::Today;
-        task.bucket_since = now;
-        task.updated_at = Some(now);
-        true
+        self.set_bucket(index, Bucket::Today, now)
     }
 
     /// Open tasks in a bucket, newest first.
@@ -259,6 +248,17 @@ impl Board {
         indices.sort_by(|&a, &b| time(&self.tasks[b]).cmp(&time(&self.tasks[a])));
         indices
     }
+}
+
+/// Move an open task into `bucket`, restarting its stay there. Reports whether
+/// the bucket actually changed.
+fn place(task: &mut Task, bucket: Bucket, now: DateTime<Local>) -> bool {
+    if task.bucket == bucket {
+        return false;
+    }
+    task.bucket = bucket;
+    task.bucket_since = now;
+    true
 }
 
 /// Task identity without an id: the instant it was created. `created_at` is
@@ -369,6 +369,21 @@ mod tests {
 
         assert!(board.unarchive(0, at(2026, 10, 8)));
         assert_eq!(board.task(0).unwrap().bucket, Bucket::Later);
+    }
+
+    #[test]
+    fn set_bucket_places_an_open_task_and_ignores_finished_ones() {
+        let mut board = seeded(&["place me", "done one"]);
+        assert!(board.set_bucket(0, Bucket::Later, at(2026, 10, 6)));
+        assert_eq!(board.task(0).unwrap().bucket, Bucket::Later);
+        assert!(
+            !board.set_bucket(0, Bucket::Later, at(2026, 10, 7)),
+            "same bucket"
+        );
+
+        board.complete(1, at(2026, 10, 6));
+        assert!(!board.set_bucket(1, Bucket::Week, at(2026, 10, 7)));
+        assert_eq!(board.task(1).unwrap().bucket, Bucket::Today);
     }
 
     #[test]

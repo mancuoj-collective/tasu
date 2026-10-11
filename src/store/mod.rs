@@ -109,13 +109,17 @@ impl Store {
                 }
             }
             Err(err) => {
-                let backup = self.backup();
+                let reason = err.to_string();
+                let (backup, reason) = match self.backup() {
+                    Ok(path) => (Some(path), reason),
+                    Err(move_err) => (
+                        None,
+                        format!("{reason}; could not move it aside: {move_err}"),
+                    ),
+                };
                 Loaded {
                     board: Board::new(),
-                    damaged: Some(Damage {
-                        backup,
-                        reason: err.to_string(),
-                    }),
+                    damaged: Some(Damage { backup, reason }),
                 }
             }
         }
@@ -154,9 +158,9 @@ impl Store {
             .ok()
     }
 
-    /// Move a corrupt file aside. Returns where it landed, or `None` when the
-    /// rename failed (the file is left in place rather than destroyed).
-    fn backup(&self) -> Option<PathBuf> {
+    /// Move a corrupt file aside, so it is kept rather than destroyed. When the
+    /// rename fails the file stays in place and the error is returned.
+    fn backup(&self) -> std::io::Result<PathBuf> {
         let file_name = self
             .path
             .file_name()
@@ -169,13 +173,8 @@ impl Store {
         let backup = self
             .path
             .with_file_name(format!("{file_name}.corrupt-{seconds}"));
-        match fs::rename(&self.path, &backup) {
-            Ok(()) => Some(backup),
-            Err(err) => {
-                eprintln!("tasu: could not back up {}: {err}", self.path.display());
-                None
-            }
-        }
+        fs::rename(&self.path, &backup)?;
+        Ok(backup)
     }
 }
 
@@ -204,9 +203,10 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
 /// Parse raw board bytes, for a caller that merges a board read elsewhere (the
 /// sync layer reads the remote copy). `None` when the bytes are not a board.
 pub fn board_from_bytes(bytes: &[u8]) -> Option<Board> {
-    serde_json::from_slice::<FileSchema>(bytes)
-        .ok()
-        .map(|schema| Board::from_tasks(schema.tasks))
+    let schema = serde_json::from_slice::<FileSchema>(bytes).ok()?;
+    let mut board = Board::from_tasks(schema.tasks);
+    board.dedup();
+    Some(board)
 }
 
 /// Serialize a board to the on-disk file shape. The one place that knows that
@@ -259,6 +259,18 @@ mod tests {
             serde_json::from_slice(&merge_files(&base, &other).unwrap()).unwrap();
         let titles: Vec<&str> = merged.tasks.iter().map(|t| t.title.as_str()).collect();
         assert_eq!(titles, vec!["shared", "base only", "other only"]);
+    }
+
+    #[test]
+    fn a_remote_board_with_duplicate_copies_is_collapsed_on_read() {
+        let twin = FileSchema {
+            tasks: vec![
+                Task::new("twin", at(2026, 10, 5)),
+                Task::new("twin", at(2026, 10, 5)),
+            ],
+        };
+        let bytes = serde_json::to_vec(&twin).unwrap();
+        assert_eq!(board_from_bytes(&bytes).unwrap().len(), 1);
     }
 
     #[test]
