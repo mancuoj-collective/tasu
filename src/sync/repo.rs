@@ -74,6 +74,39 @@ fn adopt_clone(repo: &Path, url: &str) -> Result<(), Error> {
     mark_settled(repo, url)
 }
 
+/// The result of fetching the remote tip.
+pub(super) struct RemoteTip {
+    /// The remote tip was fetched into `refs/tasu/remote`.
+    pub fetched: bool,
+    /// The fetched commit's `todos.json`, when it has one.
+    pub board: Option<Vec<u8>>,
+}
+
+/// Fetch the remote tip into the private `refs/tasu/remote` ref — the named
+/// branch first, then the remote's `HEAD` — and read its board. The one place
+/// that knows the fetch-and-read contract, shared by `pull` and `graft`, so the
+/// two cannot drift on how the remote is addressed or how an unreadable board is
+/// reported. A fetch that fails entirely is returned as an error; a best-effort
+/// caller maps it to an unfetched tip.
+pub(super) fn fetch_remote_tip(repo: &Path, branch: &str) -> Result<RemoteTip, Error> {
+    let named = format!("+refs/heads/{branch}:refs/tasu/remote");
+    let mut cmd = git::in_repo(repo, &["fetch", "--quiet", "origin", &named]);
+    if let Err(err) = git::bounded(&mut cmd, NETWORK_TIMEOUT) {
+        let mut head = git::in_repo(
+            repo,
+            &["fetch", "--quiet", "origin", "+HEAD:refs/tasu/remote"],
+        );
+        if git::bounded(&mut head, NETWORK_TIMEOUT).is_err() {
+            return Err(err);
+        }
+    }
+    let board = git::bytes(repo, &["show", "refs/tasu/remote:todos.json"]);
+    Ok(RemoteTip {
+        fetched: true,
+        board,
+    })
+}
+
 /// Existing local data meets a remote that may already have history. The
 /// remote's history is adopted, the boards are merged, then the result is
 /// committed on top and pushed. No unrelated-history merge, which proved
@@ -86,33 +119,19 @@ fn graft(repo: &Path, url: &str) -> Result<(), Error> {
     name_branch(repo, &branch)?;
     set_origin(repo, url)?;
 
-    // Fetch the remote's current tip into a private ref, independent of
-    // remote-tracking branches (which are not always created).
-    let fetched = git::run(
-        repo,
-        &[
-            "fetch",
-            "--quiet",
-            "origin",
-            &format!("+refs/heads/{branch}:refs/tasu/remote"),
-        ],
-    )
-    .is_ok()
-        || git::run(
-            repo,
-            &["fetch", "--quiet", "origin", "+HEAD:refs/tasu/remote"],
-        )
-        .is_ok();
+    // Fetch the remote's current tip. Best-effort: if the remote cannot be
+    // reached, graft still proceeds with the local board and the later push
+    // reports the failure.
+    let tip = fetch_remote_tip(repo, &branch).unwrap_or(RemoteTip {
+        fetched: false,
+        board: None,
+    });
 
     // Read both boards and merge them **before** the working tree is touched.
     // If a board cannot be read, the merge errors and the local files —
     // `todos.json` included — stay exactly as they were, because nothing has
     // been reset yet.
-    let remote_board = if fetched {
-        git::bytes(repo, &["show", "refs/tasu/remote:todos.json"])
-    } else {
-        None
-    };
+    let remote_board = tip.board;
     let local_board = board_store(repo)
         .read_bytes()
         .map_err(|err| Error::io(format!("could not read the local board: {err}")))?;
@@ -128,7 +147,7 @@ fn graft(repo: &Path, url: &str) -> Result<(), Error> {
     // The merge succeeded, so it is safe to adopt the remote's tree. The merged
     // board is written back on top of it, so the merged result — not the remote's
     // board — is what gets committed.
-    if fetched {
+    if tip.fetched {
         git::run(repo, &["reset", "--hard", "refs/tasu/remote"])?;
     }
     if let Some(bytes) = board.filter(|bytes| !bytes.is_empty()) {

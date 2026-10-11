@@ -190,18 +190,8 @@ fn pull(repo: &Path, remote: Option<&str>) -> Result<Pulled, Error> {
         return Ok(Pulled::UpToDate);
     };
 
-    // Fetch the remote branch into a private ref (remote-tracking refs are not
-    // always created), then compare histories.
-    let mut fetch = git::in_repo(
-        repo,
-        &[
-            "fetch",
-            "--quiet",
-            "origin",
-            &format!("+refs/heads/{branch}:refs/tasu/remote"),
-        ],
-    );
-    git::bounded(&mut fetch, NETWORK_TIMEOUT)?;
+    // Fetch the remote branch into a private ref, then compare histories.
+    let tip = repo::fetch_remote_tip(repo, &branch)?;
 
     // If the remote is already reachable from HEAD, we are level or ahead.
     if git::is_ancestor(repo, "refs/tasu/remote", "HEAD")? {
@@ -213,7 +203,7 @@ fn pull(repo: &Path, remote: Option<&str>) -> Result<Pulled, Error> {
     // written behind the app's back; the caller merges it in and saves it, and
     // is therefore the file's only writer. A board that cannot be read is an
     // error, never a silent empty list.
-    let remote_board = match git::bytes(repo, &["show", "refs/tasu/remote:todos.json"]) {
+    let remote_board = match tip.board {
         Some(bytes) => Some(parse_board(&bytes)?),
         None => None,
     };
