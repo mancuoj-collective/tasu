@@ -125,29 +125,13 @@ fn cli_add_syncs_to_a_remote_and_back() {
     let first = dir.path().join("first");
     std::fs::create_dir_all(&first).unwrap();
 
-    let remote = dir.path().join("remote.git");
-    let status = Command::new("git")
-        .args(["init", "--bare", "--quiet"])
-        .arg(&remote)
-        .status()
-        .unwrap();
-    assert!(status.success());
+    let remote = bare_remote(dir.path());
 
     let config = Config {
         data_dir: first,
         remote: Some(remote.to_string_lossy().into_owned()),
     };
     command::add(&config, &["Nand2Tetris".to_string()]).unwrap();
-
-    // A hosting provider points its default branch at the first pushed branch;
-    // a local bare repo does not, and a raw `git clone` would check out nothing.
-    let status = Command::new("git")
-        .arg("--git-dir")
-        .arg(&remote)
-        .args(["symbolic-ref", "HEAD", "refs/heads/main"])
-        .status()
-        .unwrap();
-    assert!(status.success());
 
     let second = dir.path().join("second");
     clone(&remote, &second);
@@ -180,15 +164,7 @@ fn overlay_scroll_moves_back_up_from_the_bottom() {
 #[test]
 fn cli_add_converges_across_two_machines() {
     let dir = tempfile::tempdir().unwrap();
-    let remote = dir.path().join("remote.git");
-    assert!(
-        Command::new("git")
-            .args(["init", "--bare", "--quiet"])
-            .arg(&remote)
-            .status()
-            .unwrap()
-            .success()
-    );
+    let remote = bare_remote(dir.path());
     let url = remote.to_string_lossy().into_owned();
 
     let machine_a = dir.path().join("a");
@@ -257,14 +233,10 @@ fn commit_all(repo: &Path, message: &str) {
     );
 }
 
-#[test]
-fn a_pull_in_flight_does_not_lose_a_task_added_meanwhile() {
-    // Regression for the pull/clobber race: the sync worker used to write
-    // `todos.json` itself while the app was saving it. Now the worker hands the
-    // remote board back and the app merges and saves it, so a task captured
-    // while a pull was in flight must survive.
-    let dir = tempfile::tempdir().unwrap();
-    let remote = dir.path().join("remote.git");
+/// A bare repository standing in for the remote, with `main` as its default
+/// branch so every clone checks it out. Uses the real git binary end to end.
+fn bare_remote(dir: &Path) -> std::path::PathBuf {
+    let remote = dir.join("remote.git");
     assert!(
         Command::new("git")
             .args(["init", "--bare", "--quiet"])
@@ -273,6 +245,26 @@ fn a_pull_in_flight_does_not_lose_a_task_added_meanwhile() {
             .unwrap()
             .success()
     );
+    assert!(
+        Command::new("git")
+            .arg("--git-dir")
+            .arg(&remote)
+            .args(["symbolic-ref", "HEAD", "refs/heads/main"])
+            .status()
+            .unwrap()
+            .success()
+    );
+    remote
+}
+
+#[test]
+fn a_pull_in_flight_does_not_lose_a_task_added_meanwhile() {
+    // Regression for the pull/clobber race: the sync worker used to write
+    // `todos.json` itself while the app was saving it. Now the worker hands the
+    // remote board back and the app merges and saves it, so a task captured
+    // while a pull was in flight must survive.
+    let dir = tempfile::tempdir().unwrap();
+    let remote = bare_remote(dir.path());
     let url = remote.to_string_lossy().into_owned();
 
     // The remote starts with one task on `main`.
@@ -285,11 +277,6 @@ fn a_pull_in_flight_does_not_lose_a_task_added_meanwhile() {
     commit_all(&seed, "base");
     git(&seed, &["remote", "add", "origin", &url]);
     git(&seed, &["push", "-q", "origin", "main"]);
-    let _ = Command::new("git")
-        .arg("--git-dir")
-        .arg(&remote)
-        .args(["symbolic-ref", "HEAD", "refs/heads/main"])
-        .status();
 
     // Machine A clones and adds a task it never pushes, so its history diverges.
     let a = dir.path().join("a");
@@ -816,25 +803,7 @@ fn cli_warns_when_the_board_cannot_be_read() {
 #[test]
 fn a_later_rename_survives_a_diverged_sync() {
     let dir = tempfile::tempdir().unwrap();
-    let remote = dir.path().join("remote.git");
-    assert!(
-        Command::new("git")
-            .args(["init", "--bare", "--quiet"])
-            .arg(&remote)
-            .status()
-            .unwrap()
-            .success()
-    );
-    // Pin the bare repo's default branch so every machine agrees on `main`.
-    assert!(
-        Command::new("git")
-            .arg("--git-dir")
-            .arg(&remote)
-            .args(["symbolic-ref", "HEAD", "refs/heads/main"])
-            .status()
-            .unwrap()
-            .success()
-    );
+    let remote = bare_remote(dir.path());
     let url = remote.to_string_lossy().into_owned();
 
     let a = dir.path().join("a");
