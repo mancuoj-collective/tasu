@@ -111,7 +111,10 @@ fn main() {
     status.ui.tick = 6;
     println!("\n=== syncing (84x12) ===");
     print(&status, 84, 12);
-    status.ui.sync = tasu::app::SyncStatus::Failed("offline");
+    status.ui.sync_problem = Some(tasu::app::Problem::new(
+        "offline",
+        "fatal: unable to access: Could not resolve host: github.com",
+    ));
     println!("\n=== sync failed (84x12) ===");
     print(&status, 84, 12);
 }

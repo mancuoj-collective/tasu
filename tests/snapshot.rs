@@ -7,7 +7,7 @@ use chrono::{DateTime, Local};
 mod common;
 use common::{draw_text, dt};
 
-use tasu::app::{Mode, Model, SyncStatus};
+use tasu::app::{Mode, Model, Problem, SyncStatus};
 use tasu::domain::{Board, Bucket, Task, TaskState};
 
 fn render(model: &Model, width: u16, height: u16) -> String {
@@ -63,7 +63,10 @@ fn wide_layout() {
 fn help_with_sync_error() {
     let mut model = Model::new(board(), dt(8));
     model.ui.mode = Mode::Help;
-    model.ui.sync = SyncStatus::Failed("remote not found");
+    model.ui.sync_problem = Some(Problem::new(
+        "remote not found",
+        "remote: Repository not found.\nfatal: repository 'you/tasu-data' does not exist",
+    ));
     insta::assert_snapshot!(render(&model, 84, 26));
 }
 
@@ -71,7 +74,11 @@ fn help_with_sync_error() {
 fn help_hides_the_sync_error_and_the_footer_carries_it() {
     let mut model = Model::new(board(), dt(8));
     model.ui.mode = Mode::Help;
-    model.ui.sync = SyncStatus::Failed("auth failed");
+    model.ui.sync = SyncStatus::Idle;
+    model.ui.sync_problem = Some(Problem::new(
+        "auth failed",
+        "fatal: could not read Username for 'https://github.com': terminal prompts disabled",
+    ));
     // The path stays outside any home directory: `display_path` abbreviates the
     // home dir, which differs between machines and would make this snapshot
     // environment-dependent.
@@ -84,11 +91,26 @@ fn help_hides_the_sync_error_and_the_footer_carries_it() {
     );
     assert!(
         !out.contains("fatal:"),
-        "raw git error leaked into the UI:\n{out}"
+        "the one-line footer must not carry the raw git error:\n{out}"
     );
     assert!(
-        out.contains("auth failed") && out.contains("run tasu sync"),
-        "the footer should explain the failure:\n{out}"
+        out.contains("auth failed") && out.contains("! details"),
+        "the footer should summarise the failure and point at the details:\n{out}"
     );
     insta::assert_snapshot!(out);
+}
+
+#[test]
+fn the_details_overlay_shows_every_problem_in_full() {
+    let mut model = Model::new(board(), dt(8));
+    model.ui.mode = Mode::Details;
+    model.ui.error = Some(Problem::new(
+        "could not save",
+        "could not save: failed to write temporary file: Permission denied (os error 13)",
+    ));
+    model.ui.sync_problem = Some(Problem::new(
+        "offline",
+        "fatal: unable to access: Could not resolve host: github.com\n\nrun `tasu sync` to retry now",
+    ));
+    insta::assert_snapshot!(render(&model, 84, 26));
 }

@@ -48,6 +48,12 @@ impl Runtime {
         self.tracker.status()
     }
 
+    /// The last sync failure, copied into the model each frame for the footer
+    /// summary and the details overlay.
+    pub fn problem(&self) -> Option<&Problem> {
+        self.tracker.problem()
+    }
+
     /// Whether the board has changes the worker has not confirmed pushing, so
     /// quitting should hand a final push to a detached process. A clean quit
     /// spawns nothing.

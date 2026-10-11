@@ -112,9 +112,13 @@ fn footer(f: &mut Frame, model: &Model, theme: &Theme, area: ratatui::layout::Re
     }
 }
 
-/// A small dot: blinking accent while a sync is in flight, steady warning if
-/// the last one failed. Idle and local-only show nothing.
+/// A small dot: blinking accent while a sync is in flight. A sync failure is a
+/// problem like any other, shown through the same line; idle and local-only show
+/// nothing.
 fn status_line(model: &Model, theme: &Theme) -> Option<Line<'static>> {
+    if let Some(problem) = &model.ui.sync_problem {
+        return Some(problem_line("\u{2717}", problem, theme));
+    }
     match model.ui.sync {
         SyncStatus::Syncing => {
             let on = (model.ui.tick / 3).is_multiple_of(2);
@@ -125,10 +129,6 @@ fn status_line(model: &Model, theme: &Theme) -> Option<Line<'static>> {
             };
             Some(Line::from(span))
         }
-        SyncStatus::Failed(reason) => Some(Line::from(Span::styled(
-            format!("\u{2717} {reason} \u{b7} run tasu sync"),
-            theme.warn(),
-        ))),
         SyncStatus::Local | SyncStatus::Idle => None,
     }
 }

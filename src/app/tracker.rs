@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use crate::domain::Board;
 use crate::sync::{Error, JobOutcome, Pulled};
 
-use super::model::SyncStatus;
+use super::model::{Problem, SyncStatus};
 
 /// Quiet period before a change is pushed.
 const DEBOUNCE: Duration = Duration::from_secs(3);
@@ -50,6 +50,9 @@ pub(crate) fn due(state: &SyncState, debounce: Duration) -> Due {
 #[derive(Debug)]
 pub struct SyncTracker {
     status: SyncStatus,
+    /// The last failure, if any, kept whole so the details overlay can show the
+    /// git error rather than only the classified phrase.
+    problem: Option<Problem>,
     dirty: bool,
     last_change: Instant,
     retry_at: Option<Instant>,
@@ -68,6 +71,7 @@ impl SyncTracker {
             } else {
                 SyncStatus::Local
             },
+            problem: None,
             dirty: false,
             last_change: now,
             retry_at: None,
@@ -78,6 +82,11 @@ impl SyncTracker {
 
     pub fn status(&self) -> SyncStatus {
         self.status
+    }
+
+    /// The last sync failure, for the footer summary and the details overlay.
+    pub fn problem(&self) -> Option<&Problem> {
+        self.problem.as_ref()
     }
 
     /// Whether the board has changes the worker has not confirmed pushing, so
@@ -107,10 +116,16 @@ impl SyncTracker {
         self.status = SyncStatus::Syncing;
     }
 
-    /// A sync step could not run, or the repository could not be set up. The
-    /// footer shows the classified reason.
+    /// A sync step could not run, or the repository could not be set up. Keep
+    /// the classified phrase for the footer and the whole error for the details
+    /// overlay. Nothing is in flight while the retry is pending, so the status
+    /// returns to `Idle`.
     pub fn failed(&mut self, error: &Error) {
-        self.status = SyncStatus::Failed(error.kind().footer());
+        self.status = SyncStatus::Idle;
+        self.problem = Some(Problem::new(
+            error.kind().footer(),
+            format!("{}\n\nrun `tasu sync` to retry now", error.detail()),
+        ));
     }
 
     /// Apply the result of one worker job. A pulled remote board is returned for
@@ -120,10 +135,12 @@ impl SyncTracker {
         match outcome {
             JobOutcome::Pulled(Pulled::UpToDate) | JobOutcome::Pushed => {
                 self.status = SyncStatus::Idle;
+                self.problem = None;
                 None
             }
             JobOutcome::Pulled(Pulled::Merge(board)) => {
                 self.status = SyncStatus::Idle;
+                self.problem = None;
                 board
             }
             JobOutcome::Failed(error) => {
@@ -232,7 +249,14 @@ mod tests {
         );
 
         assert!(board.is_none());
-        assert_eq!(tracker.status(), SyncStatus::Failed("offline"));
+        let problem = tracker.problem().expect("a failed push is shown");
+        assert_eq!(problem.summary, "offline");
+        assert!(
+            problem.detail.contains("Could not resolve host"),
+            "the git error is kept whole: {}",
+            problem.detail
+        );
+        assert_eq!(tracker.status(), SyncStatus::Idle);
         assert!(tracker.needs_flush(), "a failed push is still owed");
         assert_eq!(tracker.due(t0 + Duration::from_secs(10)), Due::Nothing);
         assert_eq!(tracker.due(t0 + Duration::from_secs(40)), Due::PullThenPush);
@@ -274,9 +298,27 @@ mod tests {
     }
 
     #[test]
+    fn a_successful_push_clears_the_problem() {
+        let t0 = Instant::now();
+        let mut tracker = SyncTracker::new(true, t0);
+        tracker.changed(t0);
+        tracker.push_queued();
+        tracker.on_outcome(
+            JobOutcome::Failed(Error::new("fatal: could not resolve host")),
+            t0,
+        );
+        assert!(tracker.problem().is_some());
+
+        tracker.on_outcome(JobOutcome::Pushed, t0);
+        assert!(tracker.problem().is_none(), "recovery clears the footer");
+    }
+
+    #[test]
     fn a_setup_failure_is_classified_for_the_footer() {
         let mut tracker = SyncTracker::new(true, Instant::now());
         tracker.failed(&Error::new("sync worker stopped"));
-        assert_eq!(tracker.status(), SyncStatus::Failed("sync failed"));
+        let problem = tracker.problem().expect("the setup failure is shown");
+        assert_eq!(problem.summary, "sync failed");
+        assert!(problem.detail.contains("run `tasu sync`"));
     }
 }

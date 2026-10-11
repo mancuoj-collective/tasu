@@ -25,6 +25,7 @@ where
 {
     while !model.should_quit {
         model.ui.sync = runtime.status();
+        model.ui.sync_problem = runtime.problem().cloned();
         let mut overlay_scroll = None;
         terminal.draw(|frame| {
             overlay_scroll = ui::draw(frame, model, theme, chrome);

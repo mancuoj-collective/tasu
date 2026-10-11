@@ -38,7 +38,9 @@ pub enum HistoryView {
     Dropped,
 }
 
-/// Background sync status, shown in the footer.
+/// Background sync status, shown in the footer. A failure is not a status: it is
+/// a [`Problem`], like a write error or a damaged board, so it is read the same
+/// way.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SyncStatus {
     /// No remote configured.
@@ -47,9 +49,6 @@ pub enum SyncStatus {
     Idle,
     /// A pull or push is in flight.
     Syncing,
-    /// The last sync failed and will be retried. Carries the footer reason,
-    /// classified once where the failure happened.
-    Failed(&'static str),
 }
 
 /// A transient message shown after capturing, without stealing focus.
@@ -71,6 +70,8 @@ pub struct UiState {
     pub history_view: HistoryView,
     /// Background sync status, refreshed from the runtime each frame.
     pub sync: SyncStatus,
+    /// The last sync failure, with the git error kept for the details overlay.
+    pub sync_problem: Option<Problem>,
     /// A write error (e.g. the board could not be saved), shown in the footer
     /// until the next successful save, so data loss is never silent.
     pub error: Option<Problem>,
@@ -99,6 +100,7 @@ impl Default for UiState {
             done_filter: Input::default(),
             history_view: HistoryView::Done,
             sync: SyncStatus::Local,
+            sync_problem: None,
             error: None,
             board_damage: None,
             edit_target: None,
@@ -251,11 +253,15 @@ impl Model {
     }
 
     /// Everything currently wrong, for the footer and the details overlay: the
-    /// write error first, then board damage.
+    /// write error first, then board damage, then a sync failure.
     pub fn problems(&self) -> impl Iterator<Item = &Problem> {
-        [self.ui.error.as_ref(), self.ui.board_damage.as_ref()]
-            .into_iter()
-            .flatten()
+        [
+            self.ui.error.as_ref(),
+            self.ui.board_damage.as_ref(),
+            self.ui.sync_problem.as_ref(),
+        ]
+        .into_iter()
+        .flatten()
     }
 
     pub fn set_toast(&mut self, text: impl Into<String>) {
@@ -315,6 +321,17 @@ mod tests {
             Some(0),
             "the cursor stops on the last task"
         );
+    }
+
+    #[test]
+    fn problems_are_listed_in_priority_order() {
+        let mut model = Model::new(Board::new(), at(2026, 10, 5));
+        assert_eq!(model.problems().count(), 0);
+
+        model.ui.error = Some(Problem::new("could not save", "could not save: nope"));
+        model.ui.sync_problem = Some(Problem::new("offline", "fatal: unreachable"));
+        let summaries: Vec<&str> = model.problems().map(|p| p.summary.as_str()).collect();
+        assert_eq!(summaries, vec!["could not save", "offline"]);
     }
 
     #[test]
