@@ -6,11 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-11
+
 ### Fixed
 
 - The help overlay abbreviates the home directory on Windows as well as Unix.
   The boundary check used a hard-coded `/`, so on Windows the `~` abbreviation
   never applied.
+
+### Internal
+
+- The end-to-end suite is split into `tests/tui.rs`, `tests/cli.rs` and
+  `tests/sync.rs`, so a failure names the concern it belongs to.
 
 ## [0.16.0] - 2026-10-11
 
@@ -322,7 +329,8 @@ architecture and optional git sync.
 Initial release: a flat terminal todo list with JSON persistence (add, edit,
 toggle, delete) built with ratatui.
 
-[Unreleased]: https://github.com/mancuoj-collective/tasu/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/mancuoj-collective/tasu/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.17.0
 [0.16.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.16.0
 [0.15.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.15.0
 [0.14.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.14.0
