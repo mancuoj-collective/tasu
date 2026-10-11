@@ -1,6 +1,4 @@
-use std::time::Duration;
-
-use chrono::{DateTime, Local};
+use chrono::{DateTime, Local, TimeDelta};
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use tui_input::backend::crossterm::EventHandler;
 
@@ -8,7 +6,7 @@ use super::action::{Action, Effect};
 use super::model::{HistoryView, Mode, Model, Problem};
 
 /// The toast lingers this long before a `Tick` clears it.
-const TOAST_TTL: Duration = Duration::from_secs(3);
+const TOAST_TTL: TimeDelta = TimeDelta::seconds(3);
 
 /// Turn an action into state changes and a list of effects. Pure with respect
 /// to I/O: the caller owns the clock, the disk and the terminal.
@@ -59,14 +57,14 @@ pub fn update(model: &mut Model, action: Action, now: DateTime<Local>) -> Vec<Ef
 
 fn tick(model: &mut Model, now: DateTime<Local>) -> Vec<Effect> {
     model.ui.tick = model.ui.tick.wrapping_add(1);
-    if let Some(toast) = &model.ui.toast
-        && now
-            .signed_duration_since(toast.born)
-            .to_std()
-            .unwrap_or_default()
-            > TOAST_TTL
-    {
-        model.ui.toast = None;
+    if let Some(toast) = &model.ui.toast {
+        let age = now.signed_duration_since(toast.born);
+        // Expire after the TTL, and also when the clock moved backwards (a DST
+        // fall-back or an NTP step), which would otherwise pin the toast until
+        // wall time caught up.
+        if age > TOAST_TTL || age < TimeDelta::zero() {
+            model.ui.toast = None;
+        }
     }
     if model.settle_if_new_day(now) {
         model.clamp_cursor();
@@ -395,6 +393,35 @@ mod tests {
             vec![Effect::Save]
         );
         assert_eq!(model.board.task(0).unwrap().bucket, Bucket::Week);
+    }
+
+    #[test]
+    fn a_toast_expires_after_its_ttl_or_a_backwards_clock_step() {
+        let mut model = model();
+        model.set_toast("saved");
+
+        // Within the TTL it stays.
+        update(&mut model, Action::Tick, at(2026, 10, 5));
+        assert!(model.ui.toast.is_some());
+
+        // A backwards step must not pin it forever.
+        update(&mut model, Action::Tick, at(2026, 10, 4));
+        assert!(
+            model.ui.toast.is_none(),
+            "a backwards clock step must clear the toast"
+        );
+
+        // And the normal expiry still works.
+        model.set_toast("saved");
+        update(
+            &mut model,
+            Action::Tick,
+            at(2026, 10, 5) + TimeDelta::seconds(4),
+        );
+        assert!(
+            model.ui.toast.is_none(),
+            "the toast must expire after its TTL"
+        );
     }
 
     #[test]
