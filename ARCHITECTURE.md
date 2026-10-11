@@ -40,26 +40,39 @@ src/
   main.rs            entry: parse the CLI, run the loop, spawn the exit flush
   cli.rs             clap definition
   config.rs          settings: data dir / remote (env > config file > default)
-  command/mod.rs     one-shot commands: add, config, remote, sync
+  command/
+    mod.rs           one-shot task commands (add, done, drop, move, list, sync)
+                     all changing commands share `change_board`
+    render.rs        pure plain-text rendering of lists and history
+    remote.rs        `tasu remote`: set / clear, refusal message
+    update.rs        `tasu update`: install method detection and upgrade
   domain/
     task.rs          Task / TaskState / Bucket
     board.rs         Board: collection + operations + per-bucket queries
     settle.rs        pure settle(&mut Board, now)
   store/mod.rs       load / atomic save / mtime / merge_files
-  sync/mod.rs        git: probe, pull, commit+push, branch resolution, error
-                     classification; worker thread + result channel
+  sync/
+    mod.rs           Sync worker thread + result channel; pull, commit+push
+    git.rs           the only place git is spawned: C locale, deadlines, stderr
+    repo.rs          adopt / clone / graft, branch resolution, .gitignore
+    failure.rs       Failure: classify git stderr for the footer and `tasu remote`
   app/
     model.rs         Model = Board + UiState
     action.rs        Action / Effect enums
     update.rs        update(&mut Model, Action) -> Vec<Effect>
-    runtime.rs       I/O half: Store + Sync worker, debounce, reload, `due`
+    tracker.rs       SyncTracker: pure sync state machine + `due` scheduler
+    runtime.rs       I/O half: Store + Sync worker, applies the tracker's decisions
+  session.rs         the interactive loop: draw, collect, read one input, apply
   ui/
-    mod.rs           width-based layout selection + footer + modal dispatch
+    mod.rs           Chrome, width-based layout selection, footer
+    keys.rs          footer hints and help rows, one table
     theme.rs         cold palette
     sections.rs      narrow vertical stack
     kanban.rs        wide three columns
-    modal.rs         add/edit, history, help
-    components.rs    task rows, headers (ISO week), toast
+    components.rs    task rows, selected-row bar, headers (ISO week), toast
+    modal.rs         add/edit and history overlays
+    help.rs          help overlay
+    text.rs          pure text wrapping for the overlays
 ```
 
 ## Data contract (on disk)
@@ -174,16 +187,21 @@ which is what separates "our write" from "an external one".
 - The loop: draw → drain sync results and check mtime → wait up to `TICK`
   (200 ms) for a key → `update` → apply effects.
 - **`Runtime`** (in `app/runtime.rs`, part of the library) owns the `Store`, the
-  optional `Sync` worker and the debounce state (`dirty`, `last_change`,
-  `retry_at`, `in_flight`, `needs_pull`). It is the only place that touches the
-  disk, the clock or the network.
+  optional `Sync` worker and the mtime baseline. It is the only place that
+  touches the disk, the clock or the network.
+- **`SyncTracker`** (in `app/tracker.rs`) holds the sync state (`dirty`,
+  `last_change`, `retry_at`, `in_flight`, `needs_pull`, the footer status). It
+  takes `Instant`s as arguments and never does I/O, so every transition is
+  unit-tested with plain values: a job's outcome, a queued pull or push, a
+  failure's footer reason.
 - **Debounced push**: the decision is the pure
   `due(&SyncState, DEBOUNCE) -> Due` — a function of a few flags and elapsed
-  times, unit-tested without a clock or threads. `Runtime` just performs the
-  I/O: once nothing is in flight and `DEBOUNCE` (3 s) has passed quietly, it
-  sends a commit+push. A failure marks `needs_pull` and schedules a retry after
-  `RETRY` (30 s), pulling first so a rejected (non-fast-forward) push can
-  recover.
+  times. `Runtime` just performs it: once nothing is in flight and `DEBOUNCE`
+  (3 s) has passed quietly, it sends a commit+push. A failure marks `needs_pull`
+  and schedules a retry after `RETRY` (30 s), pulling first so a rejected
+  (non-fast-forward) push can recover.
+- **Failures never reach stderr during the TUI.** Sync and store problems go to
+  the footer; a save that fails on quit is printed after the terminal is restored.
 - **Sync worker**: `Sync` spawns one thread that adopts or creates the
   repository, then processes `Pull` / `CommitPush` jobs and returns a
   `JobOutcome` (`Pulled` / `Pushed` / `Failed`) over a channel. It reports its
@@ -196,7 +214,7 @@ which is what separates "our write" from "an external one".
 
 ## UI contract
 
-- `ui::draw(frame, &Model, &Theme, data_path, remote)` renders container → body
+- `ui::draw(frame, &Model, &Theme, &Chrome)` renders container → body
   → footer → modal. It **only reads** `Model`; the single value it returns is the
   help overlay's clamped scroll offset, which the caller stores (so key handling
   always starts from a valid position without the renderer mutating state).
@@ -223,8 +241,10 @@ which is what separates "our write" from "an external one".
 ## CLI
 
 - `tasu` → the TUI.
-- `tasu add <title>...` → load + `settle` + `add` + save + **best-effort**
-  commit/push (bounded; offline is fine and the exit code is still 0), printing
+- `tasu add <title>...` → **best-effort** pull, then load + `settle` + `add` +
+  save + **best-effort** commit/push (bounded; offline is fine and the exit code
+  is still 0). A failed pull or push prints one `tasu: ... failed` line on
+  stderr, so nothing is silent. Then it prints
   what it captured.
 - `tasu list [bucket] [--json]` (alias `ls`) → load + `settle` and print the open
   tasks grouped by bucket. Read-only and local; `tasu sync` refreshes first.
@@ -327,7 +347,7 @@ repositories):
   two machines converging, and a diverged merge keeping the later rename.
 
 Pure layers (domain, update, store, sync) also have unit tests, as does the
-runtime's pure `due` scheduler (debounce, retry backoff, pull-before-push), and
+sync tracker (the `due` scheduler, outcome handling, retry backoff, pull-before-push), and
 the UI has `insta` snapshot tests. Git-dependent tests run against real
 repositories, so they exercise the real git binary.
 
