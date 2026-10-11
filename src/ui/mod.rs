@@ -17,7 +17,7 @@ use ratatui::{
     widgets::{Block, Paragraph},
 };
 
-use crate::app::{Model, SyncStatus};
+use crate::app::{Model, Problem, SyncStatus};
 
 use unicode_width::UnicodeWidthStr;
 
@@ -144,23 +144,32 @@ fn toast_line(model: &Model, theme: &Theme) -> Option<Line<'static>> {
 /// A write error takes priority over everything else on the right. The full
 /// text is kept for the details overlay, so the footer stays one short line.
 fn error_line(model: &Model, theme: &Theme) -> Option<Line<'static>> {
-    model.ui.error.as_ref().map(|problem| {
-        Line::from(Span::styled(
-            format!(" \u{26a0} {} \u{b7} ! details ", problem.summary),
-            theme.warn(),
-        ))
-    })
+    model
+        .ui
+        .error
+        .as_ref()
+        .map(|problem| problem_line("\u{26a0}", problem, theme))
 }
 
 /// The footer line for a board file that could not be read, or `None` when the
 /// board is intact. The backup path and the reason are in the details overlay.
 fn board_damage_line(model: &Model, theme: &Theme, width: u16) -> Option<Line<'static>> {
     let problem = model.ui.board_damage.as_ref()?;
-    let text = format!(" \u{26a0} {} \u{b7} ! details ", problem.summary);
+    let text = problem_text("\u{26a0}", problem);
     Some(Line::from(Span::styled(
         components::truncate(&text, width as usize),
         theme.warn(),
     )))
+}
+
+/// A footer line for a problem: the short summary and the key that opens the
+/// details overlay, so every failure reads the same way.
+fn problem_line(glyph: &str, problem: &Problem, theme: &Theme) -> Line<'static> {
+    Line::from(Span::styled(problem_text(glyph, problem), theme.warn()))
+}
+
+fn problem_text(glyph: &str, problem: &Problem) -> String {
+    format!(" {glyph} {} \u{b7} ! details ", problem.summary)
 }
 
 fn line_width(line: &Line) -> u16 {
