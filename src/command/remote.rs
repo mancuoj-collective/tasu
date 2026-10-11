@@ -11,9 +11,13 @@ use crate::sync::{self, Failure};
 /// `tasu remote`: show, set or clear the sync remote. Accepts a full URL, a
 /// local path, or a GitHub `owner/repo` shorthand.
 pub fn remote(config: &Config, spec: Option<&str>, clear: bool) -> Result<()> {
+    let shadow = env_override();
     if clear {
         Config::set_remote(None)?;
         println!("sync disabled");
+        if let Some(url) = &shadow {
+            eprintln!("{}", env_shadow_warning(url));
+        }
     } else if let Some(spec) = spec {
         let url = normalize_remote(spec);
         // Verify the remote before committing it to the config. Persisting an
@@ -34,10 +38,30 @@ pub fn remote(config: &Config, spec: Option<&str>, clear: bool) -> Result<()> {
         println!("sync remote set to {url}");
         println!("config written to {}", path.display());
         println!("remote reachable, credentials OK");
+        if let Some(env_url) = &shadow {
+            eprintln!("{}", env_shadow_warning(env_url));
+        }
     } else {
         println!("{}", config.remote.as_deref().unwrap_or("none"));
     }
     Ok(())
+}
+
+/// The `TASU_REMOTE` value, when set to something non-empty. It takes precedence
+/// over the config file, so a change to the file is shadowed while it is set.
+fn env_override() -> Option<String> {
+    std::env::var_os("TASU_REMOTE")
+        .filter(|value| !value.is_empty())
+        .and_then(|value| value.into_string().ok())
+}
+
+/// Warn that `TASU_REMOTE` shadows the config file just written, so a "sync
+/// disabled" or "remote set" line is not read as the effective state.
+fn env_shadow_warning(env_remote: &str) -> String {
+    format!(
+        "tasu: TASU_REMOTE is set ({env_remote}) and overrides the config file; \
+         this change has no effect until it is unset"
+    )
 }
 
 /// Expand a GitHub `owner/repo` shorthand to an HTTPS URL. Anything that already
@@ -117,7 +141,7 @@ fn styled(code: &str, text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_remote, unreachable};
+    use super::{env_shadow_warning, normalize_remote, unreachable};
     use crate::sync::Error;
 
     #[test]
@@ -175,5 +199,12 @@ mod tests {
             "{message}"
         );
         assert!(message.contains("previous remote kept"), "{message}");
+    }
+
+    #[test]
+    fn the_shadow_warning_names_the_env_remote() {
+        let warning = env_shadow_warning("git@env:repo.git");
+        assert!(warning.contains("git@env:repo.git"), "{warning}");
+        assert!(warning.contains("no effect"), "{warning}");
     }
 }
