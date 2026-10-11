@@ -34,19 +34,43 @@ pub(super) fn run(repo: &Path, args: &[&str]) -> Result<(), Error> {
     if output.status.success() {
         return Ok(());
     }
+    Err(Error::new(git_message(&output)))
+}
+
+/// The human-facing text of a failed git command: stderr, or stdout when stderr
+/// is empty, or a generic line when both are.
+fn git_message(output: &std::process::Output) -> String {
     let mut message = String::from_utf8_lossy(&output.stderr).trim().to_string();
     if message.is_empty() {
         message = String::from_utf8_lossy(&output.stdout).trim().to_string();
     }
-    Err(Error::new(message))
+    if message.is_empty() {
+        "git command failed".to_string()
+    } else {
+        message
+    }
 }
 
 /// Whether a git command in `repo` exits successfully. Decided by exit status,
-/// never by parsing output.
+/// never by parsing output. Only for queries where "false" is a safe answer.
 pub(super) fn ok(repo: &Path, args: &[&str]) -> bool {
     in_repo(repo, args)
         .output()
         .is_ok_and(|output| output.status.success())
+}
+
+/// Whether `ancestor` is an ancestor of `descendant`. Exit 1 means "no"; any
+/// other non-zero code — a missing object, a corrupt repository — is a real git
+/// failure and is returned as an error rather than read as "no".
+pub(super) fn is_ancestor(repo: &Path, ancestor: &str, descendant: &str) -> Result<bool, Error> {
+    let output = in_repo(repo, &["merge-base", "--is-ancestor", ancestor, descendant])
+        .output()
+        .map_err(|err| Error::io(err.to_string()))?;
+    match output.status.code() {
+        Some(0) => Ok(true),
+        Some(1) => Ok(false),
+        _ => Err(Error::new(git_message(&output))),
+    }
 }
 
 /// Raw stdout of a git command in `repo`, when it succeeds.

@@ -204,10 +204,7 @@ fn pull(repo: &Path, remote: Option<&str>) -> Result<Pulled, Error> {
     git::bounded(&mut fetch, NETWORK_TIMEOUT)?;
 
     // If the remote is already reachable from HEAD, we are level or ahead.
-    if git::ok(
-        repo,
-        &["merge-base", "--is-ancestor", "refs/tasu/remote", "HEAD"],
-    ) {
+    if git::is_ancestor(repo, "refs/tasu/remote", "HEAD")? {
         return Ok(Pulled::UpToDate);
     }
 
@@ -821,6 +818,20 @@ mod tests {
             .expect("the pull itself succeeds")
             .expect("the unreadable local board must be reported, not swallowed");
         assert!(damage.backup.is_some(), "the corrupt board was moved aside");
+    }
+
+    #[test]
+    fn is_ancestor_distinguishes_a_git_error_from_no() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = dir.path().join("r");
+        std::fs::create_dir_all(&repo).unwrap();
+        git(&repo, &["init", "-q", "-b", "main"]).unwrap();
+        std::fs::write(repo.join("f"), "x").unwrap();
+        commit(&repo, "c");
+
+        assert!(super::git::is_ancestor(&repo, "HEAD", "HEAD").unwrap());
+        // An unknown ref is a git failure (exit 128), not "not an ancestor".
+        assert!(super::git::is_ancestor(&repo, "refs/heads/missing", "HEAD").is_err());
     }
 
     fn board_titles(repo: &Path) -> Vec<String> {
