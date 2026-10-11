@@ -1,6 +1,11 @@
 //! Plain-text wrapping for the overlays. Pure: every function takes text and a
 //! width in display cells and returns the pieces.
 
+use ratatui::{
+    layout::Alignment,
+    style::Style,
+    text::{Line, Span},
+};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 /// Greedy wrap to at most `width` display cells. Break opportunities are
@@ -105,6 +110,38 @@ fn split_at_width(text: &str, width: usize) -> (String, &str) {
         end = text.chars().next().map(char::len_utf8).unwrap_or(0);
     }
     (text[..end].to_string(), &text[end..])
+}
+
+/// Append a labelled, wrapped block to `lines`. The first line begins with
+/// `prefix`; continuation lines are indented under it. Long tokens without
+/// spaces (paths, URLs) are hard-broken, so nothing is ever cut off.
+pub(super) fn push_block(
+    lines: &mut Vec<Line<'static>>,
+    prefix: &str,
+    body: &str,
+    style: Style,
+    inner: usize,
+    align: Alignment,
+) {
+    let indent = prefix.width();
+    let body_width = inner.saturating_sub(indent).max(1);
+    for (i, chunk) in wrap_text(body, body_width).into_iter().enumerate() {
+        let chunk = chunk.trim_end();
+        let lead = if i == 0 {
+            prefix.to_string()
+        } else {
+            " ".repeat(indent)
+        };
+        let pad = match align {
+            Alignment::Right => body_width.saturating_sub(chunk.width()),
+            Alignment::Center => body_width.saturating_sub(chunk.width()) / 2,
+            Alignment::Left => 0,
+        };
+        lines.push(Line::from(Span::styled(
+            format!("{lead}{}{chunk}", " ".repeat(pad)),
+            style,
+        )));
+    }
 }
 
 #[cfg(test)]

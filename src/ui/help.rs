@@ -6,16 +6,14 @@ use std::path::Path;
 use ratatui::{
     Frame,
     layout::Alignment,
-    style::Style,
     text::{Line, Span},
-    widgets::{Block, Clear, Padding, Paragraph},
+    widgets::{Block, Padding},
 };
-use unicode_width::UnicodeWidthStr;
 
 use crate::app::Model;
 
-use super::modal::centered;
-use super::text::wrap_text;
+use super::modal::render_overlay;
+use super::text::push_block;
 use super::{Chrome, keys, theme::Theme};
 
 /// Help overlay geometry, in cells. Generous side padding keeps the content off
@@ -100,18 +98,15 @@ pub fn draw(f: &mut Frame, model: &Model, theme: &Theme, chrome: &Chrome) -> usi
     let block = Block::bordered()
         .border_style(theme.accent())
         .padding(padding);
-    // Height fits the content but never exceeds the screen (one blank row to
-    // spare top and bottom); extra lines scroll.
-    let height = (lines.len() as u16 + HELP_CHROME).min(full.height.saturating_sub(2));
-    let area = centered(full, width, height);
-    f.render_widget(Clear, area);
-
-    let inner_height = height.saturating_sub(HELP_CHROME) as usize;
-    let max_offset = lines.len().saturating_sub(inner_height);
-    let offset = model.ui.overlay_scroll.min(max_offset);
-    let visible: Vec<Line> = lines.into_iter().skip(offset).collect();
-    f.render_widget(Paragraph::new(visible).block(block), area);
-    offset
+    render_overlay(
+        f,
+        full,
+        lines,
+        width,
+        HELP_CHROME,
+        block,
+        model.ui.overlay_scroll,
+    )
 }
 
 /// Abbreviate the home directory to `~`.
@@ -124,36 +119,4 @@ fn display_path(path: &Path) -> String {
         }
     }
     text
-}
-
-/// Append a labelled, wrapped block to `lines`. The first line begins with
-/// `prefix`; continuation lines are indented under it. Long tokens without
-/// spaces (paths, URLs) are hard-broken, so nothing is ever cut off.
-pub(super) fn push_block(
-    lines: &mut Vec<Line<'static>>,
-    prefix: &str,
-    body: &str,
-    style: Style,
-    inner: usize,
-    align: Alignment,
-) {
-    let indent = prefix.width();
-    let body_width = inner.saturating_sub(indent).max(1);
-    for (i, chunk) in wrap_text(body, body_width).into_iter().enumerate() {
-        let chunk = chunk.trim_end();
-        let lead = if i == 0 {
-            prefix.to_string()
-        } else {
-            " ".repeat(indent)
-        };
-        let pad = match align {
-            Alignment::Right => body_width.saturating_sub(chunk.width()),
-            Alignment::Center => body_width.saturating_sub(chunk.width()) / 2,
-            Alignment::Left => 0,
-        };
-        lines.push(Line::from(Span::styled(
-            format!("{lead}{}{chunk}", " ".repeat(pad)),
-            style,
-        )));
-    }
 }

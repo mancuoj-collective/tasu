@@ -6,15 +6,14 @@ use ratatui::{
     Frame,
     layout::Alignment,
     text::{Line, Span},
-    widgets::{Block, Clear, Padding, Paragraph},
+    widgets::{Block, Padding},
 };
 use unicode_width::UnicodeWidthStr;
 
 use crate::app::Model;
 
-use super::help::push_block;
-use super::modal::centered;
-use super::text::wrap_text;
+use super::modal::render_overlay;
+use super::text::{push_block, wrap_text};
 use super::{PROBLEM_MARK, theme::Theme};
 
 const DETAILS_MAX_WIDTH: u16 = 78;
@@ -66,17 +65,15 @@ pub fn draw(f: &mut Frame, model: &Model, theme: &Theme) -> usize {
         .border_style(theme.accent())
         .padding(padding)
         .title(Span::styled(" problems ", theme.accent()));
-    // Height fits the content but never exceeds the screen; extra lines scroll.
-    let height = (lines.len() as u16 + DETAILS_CHROME).min(full.height.saturating_sub(2));
-    let area = centered(full, width, height);
-    f.render_widget(Clear, area);
-
-    let inner_height = height.saturating_sub(DETAILS_CHROME) as usize;
-    let max_offset = lines.len().saturating_sub(inner_height);
-    let offset = model.ui.overlay_scroll.min(max_offset);
-    let visible: Vec<Line> = lines.into_iter().skip(offset).collect();
-    f.render_widget(Paragraph::new(visible).block(block), area);
-    offset
+    render_overlay(
+        f,
+        full,
+        lines,
+        width,
+        DETAILS_CHROME,
+        block,
+        model.ui.overlay_scroll,
+    )
 }
 
 /// The next step, marked with an accent arrow and muted text so it reads as

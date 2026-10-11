@@ -177,3 +177,28 @@ pub(super) fn centered(area: Rect, width: u16, height: u16) -> Rect {
         .areas(area);
     area
 }
+
+/// Render a scrolling overlay sized to its content and return the clamped scroll
+/// offset for the caller to store. Shared by the help and details overlays, so
+/// the geometry, the `Clear`, and the offset clamp live in one place.
+pub(super) fn render_overlay(
+    f: &mut Frame,
+    full: Rect,
+    lines: Vec<Line<'static>>,
+    width: u16,
+    chrome: u16,
+    block: Block<'_>,
+    scroll: usize,
+) -> usize {
+    // Height fits the content but never exceeds the screen; extra lines scroll.
+    let height = (lines.len() as u16 + chrome).min(full.height.saturating_sub(2));
+    let area = centered(full, width, height);
+    f.render_widget(Clear, area);
+
+    let inner_height = height.saturating_sub(chrome) as usize;
+    let max_offset = lines.len().saturating_sub(inner_height);
+    let offset = scroll.min(max_offset);
+    let visible: Vec<Line> = lines.into_iter().skip(offset).collect();
+    f.render_widget(Paragraph::new(visible).block(block), area);
+    offset
+}
