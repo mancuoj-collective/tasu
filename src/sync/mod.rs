@@ -8,6 +8,7 @@ use std::thread;
 use std::time::Duration;
 
 use crate::domain::Board;
+use crate::store::Damage;
 
 pub use failure::{Error, Failure};
 use repo::{DEFAULT_BRANCH, board_store, commit_all, current_branch, ensure_repo};
@@ -123,25 +124,32 @@ pub fn commit_now(repo: &Path, remote: Option<&str>) -> Result<(), Error> {
 }
 
 /// One synchronous pull, used before a one-shot command reads the board so a
-/// CLI-only machine does not diverge from the remote.
-pub fn pull_now(repo: &Path, remote: Option<&str>) -> Result<(), Error> {
+/// CLI-only machine does not diverge from the remote. Returns any [`Damage`]
+/// from the local board that could not be read, so the caller can surface it
+/// instead of letting the tasks look lost.
+pub fn pull_now(repo: &Path, remote: Option<&str>) -> Result<Option<Damage>, Error> {
     ensure_repo(repo, remote)?;
     apply_pull(repo, pull(repo, remote)?)
 }
 
 /// Merge a pull result into the on-disk board. The one-shot CLI is a single
 /// process, so it writes the file directly; the TUI instead hands the board to
-/// its model, which stays the file's only writer.
-fn apply_pull(repo: &Path, pulled: Pulled) -> Result<(), Error> {
+/// its model, which stays the file's only writer. The `Damage`, when the local
+/// board could not be read (and was moved aside by `Store::load`), is returned
+/// rather than dropped, so a pull can never quietly replace a board it could not
+/// parse.
+fn apply_pull(repo: &Path, pulled: Pulled) -> Result<Option<Damage>, Error> {
     let Pulled::Merge(Some(remote)) = pulled else {
-        return Ok(());
+        return Ok(None);
     };
     let store = board_store(repo);
     // Remote is the shared base; the local board fills in and advances.
-    let merged = remote.merged_with(&store.load().board);
+    let loaded = store.load();
+    let merged = remote.merged_with(&loaded.board);
     store
         .save(&merged)
-        .map_err(|err| Error::new(err.to_string()))
+        .map_err(|err| Error::new(err.to_string()))?;
+    Ok(loaded.damaged)
 }
 
 /// Check that a remote is reachable and that credentials work, without asking
@@ -704,7 +712,7 @@ mod tests {
     /// Pull and apply, the way the one-shot CLI does. The TUI instead hands the
     /// returned board to its model, which is the file's only writer.
     fn pull_applied(repo: &Path, remote: &str) {
-        apply_pull(repo, pull(repo, Some(remote)).unwrap()).unwrap();
+        let _ = apply_pull(repo, pull(repo, Some(remote)).unwrap()).unwrap();
     }
 
     #[test]
@@ -762,6 +770,44 @@ mod tests {
             .map(|task| task.title.as_str())
             .collect();
         assert!(titles.contains(&"from B"), "{titles:?}");
+    }
+
+    #[test]
+    fn pull_reports_a_corrupt_local_board() {
+        // Regression: `apply_pull` used to keep only `.board` from `Store::load`,
+        // so a local `todos.json` that could not be read was replaced by the
+        // remote's copy with no warning — the tasks looked lost.
+        let dir = tempfile::tempdir().unwrap();
+        let remote = bare_remote(dir.path());
+
+        let seed = dir.path().join("seed");
+        std::fs::create_dir_all(&seed).unwrap();
+        write_board(&seed, &[("base", 5)]);
+        git(&seed, &["init", "-q", "-b", "main"]).unwrap();
+        git(&seed, &["add", "-A"]).unwrap();
+        commit(&seed, "base");
+        git(&seed, &["remote", "add", "origin", &remote]).unwrap();
+        git(&seed, &["push", "-q", "origin", "main"]).unwrap();
+        let _ = Command::new("git")
+            .arg("--git-dir")
+            .arg(&remote)
+            .args(["symbolic-ref", "HEAD", "refs/heads/main"])
+            .status();
+
+        // A clone whose working-tree board cannot be read.
+        let a = dir.path().join("a");
+        clone_repo(&remote, &a);
+        std::fs::write(a.join("todos.json"), "{ not a board").unwrap();
+
+        // The remote moves ahead, so the pull takes the merge path.
+        add_task(&seed, "from seed", 6);
+        commit(&seed, "ahead");
+        git(&seed, &["push", "-q", "origin", "main"]).unwrap();
+
+        let damage = pull_now(&a, Some(&remote))
+            .expect("the pull itself succeeds")
+            .expect("the unreadable local board must be reported, not swallowed");
+        assert!(damage.backup.is_some(), "the corrupt board was moved aside");
     }
 
     fn board_titles(repo: &Path) -> Vec<String> {

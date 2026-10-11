@@ -195,9 +195,13 @@ fn joined_title(words: &[String]) -> Option<String> {
 
 /// Best-effort pull before a one-shot command. The command still runs on the
 /// local board, but a failed pull is reported like a failed push, never silent.
+/// A local board that could not be read would otherwise be replaced by the
+/// remote's copy, so its damage is printed too.
 fn best_effort_pull(config: &Config) {
-    if let Err(err) = sync::pull_now(&config.data_dir, config.remote.as_deref()) {
-        eprintln!("tasu: pull failed: {err}");
+    match sync::pull_now(&config.data_dir, config.remote.as_deref()) {
+        Ok(Some(damage)) => eprintln!("tasu: {}", damage.detail()),
+        Ok(None) => {}
+        Err(err) => eprintln!("tasu: pull failed: {err}"),
     }
 }
 
@@ -223,6 +227,9 @@ pub fn sync(config: &Config) -> Result<()> {
 
     let pull = sync::pull_now(&config.data_dir, Some(url));
     let push = sync::commit_now(&config.data_dir, Some(url));
+    if let Ok(Some(damage)) = &pull {
+        eprintln!("tasu: {}", damage.detail());
+    }
     if let Err(err) = &pull {
         eprintln!("pull failed:\n  {err}");
     }

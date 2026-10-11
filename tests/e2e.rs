@@ -792,7 +792,7 @@ fn a_later_rename_survives_a_diverged_sync() {
     sync::commit_now(&a, Some(&url)).unwrap();
 
     // B clones it.
-    sync::pull_now(&b, Some(&url)).unwrap();
+    let _ = sync::pull_now(&b, Some(&url)).unwrap();
     let mut board_b = Store::new(b.join("todos.json")).load().board;
     assert_eq!(board_b.tasks().len(), 1, "B did not receive the task");
 
@@ -803,7 +803,7 @@ fn a_later_rename_survives_a_diverged_sync() {
 
     board_b.rename(0, "named on B", dt(7));
     Store::new(b.join("todos.json")).save(&board_b).unwrap();
-    sync::pull_now(&b, Some(&url)).unwrap();
+    let _ = sync::pull_now(&b, Some(&url)).unwrap();
     sync::commit_now(&b, Some(&url)).unwrap();
 
     let merged = Store::new(b.join("todos.json")).load().board;
