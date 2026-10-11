@@ -100,7 +100,7 @@ pub enum HistoryList {
 /// `tasu history [done|dropped]`: print completed and dropped tasks. With no
 /// view, both sections are shown.
 pub fn history(config: &Config, view: HistoryList, json: bool) -> Result<()> {
-    let board = load_board(&Store::new(config.board_path()));
+    let (_, board) = open_board(config, Local::now());
     let sections = history_sections(&board, view);
 
     if json {
