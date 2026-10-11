@@ -1,3 +1,4 @@
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -12,23 +13,36 @@ pub struct Config {
 
 impl Config {
     pub fn load() -> Self {
-        let file = FileConfig::read();
+        Self::resolve(
+            std::env::var_os("TASU_DATA"),
+            std::env::var_os("TASU_REMOTE"),
+            FileConfig::read(),
+        )
+    }
 
-        let data_dir = std::env::var_os("TASU_DATA")
+    /// Apply the precedence — environment over config file over default — from
+    /// already-read values, so it can be tested without touching the process
+    /// environment. A *present* environment value always wins, even when empty:
+    /// an empty `TASU_DATA`/`TASU_REMOTE` means "not set here", never "fall back
+    /// to the file".
+    fn resolve(data: Option<OsString>, remote: Option<OsString>, file: FileConfig) -> Self {
+        let data_dir = data
+            .filter(|value| !value.is_empty())
             .map(PathBuf::from)
             .or(file.data_dir)
             .unwrap_or_else(default_data_dir);
 
-        let remote = match std::env::var("TASU_REMOTE") {
-            Ok(url) if !url.trim().is_empty() => Some(url),
-            Ok(_) => None,
-            Err(std::env::VarError::NotUnicode(_)) => {
-                eprintln!("tasu: ignoring non-UTF-8 TASU_REMOTE");
-                None
-            }
-            Err(std::env::VarError::NotPresent) => None,
-        }
-        .or(file.remote);
+        let remote = match remote {
+            None => file.remote,
+            Some(value) => match value.into_string() {
+                Ok(url) if url.trim().is_empty() => None,
+                Ok(url) => Some(url),
+                Err(_) => {
+                    eprintln!("tasu: ignoring non-UTF-8 TASU_REMOTE");
+                    file.remote
+                }
+            },
+        };
 
         Self { data_dir, remote }
     }
@@ -106,4 +120,55 @@ fn default_data_dir() -> PathBuf {
     dirs::data_dir()
         .map(|dir| dir.join("tasu"))
         .unwrap_or_else(|| PathBuf::from("."))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn file(data: Option<&str>, remote: Option<&str>) -> FileConfig {
+        FileConfig {
+            data_dir: data.map(PathBuf::from),
+            remote: remote.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn empty_env_data_dir_does_not_become_the_cwd() {
+        let config = Config::resolve(
+            Some(OsString::from("")),
+            None,
+            file(Some("/from/file"), None),
+        );
+        assert_eq!(config.data_dir, PathBuf::from("/from/file"));
+    }
+
+    #[test]
+    fn empty_env_remote_disables_a_file_remote() {
+        let config = Config::resolve(
+            None,
+            Some(OsString::from("")),
+            file(None, Some("git@host:repo.git")),
+        );
+        assert_eq!(
+            config.remote, None,
+            "a present-but-empty TASU_REMOTE must override the config file"
+        );
+    }
+
+    #[test]
+    fn a_set_env_remote_wins_over_the_file() {
+        let config = Config::resolve(
+            None,
+            Some(OsString::from("git@env:repo.git")),
+            file(None, Some("git@file:repo.git")),
+        );
+        assert_eq!(config.remote.as_deref(), Some("git@env:repo.git"));
+    }
+
+    #[test]
+    fn absent_env_remote_uses_the_file() {
+        let config = Config::resolve(None, None, file(None, Some("git@file:repo.git")));
+        assert_eq!(config.remote.as_deref(), Some("git@file:repo.git"));
+    }
 }
