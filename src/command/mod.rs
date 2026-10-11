@@ -112,7 +112,7 @@ pub fn history(config: &Config, view: HistoryList, json: bool) -> Result<()> {
     if json {
         let tasks: Vec<&Task> = sections
             .iter()
-            .flat_map(|(_, tasks)| tasks.iter().copied())
+            .flat_map(|section| section.tasks.iter().copied())
             .collect();
         return print_json(&tasks);
     }

@@ -5,9 +5,17 @@ use crate::domain::{Board, Bucket, Task};
 
 use super::HistoryList;
 
-/// The requested history views as `(dropped, tasks)`, newest first, in print
-/// order. Empty views are kept so `render_history` can skip them.
-pub(super) fn history_sections(board: &Board, view: HistoryList) -> Vec<(bool, Vec<&Task>)> {
+/// One history section: whether it is the dropped list, and its tasks, newest
+/// first. Named fields instead of a bare `(bool, Vec<_>)` tuple, so the flag
+/// cannot be transposed.
+pub(super) struct HistorySection<'a> {
+    pub dropped: bool,
+    pub tasks: Vec<&'a Task>,
+}
+
+/// The requested history views, in print order. Empty views are kept so
+/// `render_history` can skip them.
+pub(super) fn history_sections(board: &Board, view: HistoryList) -> Vec<HistorySection<'_>> {
     let wanted: &[bool] = match view {
         HistoryList::Both => &[false, true],
         HistoryList::Done => &[false],
@@ -25,22 +33,23 @@ pub(super) fn history_sections(board: &Board, view: HistoryList) -> Vec<(bool, V
                 .iter()
                 .filter_map(|&index| board.task(index))
                 .collect();
-            (dropped, tasks)
+            HistorySection { dropped, tasks }
         })
         .collect()
 }
 
-pub(super) fn render_history(sections: &[(bool, Vec<&Task>)], view: HistoryList) -> String {
+pub(super) fn render_history(sections: &[HistorySection<'_>], view: HistoryList) -> String {
     let mut rendered: Vec<String> = Vec::new();
-    for (dropped, tasks) in sections {
-        if tasks.is_empty() {
+    for section in sections {
+        if section.tasks.is_empty() {
             continue;
         }
-        let mark = if *dropped { '\u{2717}' } else { '\u{2713}' };
+        let dropped = section.dropped;
+        let mark = if dropped { '\u{2717}' } else { '\u{2713}' };
         let mut out = String::new();
-        out.push_str(if *dropped { "DROPPED" } else { "DONE" });
+        out.push_str(if dropped { "DROPPED" } else { "DONE" });
         out.push('\n');
-        for task in tasks {
+        for task in &section.tasks {
             out.push_str("  ");
             out.push(mark);
             out.push(' ');
