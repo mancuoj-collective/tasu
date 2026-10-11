@@ -4,8 +4,6 @@ use chrono::{DateTime, Local};
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use tui_input::backend::crossterm::EventHandler;
 
-use crate::domain::settle;
-
 use super::action::{Action, Effect};
 use super::model::{HistoryView, Mode, Model, Problem};
 
@@ -32,7 +30,7 @@ pub fn update(model: &mut Model, action: Action, now: DateTime<Local>) -> Vec<Ef
             // The file on disk is the truth: mirror the damage either way, so a
             // reload of a healed board clears a stale "board unreadable" problem.
             model.ui.board_damage = damaged;
-            settle(&mut model.board, now);
+            model.settle(now);
             model.clamp_cursor();
             Vec::new()
         }
@@ -45,7 +43,7 @@ pub fn update(model: &mut Model, action: Action, now: DateTime<Local>) -> Vec<Ef
                 return Vec::new();
             }
             model.board = merged;
-            settle(&mut model.board, now);
+            model.settle(now);
             model.clamp_cursor();
             vec![Effect::Save]
         }
@@ -70,7 +68,7 @@ fn tick(model: &mut Model, now: DateTime<Local>) -> Vec<Effect> {
     {
         model.ui.toast = None;
     }
-    if settle(&mut model.board, now) {
+    if model.settle_if_new_day(now) {
         model.clamp_cursor();
         vec![Effect::Save]
     } else {

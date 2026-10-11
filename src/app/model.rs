@@ -143,6 +143,10 @@ pub struct Model {
     pub ui: UiState,
     pub now: DateTime<Local>,
     pub should_quit: bool,
+    /// The last local date `settle` ran for, so the idle tick does not rescan the
+    /// whole board five times a second when the day — and thus the ISO week —
+    /// cannot have changed.
+    settled_date: Option<chrono::NaiveDate>,
 }
 
 impl Model {
@@ -152,7 +156,23 @@ impl Model {
             ui: UiState::default(),
             now,
             should_quit: false,
+            settled_date: None,
         }
+    }
+
+    /// Settle the board to `now`, recording the day so the idle tick can skip.
+    pub fn settle(&mut self, now: DateTime<Local>) -> bool {
+        self.settled_date = Some(now.date_naive());
+        crate::domain::settle(&mut self.board, now)
+    }
+
+    /// Settle only when the local date advanced since the last settle: demotion
+    /// depends on the day and the ISO week, and both change only with the date.
+    pub fn settle_if_new_day(&mut self, now: DateTime<Local>) -> bool {
+        if self.settled_date == Some(now.date_naive()) {
+            return false;
+        }
+        self.settle(now)
     }
 
     pub const BUCKETS: [Bucket; 3] = [Bucket::Today, Bucket::Week, Bucket::Later];
