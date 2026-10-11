@@ -9,18 +9,18 @@ expression: "render(&model, 84, 26)"
                                                                                     
  THIS WEEK  41/53                                                                   
  ────────────────────────────────────────────────────────────────────────────────── 
-  ○┌ details ───────────────────────────────────────────────────────────────────┐   
+  ○ write the README                                                                
+   ┌ problems ──────────────────────────────────────────────────────────────────┐   
+ LA│                                                                            │   
+ ──│  ⚠ could not save                                                          │── 
+  ○│      failed to write temporary file: Permission denied (os error 13)       │   
    │                                                                            │   
- LA│  could not save                                                            │   
- ──│    could not save: failed to write temporary file: Permission denied (os   │── 
-  ○│    error 13)                                                               │   
-   │                                                                            │   
-   │  offline                                                                   │   
-   │    fatal: unable to access: Could not resolve host: github.com             │   
-   │                                                                            │   
-   │    run `tasu sync` to retry now                                            │   
+   │  ⚠ offline                                                                 │   
+   │      fatal: unable to access: Could not resolve host: github.com           │   
+   │      → run `tasu sync` to retry now                                        │   
    │                                                                            │   
    └────────────────────────────────────────────────────────────────────────────┘   
+                                                                                    
                                                                                     
                                                                                     
                                                                                     

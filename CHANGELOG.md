@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The problems overlay (`!`) reads as a list of headings, not a wall of text:
+  the summary is a bold glyph heading, the facts are indented under it, a backup
+  path sits on its own line, and a next step (`→ run tasu sync to retry now`)
+  ends the entry. The summary is no longer repeated in the body, and the overlay
+  is titled `problems`.
+
 ## [0.15.0] - 2026-10-11
 
 ### Added

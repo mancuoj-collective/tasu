@@ -7,7 +7,7 @@ use tui_input::backend::crossterm::EventHandler;
 use crate::domain::settle;
 
 use super::action::{Action, Effect};
-use super::model::{HistoryView, Mode, Model, Problem};
+use super::model::{HistoryView, Mode, Model};
 
 /// The toast lingers this long before a `Tick` clears it.
 const TOAST_TTL: Duration = Duration::from_secs(3);
@@ -31,8 +31,8 @@ pub fn update(model: &mut Model, action: Action, now: DateTime<Local>) -> Vec<Ef
             model.board = board;
             // A reloaded file that could not be parsed is empty; say so rather
             // than letting the board appear to have vanished.
-            if let Some(damage) = damaged {
-                model.ui.board_damage = Some(Problem::new("board unreadable", damage));
+            if let Some(problem) = damaged {
+                model.ui.board_damage = Some(problem);
             }
             settle(&mut model.board, now);
             model.clamp_cursor();
@@ -308,6 +308,7 @@ mod tests {
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
     use super::*;
+    use crate::app::Problem;
     use crate::domain::{Bucket, test_time::at};
 
     fn press(code: KeyCode) -> Action {
@@ -420,7 +421,7 @@ mod tests {
 
         model.ui.error = Some(Problem::new(
             "could not save",
-            "could not save: Permission denied (os error 13)",
+            "Permission denied (os error 13)",
         ));
         update(&mut model, press(KeyCode::Char('!')), at(2026, 10, 5));
         assert_eq!(model.ui.mode, Mode::Details);

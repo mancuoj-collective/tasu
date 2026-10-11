@@ -122,10 +122,10 @@ impl SyncTracker {
     /// returns to `Idle`.
     pub fn failed(&mut self, error: &Error) {
         self.status = SyncStatus::Idle;
-        self.problem = Some(Problem::new(
-            error.kind().footer(),
-            format!("{}\n\nrun `tasu sync` to retry now", error.detail()),
-        ));
+        self.problem = Some(
+            Problem::new(error.kind().footer(), error.detail())
+                .with_hint("run `tasu sync` to retry now"),
+        );
     }
 
     /// Apply the result of one worker job. A pulled remote board is returned for
@@ -319,6 +319,9 @@ mod tests {
         tracker.failed(&Error::new("sync worker stopped"));
         let problem = tracker.problem().expect("the setup failure is shown");
         assert_eq!(problem.summary, "sync failed");
-        assert!(problem.detail.contains("run `tasu sync`"));
+        assert_eq!(
+            problem.hint.as_deref(),
+            Some("run `tasu sync` to retry now")
+        );
     }
 }

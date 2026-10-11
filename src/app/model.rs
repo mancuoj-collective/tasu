@@ -14,12 +14,15 @@ pub enum Mode {
 }
 
 /// Something that went wrong and stays visible until it is resolved. The footer
-/// shows `summary`; the details overlay shows `detail`, which is never
-/// truncated, so a long IO error or a backup path is readable.
+/// shows `summary`; the details overlay shows `detail` and, when there is one,
+/// the `hint` next step. `detail` never repeats `summary`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Problem {
     pub summary: String,
     pub detail: String,
+    /// A next step, shown under the facts with a leading arrow. `None` when
+    /// there is nothing useful to suggest.
+    pub hint: Option<String>,
 }
 
 impl Problem {
@@ -27,7 +30,24 @@ impl Problem {
         Self {
             summary: summary.into(),
             detail: detail.into(),
+            hint: None,
         }
+    }
+
+    /// Attach a next step.
+    pub fn with_hint(mut self, hint: impl Into<String>) -> Self {
+        self.hint = Some(hint.into());
+        self
+    }
+
+    /// The problem for a board file that could not be read: why, and where the
+    /// original was moved aside — two facts, neither repeating the summary.
+    pub fn from_damage(damage: &crate::store::Damage) -> Self {
+        let detail = match &damage.backup {
+            Some(path) => format!("{}\nsaved as {}", damage.reason, path.display()),
+            None => damage.reason.clone(),
+        };
+        Self::new("board unreadable", detail)
     }
 }
 
@@ -328,7 +348,7 @@ mod tests {
         let mut model = Model::new(Board::new(), at(2026, 10, 5));
         assert_eq!(model.problems().count(), 0);
 
-        model.ui.error = Some(Problem::new("could not save", "could not save: nope"));
+        model.ui.error = Some(Problem::new("could not save", "nope"));
         model.ui.sync_problem = Some(Problem::new("offline", "fatal: unreachable"));
         let summaries: Vec<&str> = model.problems().map(|p| p.summary.as_str()).collect();
         assert_eq!(summaries, vec!["could not save", "offline"]);

@@ -69,9 +69,7 @@ fn run_tui(config: Config) -> Result<()> {
     let now = Local::now();
     let loaded = runtime.load_board(now);
     let mut model = Model::new(loaded.board, now);
-    model.ui.board_damage = loaded
-        .damaged
-        .map(|d| Problem::new("board unreadable", d.detail()));
+    model.ui.board_damage = loaded.damaged.as_ref().map(Problem::from_damage);
     let theme = Theme::detect();
     let chrome = Chrome {
         data_path: &board_path,

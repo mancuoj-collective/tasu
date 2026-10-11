@@ -1,6 +1,6 @@
-//! The details overlay: the full, untruncated text of whatever went wrong, so a
-//! long IO error or the path of a backup is readable even in a narrow terminal.
-//! The footer only carries the short summary that opens this.
+//! The details overlay: every problem in full — the summary as a heading, the
+//! facts indented beneath it, and, when there is one, the next step. Nothing
+//! repeats the heading and nothing is elided.
 
 use ratatui::{
     Frame,
@@ -20,6 +20,8 @@ const DETAILS_PAD_X: u16 = 2;
 const DETAILS_PAD_Y: u16 = 1;
 /// Border (2) plus vertical padding, matching `help`.
 const DETAILS_CHROME: u16 = 2 + DETAILS_PAD_Y * 2;
+/// Facts and the next step sit under the summary's glyph.
+const DETAILS_INDENT: &str = "    ";
 
 /// Draw the overlay and return the clamped scroll offset, so the caller can
 /// store it (the same contract as the help overlay).
@@ -34,19 +36,31 @@ pub fn draw(f: &mut Frame, model: &Model, theme: &Theme) -> usize {
         if index > 0 {
             lines.push(Line::default());
         }
+        // A heading the colour-blind and no-colour terminals can still read: a
+        // glyph and bold weight, not only the warning hue.
         lines.push(Line::from(Span::styled(
-            problem.summary.clone(),
-            theme.warn(),
+            format!("\u{26a0} {}", problem.summary),
+            theme.warn().bold(),
         )));
-        // The detail wraps onto continuation lines, so nothing is elided.
+        // The facts wrap onto their own indented lines, so nothing is elided.
         push_block(
             &mut lines,
-            "  ",
+            DETAILS_INDENT,
             &problem.detail,
             theme.text(),
             inner,
             Alignment::Left,
         );
+        if let Some(hint) = &problem.hint {
+            push_block(
+                &mut lines,
+                DETAILS_INDENT,
+                &format!("\u{2192} {hint}"),
+                theme.text(),
+                inner,
+                Alignment::Left,
+            );
+        }
     }
     if lines.is_empty() {
         lines.push(Line::from(Span::styled("nothing to report", theme.muted())));
@@ -56,7 +70,7 @@ pub fn draw(f: &mut Frame, model: &Model, theme: &Theme) -> usize {
     let block = Block::bordered()
         .border_style(theme.accent())
         .padding(padding)
-        .title(Span::styled(" details ", theme.accent()));
+        .title(Span::styled(" problems ", theme.accent()));
     // Height fits the content but never exceeds the screen; extra lines scroll.
     let height = (lines.len() as u16 + DETAILS_CHROME).min(full.height.saturating_sub(2));
     let area = centered(full, width, height);

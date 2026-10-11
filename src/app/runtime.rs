@@ -111,10 +111,10 @@ impl Runtime {
                             self.tracker.changed(Instant::now());
                         }
                         Err(err) => {
-                            model.ui.error = Some(Problem::new(
-                                "could not save",
-                                format!("could not save: {err}"),
-                            ))
+                            // The whole chain, so the details overlay shows the
+                            // cause and not only the outermost context.
+                            model.ui.error =
+                                Some(Problem::new("could not save", format!("{err:#}")))
                         }
                     }
                     self.sync_mtime();
@@ -173,7 +173,7 @@ impl Runtime {
         let loaded = self.store.load();
         Some(Action::Reload {
             board: loaded.board,
-            damaged: loaded.damaged.map(|damage| damage.detail()),
+            damaged: loaded.damaged.as_ref().map(Problem::from_damage),
         })
     }
 }

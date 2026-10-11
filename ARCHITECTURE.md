@@ -231,13 +231,14 @@ which is what separates "our write" from "an external one".
   (a blinking dot while syncing, `✗ <summary> · ! details` on failure), then
   the toast. Every failure reads the same way.
 - Every failure — a write error, a board that could not be read, a sync
-  failure — keeps a `Problem` (`summary` + `detail`). The footer shows only the
-  short `summary` with a `· ! details` affordance, so a long IO error, a backup
-  path or a git dump never crowds it out; pressing `!` opens the details
-  overlay, which wraps the full `detail` and scrolls like help. `!` is inert
-  when nothing is wrong. A sync failure's overlay detail ends with the
-  `run tasu sync` retry hint. Every problem clears when its cause does (a
-  successful save, a successful sync).
+  failure — keeps a `Problem`: a short `summary`, the `detail` facts, and an
+  optional `hint` next step. The footer shows only the `summary` with a
+  `· ! details` affordance, so a long IO error, a backup path or a git dump
+  never crowds it out. Pressing `!` opens the problems overlay, titled
+  `problems`: a bold glyph heading per `summary`, the `detail` facts wrapped and
+  indented (a backup path on its own line), and the `hint` last, after an `→`.
+  `detail` never repeats `summary`. `!` is inert when nothing is wrong. Every
+  problem clears when its cause does (a successful save, a successful sync).
 - When `todos.json` could not be read, the footer's **left** side replaces the
   key hints with the damage summary, so the sync status on the right stays
   visible.

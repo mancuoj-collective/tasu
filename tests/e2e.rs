@@ -614,9 +614,7 @@ fn a_corrupt_board_is_reported_and_its_backup_is_readable() {
     let loaded = runtime.load_board(now);
     assert!(loaded.board.is_empty(), "a damaged board loads empty");
     let mut model = Model::new(loaded.board, now);
-    model.ui.board_damage = loaded
-        .damaged
-        .map(|d| Problem::new("board unreadable", d.detail()));
+    model.ui.board_damage = loaded.damaged.as_ref().map(Problem::from_damage);
 
     let screen = render(&mut model, 80, 12);
     assert!(

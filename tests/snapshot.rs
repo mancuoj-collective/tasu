@@ -106,11 +106,14 @@ fn the_details_overlay_shows_every_problem_in_full() {
     model.ui.mode = Mode::Details;
     model.ui.error = Some(Problem::new(
         "could not save",
-        "could not save: failed to write temporary file: Permission denied (os error 13)",
+        "failed to write temporary file: Permission denied (os error 13)",
     ));
-    model.ui.sync_problem = Some(Problem::new(
-        "offline",
-        "fatal: unable to access: Could not resolve host: github.com\n\nrun `tasu sync` to retry now",
-    ));
+    model.ui.sync_problem = Some(
+        Problem::new(
+            "offline",
+            "fatal: unable to access: Could not resolve host: github.com",
+        )
+        .with_hint("run `tasu sync` to retry now"),
+    );
     insta::assert_snapshot!(render(&model, 84, 26));
 }
