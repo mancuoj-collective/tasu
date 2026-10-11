@@ -24,9 +24,15 @@ use render::{bucket_label, history_sections, render_history, render_open};
 fn load_board(store: &Store) -> Board {
     let loaded = store.load();
     if let Some(damage) = &loaded.damaged {
-        eprintln!("tasu: {}", damage.detail());
+        warn(damage.detail());
     }
     loaded.board
+}
+
+/// Report a one-shot failure on stderr, with the `tasu:` prefix every command
+/// shares, so CLI output stays uniform and greppable.
+fn warn(message: impl std::fmt::Display) {
+    eprintln!("tasu: {message}");
 }
 
 /// Open the local board for a one-shot command: the `Store` to write it back
@@ -199,15 +205,15 @@ fn joined_title(words: &[String]) -> Option<String> {
 /// remote's copy, so its damage is printed too.
 fn best_effort_pull(config: &Config) {
     match sync::pull_now(&config.data_dir, config.remote.as_deref()) {
-        Ok(Some(damage)) => eprintln!("tasu: {}", damage.detail()),
+        Ok(Some(damage)) => warn(damage.detail()),
         Ok(None) => {}
-        Err(err) => eprintln!("tasu: pull failed: {err}"),
+        Err(err) => warn(format!("pull failed: {err}")),
     }
 }
 
 fn best_effort_push(config: &Config) {
     if let Err(err) = sync::commit_now(&config.data_dir, config.remote.as_deref()) {
-        eprintln!("tasu: push failed: {err}");
+        warn(format!("push failed: {err}"));
     }
 }
 
@@ -228,14 +234,14 @@ pub fn sync(config: &Config) -> Result<()> {
     let pull = sync::pull_now(&config.data_dir, Some(url));
     let push = sync::commit_now(&config.data_dir, Some(url));
     if let Ok(Some(damage)) = &pull {
-        eprintln!("tasu: {}", damage.detail());
+        warn(damage.detail());
     }
     if let Err(err) = &pull {
-        eprintln!("pull failed:\n  {err}");
+        warn(format!("pull failed: {err}"));
     }
     match &push {
         Ok(()) => println!("push ok"),
-        Err(err) => eprintln!("push failed:\n  {err}"),
+        Err(err) => warn(format!("push failed: {err}")),
     }
     if pull.is_err() || push.is_err() {
         anyhow::bail!("sync failed");
