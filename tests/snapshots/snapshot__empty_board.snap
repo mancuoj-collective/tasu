@@ -1,0 +1,16 @@
+---
+source: tests/snapshot.rs
+expression: "render(&model, 84, 12)"
+---
+                                                                                    
+                                                                                    
+                                                                                    
+                                                                                    
+                                                                                    
+                              press a to add something                              
+                                                                                    
+                                                                                    
+                                                                                    
+                                                                                    
+                                                                                    
+ ? help  q quit  a add  c history  [] move

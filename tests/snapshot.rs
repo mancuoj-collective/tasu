@@ -122,3 +122,40 @@ fn the_details_overlay_shows_every_problem_in_full() {
     );
     insta::assert_snapshot!(render(&model, 84, 26));
 }
+
+#[test]
+fn empty_board() {
+    let model = Model::new(Board::new(), dt(8));
+    insta::assert_snapshot!(render(&model, 84, 12));
+}
+
+#[test]
+fn too_small_terminal() {
+    let model = Model::new(board(), dt(8));
+    insta::assert_snapshot!(render(&model, 30, 6));
+}
+
+#[test]
+fn capture_toast() {
+    let mut model = Model::new(board(), dt(8));
+    model.set_toast("saved to today");
+    insta::assert_snapshot!(render(&model, 84, 20));
+}
+
+#[test]
+fn add_modal() {
+    let mut model = Model::new(board(), dt(8));
+    model.ui.mode = Mode::Add;
+    model.ui.input = tui_input::Input::new("write a snapshot".to_string());
+    insta::assert_snapshot!(render(&model, 84, 20));
+}
+
+#[test]
+fn history_modal() {
+    let mut board = board();
+    board.complete(0, dt(9));
+    board.archive(1, dt(9));
+    let mut model = Model::new(board, dt(9));
+    model.ui.mode = Mode::Completed;
+    insta::assert_snapshot!(render(&model, 84, 20));
+}

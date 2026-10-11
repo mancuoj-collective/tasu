@@ -1,0 +1,9 @@
+---
+source: tests/snapshot.rs
+expression: "render(&model, 30, 6)"
+---
+                              
+                              
+      terminal too small      
+   enlarge to at least 40x8   
+           q to quit
