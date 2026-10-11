@@ -739,6 +739,128 @@ fn cli_move_to_the_same_bucket_is_refused() {
 }
 
 #[test]
+fn cli_done_completes_a_task() {
+    let dir = tempfile::tempdir().unwrap();
+    let data = dir.path().join("data");
+    let cfg = dir.path().join("cfg");
+
+    assert!(
+        tasu(&data, &cfg)
+            .args(["add", "finish me"])
+            .status()
+            .unwrap()
+            .success()
+    );
+    let out = tasu(&data, &cfg)
+        .args(["done", "finish me"])
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let board = Store::new(data.join("todos.json")).load().board;
+    assert_eq!(board.done().len(), 1, "the task must be done on disk");
+    assert!(board.open_in(Bucket::Today).is_empty());
+}
+
+#[test]
+fn cli_history_reports_done_and_dropped() {
+    let dir = tempfile::tempdir().unwrap();
+    let data = dir.path().join("data");
+    let cfg = dir.path().join("cfg");
+
+    for title in ["kept", "dropped"] {
+        assert!(
+            tasu(&data, &cfg)
+                .args(["add", title])
+                .status()
+                .unwrap()
+                .success()
+        );
+    }
+    assert!(
+        tasu(&data, &cfg)
+            .args(["done", "kept"])
+            .status()
+            .unwrap()
+            .success()
+    );
+    assert!(
+        tasu(&data, &cfg)
+            .args(["drop", "dropped"])
+            .status()
+            .unwrap()
+            .success()
+    );
+
+    let out = tasu(&data, &cfg)
+        .args(["history", "--json"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let tasks: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(
+        tasks.as_array().unwrap().len(),
+        2,
+        "done and dropped are both listed: {tasks}"
+    );
+}
+
+#[test]
+fn cli_config_reports_the_resolved_data_dir() {
+    let dir = tempfile::tempdir().unwrap();
+    let data = dir.path().join("data");
+    let cfg = dir.path().join("cfg");
+
+    let out = tasu(&data, &cfg)
+        .args(["config", "--json"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let value: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(value["data_dir"], data.display().to_string());
+    assert!(value["remote"].is_null(), "no remote is configured");
+}
+
+#[test]
+fn cli_remote_probe_failure_clears_the_previous_remote() {
+    let dir = tempfile::tempdir().unwrap();
+    let data = dir.path().join("data");
+    let cfg = dir.path().join("cfg");
+    let remote = bare_remote(dir.path());
+    let url = remote.to_string_lossy().into_owned();
+
+    let out = tasu(&data, &cfg).args(["remote", &url]).output().unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    // A definitively missing repository is refused and the previous remote is
+    // cleared, not left to be retried forever.
+    let bad = dir.path().join("nope.git");
+    let out = tasu(&data, &cfg)
+        .args(["remote", bad.to_string_lossy().as_ref()])
+        .output()
+        .unwrap();
+    assert!(!out.status.success(), "a missing remote must be refused");
+
+    let out = tasu(&data, &cfg)
+        .args(["config", "--json"])
+        .output()
+        .unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert!(
+        value["remote"].is_null(),
+        "the previous remote must be cleared: {value}"
+    );
+}
+
+#[test]
 fn cli_sync_exits_nonzero_on_an_unreachable_remote() {
     let dir = tempfile::tempdir().unwrap();
     let data = dir.path().join("data");
