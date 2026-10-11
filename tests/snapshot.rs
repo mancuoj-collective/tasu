@@ -2,19 +2,27 @@
 
 use std::path::Path;
 
-use chrono::{DateTime, Local, TimeZone};
-use ratatui::Terminal;
-use ratatui::backend::TestBackend;
+use chrono::{DateTime, Local};
+
+mod common;
+use common::{draw_text, dt};
 
 use tasu::app::{Mode, Model, SyncStatus};
 use tasu::domain::{Board, Bucket, Task, TaskState};
-use tasu::ui;
 
-fn dt(day: u32) -> DateTime<Local> {
-    Local
-        .with_ymd_and_hms(2026, 10, day, 9, 0, 0)
-        .single()
-        .unwrap()
+fn render(model: &Model, width: u16, height: u16) -> String {
+    draw_text(
+        model,
+        width,
+        height,
+        Path::new("/tmp/tasu/todos.json"),
+        Some("git@github.com:you/tasu-data.git"),
+    )
+    .0
+}
+
+fn render_at(model: &Model, width: u16, height: u16, path: &Path, sync: Option<&str>) -> String {
+    draw_text(model, width, height, path, sync).0
 }
 
 fn task(title: &str, bucket: Bucket, since: DateTime<Local>) -> Task {
@@ -39,36 +47,6 @@ fn board() -> Board {
     ])
 }
 
-fn render(model: &Model, width: u16, height: u16) -> String {
-    render_full(
-        model,
-        width,
-        height,
-        Path::new("/tmp/tasu/todos.json"),
-        Some("git@github.com:you/tasu-data.git"),
-    )
-}
-
-fn render_full(model: &Model, width: u16, height: u16, path: &Path, sync: Option<&str>) -> String {
-    let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
-    terminal
-        .draw(|frame| {
-            let _ = ui::draw(frame, model, &ui::theme::Theme::DARK, path, sync);
-        })
-        .unwrap();
-
-    let buffer = terminal.backend().buffer();
-    let area = buffer.area();
-    let mut out = String::new();
-    for y in area.top()..area.bottom() {
-        for x in area.left()..area.right() {
-            out.push_str(buffer.cell((x, y)).map_or(" ", |cell| cell.symbol()));
-        }
-        out.push('\n');
-    }
-    out
-}
-
 #[test]
 fn narrow_layout() {
     let model = Model::new(board(), dt(8));
@@ -85,8 +63,7 @@ fn wide_layout() {
 fn help_with_sync_error() {
     let mut model = Model::new(board(), dt(8));
     model.ui.mode = Mode::Help;
-    model.ui.sync = SyncStatus::Failed;
-    model.ui.sync_error = Some("fatal: repository 'you/tasu-data' not found".to_string());
+    model.ui.sync = SyncStatus::Failed("remote not found");
     insta::assert_snapshot!(render(&model, 84, 26));
 }
 
@@ -94,15 +71,11 @@ fn help_with_sync_error() {
 fn help_hides_the_sync_error_and_the_footer_carries_it() {
     let mut model = Model::new(board(), dt(8));
     model.ui.mode = Mode::Help;
-    model.ui.sync = SyncStatus::Failed;
-    model.ui.sync_error = Some(
-        "fatal: could not read Username for 'https://github.com': terminal prompts disabled"
-            .to_string(),
-    );
+    model.ui.sync = SyncStatus::Failed("auth failed");
     // The path stays outside any home directory: `display_path` abbreviates the
     // home dir, which differs between machines and would make this snapshot
     // environment-dependent.
-    let out = render_full(
+    let out = render_at(
         &model,
         84,
         30,

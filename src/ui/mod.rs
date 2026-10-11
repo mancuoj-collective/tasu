@@ -1,7 +1,10 @@
 pub mod components;
+pub mod help;
 pub mod kanban;
+pub mod keys;
 pub mod modal;
 pub mod sections;
+pub mod text;
 pub mod theme;
 
 use std::path::Path;
@@ -13,7 +16,7 @@ use ratatui::{
     widgets::{Block, Paragraph},
 };
 
-use crate::app::{Mode, Model, SyncStatus};
+use crate::app::{Model, SyncStatus};
 
 use unicode_width::UnicodeWidthStr;
 
@@ -35,15 +38,18 @@ pub(crate) fn scroll_offset(cursor: usize, total: usize, height: usize) -> usize
         .min(total.saturating_sub(height))
 }
 
+/// What the chrome shows beside the board: where the data lives and which sync
+/// remote is set. The model does not hold either, so every renderer receives
+/// them through this one value.
+#[derive(Debug, Clone, Copy)]
+pub struct Chrome<'a> {
+    pub data_path: &'a Path,
+    pub remote: Option<&'a str>,
+}
+
 /// Draw the whole UI. The only value a render produces is the help overlay's
 /// clamped scroll offset, which the caller stores; nothing here mutates state.
-pub fn draw(
-    f: &mut Frame,
-    model: &Model,
-    theme: &Theme,
-    data_path: &Path,
-    sync: Option<&str>,
-) -> Option<usize> {
+pub fn draw(f: &mut Frame, model: &Model, theme: &Theme, chrome: &Chrome) -> Option<usize> {
     f.render_widget(Block::new().style(theme.root()), f.area());
 
     if f.area().width < MIN_WIDTH || f.area().height < MIN_HEIGHT {
@@ -61,7 +67,7 @@ pub fn draw(
         sections::draw(f, model, list, theme);
     }
     footer(f, model, theme, footer_area);
-    modal::draw(f, model, theme, data_path, sync)
+    modal::draw(f, model, theme, chrome)
 }
 
 fn too_small(f: &mut Frame, theme: &Theme) {
@@ -118,18 +124,10 @@ fn status_line(model: &Model, theme: &Theme) -> Option<Line<'static>> {
             };
             Some(Line::from(span))
         }
-        SyncStatus::Failed => {
-            let reason = model
-                .ui
-                .sync_error
-                .as_deref()
-                .map(|err| crate::sync::Failure::classify(err).footer())
-                .unwrap_or("sync failed");
-            Some(Line::from(Span::styled(
-                format!("\u{2717} {reason} \u{b7} run tasu sync"),
-                theme.warn(),
-            )))
-        }
+        SyncStatus::Failed(reason) => Some(Line::from(Span::styled(
+            format!("\u{2717} {reason} \u{b7} run tasu sync"),
+            theme.warn(),
+        ))),
         SyncStatus::Local | SyncStatus::Idle => None,
     }
 }
@@ -171,23 +169,7 @@ fn line_width(line: &Line) -> u16 {
 
 fn hint_line(model: &Model, theme: &Theme) -> Line<'static> {
     let (key_style, label_style) = theme.key_hint();
-    let hints: &[(&str, &str)] = match model.ui.mode {
-        Mode::Normal => &[
-            ("?", "help"),
-            ("q", "quit"),
-            ("a", "add"),
-            ("c", "history"),
-            ("[]", "move"),
-        ],
-        Mode::Add | Mode::Edit => &[("enter", "save"), ("esc", "cancel")],
-        Mode::Completed => &[
-            ("\u{2190}\u{2192}", "switch"),
-            ("enter", "restore"),
-            ("\u{2191}\u{2193}", "move"),
-            ("esc", "back"),
-        ],
-        Mode::Help => &[("\u{2191}\u{2193}", "scroll"), ("esc", "close")],
-    };
+    let hints = keys::hints(model.ui.mode);
 
     let mut spans = Vec::new();
     for (index, (key, label)) in hints.iter().enumerate() {

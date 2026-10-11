@@ -79,6 +79,16 @@ pub fn header_lines(
     [title, rule]
 }
 
+/// A task row, drawn as one highlighted bar when it is the selected row.
+pub fn selectable_row(task: &Task, theme: &Theme, width: u16, selected: bool) -> Line<'static> {
+    let line = task_line(task, theme, width);
+    if selected {
+        pad_line(line, width, theme.highlight()).style(theme.highlight())
+    } else {
+        line
+    }
+}
+
 /// Extend a line to the full width with styled blanks, so a highlighted row
 /// reads as one continuous bar instead of stopping at the last character.
 pub fn pad_line(mut line: Line<'static>, width: u16, style: Style) -> Line<'static> {

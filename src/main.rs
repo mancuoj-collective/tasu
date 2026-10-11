@@ -7,12 +7,13 @@ use chrono::Local;
 use clap::Parser;
 use crossterm::event;
 
-use tasu::app::{Action, Model, Runtime, update};
+use tasu::app::{Action, Model, Runtime};
 use tasu::cli::{Cli, Command, HistoryName};
 use tasu::command;
 use tasu::config::Config;
 use tasu::domain::Bucket;
-use tasu::ui::{self, theme::Theme};
+use tasu::session;
+use tasu::ui::{Chrome, theme::Theme};
 
 /// How often the loop wakes up to settle, expire the toast and poll for
 /// external changes.
@@ -70,41 +71,35 @@ fn run_tui(config: Config) -> Result<()> {
     let mut model = Model::new(loaded.board, now);
     model.ui.board_damage = loaded.damaged.map(|damage| damage.message());
     let theme = Theme::detect();
+    let chrome = Chrome {
+        data_path: &board_path,
+        remote: remote.as_deref(),
+    };
 
     // Fetch remote state in the background; the mtime watcher reloads it.
     runtime.start_sync();
 
     // Restore the terminal first; the final push must not freeze the UI.
-    let result = ratatui::run(|terminal| {
-        while !model.should_quit {
-            model.ui.sync = runtime.status();
-            model.ui.sync_error = runtime.error().map(str::to_string);
-            let mut help_scroll = None;
-            terminal.draw(|frame| {
-                help_scroll = ui::draw(frame, &model, &theme, &board_path, remote.as_deref());
-            })?;
-            // The renderer hands back the help overlay's clamped offset.
-            if let Some(offset) = help_scroll {
-                model.ui.help_scroll = offset;
-            }
-
-            if let Some(action) = runtime.poll_external() {
-                let effects = update(&mut model, action, Local::now());
-                runtime.apply(&mut model, effects);
-            }
-
-            let action = next_action()?;
-            let effects = update(&mut model, action, Local::now());
-            runtime.apply(&mut model, effects);
-        }
-        Ok(())
+    let result: Result<()> = ratatui::run(|terminal| {
+        session::run(
+            terminal,
+            &mut runtime,
+            &mut model,
+            &theme,
+            &chrome,
+            next_action,
+        )
     });
     // Quitting must not wait on the network: the board is already saved on disk,
     // so hand any pending commit+push to a detached `tasu flush` and return now.
     if remote.is_some() && runtime.needs_flush() {
         spawn_background_flush();
     }
-    result
+    result?;
+    if let Some(error) = runtime.quit_error() {
+        anyhow::bail!("{error}");
+    }
+    Ok(())
 }
 
 /// Commit and push in a detached process, so quitting returns to the shell at

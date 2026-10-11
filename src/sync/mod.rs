@@ -1,21 +1,20 @@
-use std::io::Read;
+mod failure;
+mod git;
+mod repo;
+
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use crate::domain::Board;
-use crate::store::{MergeSide, Store};
+
+pub use failure::{Error, Failure};
+use repo::{DEFAULT_BRANCH, board_store, commit_all, current_branch, ensure_repo};
 
 /// Network operations are bounded so a hung connection cannot freeze a caller.
 const NETWORK_TIMEOUT: Duration = Duration::from_secs(20);
 const PUSH_TIMEOUT: Duration = Duration::from_secs(8);
-
-/// Branch used when the remote has no branch to adopt. A fixed name keeps every
-/// machine on the same branch: the host's `init.defaultBranch` (often `master`
-/// on Windows) must never leak into the data repository.
-const DEFAULT_BRANCH: &str = "main";
 
 /// Git-backed sync for a single writer.
 ///
@@ -27,7 +26,7 @@ pub struct Sync {
     results: Receiver<JobOutcome>,
     /// One-shot outcome of adopting/creating the repository, sent before any
     /// job runs so a broken setup is visible instead of looking idle.
-    init: Receiver<Result<(), String>>,
+    init: Receiver<Result<(), Error>>,
 }
 
 enum Job {
@@ -49,14 +48,14 @@ pub enum Pulled {
 pub enum JobOutcome {
     Pulled(Pulled),
     Pushed,
-    Failed(String),
+    Failed(Error),
 }
 
 impl Sync {
     pub fn new(repo: PathBuf, remote: Option<String>) -> Self {
         let (jobs_tx, jobs_rx) = mpsc::channel::<Job>();
         let (results_tx, results_rx) = mpsc::channel::<JobOutcome>();
-        let (init_tx, init_rx) = mpsc::channel::<Result<(), String>>();
+        let (init_tx, init_rx) = mpsc::channel::<Result<(), Error>>();
 
         // The worker owns the repo and remote; the app only talks to it over
         // the channels.
@@ -93,17 +92,17 @@ impl Sync {
     /// Fetch the latest remote state. The remote's board comes back through
     /// [`Sync::poll`] for the app to merge, so the worker never writes
     /// `todos.json` and cannot race the app's own save.
-    pub fn pull(&self) -> Result<(), String> {
+    pub fn pull(&self) -> Result<(), Error> {
         self.jobs
             .send(Job::Pull)
-            .map_err(|_| "sync worker stopped".to_string())
+            .map_err(|_| Error::new("sync worker stopped"))
     }
 
     /// Stage, commit and push. Debounced by the caller.
-    pub fn commit_push(&self) -> Result<(), String> {
+    pub fn commit_push(&self) -> Result<(), Error> {
         self.jobs
             .send(Job::CommitPush)
-            .map_err(|_| "sync worker stopped".to_string())
+            .map_err(|_| Error::new("sync worker stopped"))
     }
 
     pub fn poll(&self) -> Option<JobOutcome> {
@@ -112,20 +111,20 @@ impl Sync {
 
     /// The one-shot repository-setup result, once the worker has produced it.
     /// `None` until then; after the first call it returns `None` again.
-    pub fn poll_init(&self) -> Option<Result<(), String>> {
+    pub fn poll_init(&self) -> Option<Result<(), Error>> {
         self.init.try_recv().ok()
     }
 }
 
 /// One synchronous commit+push, for one-shot commands and process exit.
-pub fn commit_now(repo: &Path, remote: Option<&str>) -> Result<(), String> {
+pub fn commit_now(repo: &Path, remote: Option<&str>) -> Result<(), Error> {
     ensure_repo(repo, remote)?;
     commit_push(repo, remote)
 }
 
 /// One synchronous pull, used before a one-shot command reads the board so a
 /// CLI-only machine does not diverge from the remote.
-pub fn pull_now(repo: &Path, remote: Option<&str>) -> Result<(), String> {
+pub fn pull_now(repo: &Path, remote: Option<&str>) -> Result<(), Error> {
     ensure_repo(repo, remote)?;
     apply_pull(repo, pull(repo, remote)?)
 }
@@ -133,405 +132,24 @@ pub fn pull_now(repo: &Path, remote: Option<&str>) -> Result<(), String> {
 /// Merge a pull result into the on-disk board. The one-shot CLI is a single
 /// process, so it writes the file directly; the TUI instead hands the board to
 /// its model, which stays the file's only writer.
-fn apply_pull(repo: &Path, pulled: Pulled) -> Result<(), String> {
+fn apply_pull(repo: &Path, pulled: Pulled) -> Result<(), Error> {
     let Pulled::Merge(Some(remote)) = pulled else {
         return Ok(());
     };
     let store = board_store(repo);
     // Remote is the shared base; the local board fills in and advances.
     let merged = remote.merged_with(&store.load().board);
-    store.save(&merged).map_err(|err| err.to_string())
+    store
+        .save(&merged)
+        .map_err(|err| Error::new(err.to_string()))
 }
 
 /// Check that a remote is reachable and that credentials work, without asking
 /// for input. Empty repositories count as reachable.
-pub fn probe_remote(url: &str) -> Result<(), String> {
-    let mut cmd = git_command();
+pub fn probe_remote(url: &str) -> Result<(), Error> {
+    let mut cmd = git::program();
     cmd.args(["ls-remote", url]);
-    run_bounded(&mut cmd, NETWORK_TIMEOUT)
-}
-
-/// A short, human-readable reason a sync failed, inferred from git's stderr.
-/// Used to lead with the likely cause instead of a raw error dump.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Failure {
-    NotFound,
-    Auth,
-    Network,
-    Other,
-}
-
-impl Failure {
-    pub fn classify(error: &str) -> Self {
-        let error = error.to_ascii_lowercase();
-        let has = |needle: &str| error.contains(needle);
-        if has("repository not found")
-            || has("does not appear to be a git repository")
-            || (has("repository") && has("not found"))
-        {
-            Self::NotFound
-        } else if has("authentication failed")
-            || has("could not read username")
-            || has("could not read password")
-            || has("terminal prompts disabled")
-            || has("permission denied")
-            || has("403")
-        {
-            Self::Auth
-        } else if has("could not resolve host")
-            || has("could not resolve")
-            || has("unable to access")
-            || has("failed to connect")
-            || has("timed out")
-            || has("network is unreachable")
-        {
-            Self::Network
-        } else {
-            Self::Other
-        }
-    }
-
-    /// A phrase naming the cause, for the `tasu remote` failure message.
-    pub fn reason(self) -> &'static str {
-        match self {
-            Self::NotFound => "repository not found",
-            Self::Auth => "authentication failed",
-            Self::Network => "can't reach the host",
-            Self::Other => "sync failed",
-        }
-    }
-
-    /// A phrase for the footer, paired with a `tasu sync` hint.
-    pub fn footer(self) -> &'static str {
-        match self {
-            Self::NotFound => "remote not found",
-            Self::Auth => "auth failed",
-            Self::Network => "offline",
-            Self::Other => "sync failed",
-        }
-    }
-
-    /// One actionable line, for the `tasu remote` failure message.
-    pub fn fix(self) -> &'static str {
-        match self {
-            Self::NotFound => {
-                "check the owner/repo, or create the repository (private is fine), then retry"
-            }
-            Self::Auth => {
-                "no stored credentials or no write access \u{2014} over HTTPS git needs a token, or use an SSH remote"
-            }
-            Self::Network => "check your network and the host name, then retry",
-            Self::Other => "the git error is above",
-        }
-    }
-}
-
-/// The board file inside the sync working tree. Reads and writes go through
-/// `Store`, so `todos.json` has exactly one (atomic) write path shared with the
-/// app, instead of a second plain `fs::write` that could race the reader.
-fn board_store(repo: &Path) -> Store {
-    Store::new(repo.join("todos.json"))
-}
-
-/// Name the side of a failed board merge, so a sync result says which file could
-/// not be read instead of silently dropping its tasks.
-fn unreadable_board(side: MergeSide, base: &str, other: &str) -> String {
-    let name = match side {
-        MergeSide::Base => base,
-        MergeSide::Other => other,
-    };
-    format!("{name} board could not be read; sync stopped to avoid dropping tasks")
-}
-
-fn ensure_repo(repo: &Path, remote: Option<&str>) -> Result<(), String> {
-    if repo.join(".git").exists() {
-        ensure_gitignore(repo);
-        if let Some(url) = remote {
-            set_origin(repo, url);
-            // All machines must agree on one branch. Reconcile it once per
-            // remote, then stop asking: the `ls-remote` this needs is a network
-            // round-trip we do not want on every launch. An unreachable remote
-            // is not marked, so it is retried next time.
-            if !is_settled(repo, url)
-                && let Ok(branch) = remote_default_branch_result(url)
-            {
-                if let Some(branch) = branch {
-                    name_branch(repo, &branch);
-                }
-                mark_settled(repo, url);
-            }
-        }
-        return Ok(());
-    }
-
-    // Without a remote tasu is purely local and never shells out to git.
-    let Some(url) = remote else {
-        return Ok(());
-    };
-
-    std::fs::create_dir_all(repo).map_err(|err| err.to_string())?;
-
-    // An empty directory is the second machine: clone the history.
-    let empty = std::fs::read_dir(repo)
-        .map(|mut entries| entries.next().is_none())
-        .unwrap_or(true);
-    if empty && clone(url, repo).is_ok() {
-        // Check out first: an untracked `.gitignore` written before the
-        // checkout would block git from creating the tracked one, leaving the
-        // board unpopulated.
-        settle_head(repo, &target_branch(url));
-        ensure_gitignore(repo);
-        mark_settled(repo, url);
-        return Ok(());
-    }
-
-    // Existing local data (first machine, or a remote that already has a
-    // README). The remote's history is adopted, the boards are merged, then the
-    // result is committed on top and pushed. No unrelated-history merge, which
-    // proved unreliable across git builds.
-    //
-    // Name the branch before the first commit: `git init` alone would use the
-    // host's default (e.g. `master`), splitting the remote into two branches.
-    let branch = target_branch(url);
-    git(repo, &["init", "-q"])?;
-    name_branch(repo, &branch);
-    let _ = git(repo, &["remote", "add", "origin", url]);
-
-    // Fetch the remote's current tip into a private ref, independent of
-    // remote-tracking branches (which are not always created).
-    let fetched = git(
-        repo,
-        &[
-            "fetch",
-            "--quiet",
-            "origin",
-            &format!("+refs/heads/{branch}:refs/tasu/remote"),
-        ],
-    )
-    .is_ok()
-        || git(
-            repo,
-            &["fetch", "--quiet", "origin", "+HEAD:refs/tasu/remote"],
-        )
-        .is_ok();
-
-    // Read both boards and merge them **before** the working tree is touched.
-    // The remote may already carry a board; when both sides have one they are
-    // unioned so connecting a remote never silently drops the other machine's
-    // tasks, otherwise the side that has data is kept. If a board cannot be
-    // read, the merge errors and we return with the local files — `todos.json`
-    // included — exactly as they were, because nothing has been reset yet.
-    let remote_board = if fetched {
-        git_bytes(repo, &["show", "refs/tasu/remote:todos.json"])
-    } else {
-        None
-    };
-    let local_board = board_store(repo).read_bytes();
-    let board = match (local_board, remote_board) {
-        (Some(local), Some(remote)) => Some(
-            crate::store::merge_files(&local, &remote)
-                .map_err(|side| unreadable_board(side, "local", "remote"))?,
-        ),
-        (board, None) => board,
-        (None, board) => board,
-    };
-
-    // The merge succeeded, so it is safe to adopt the remote's tree. The board
-    // is written back on top of it, so the merged result — not the remote's
-    // board — is what gets committed.
-    if fetched {
-        let _ = git(repo, &["reset", "--hard", "refs/tasu/remote"]);
-    }
-    if let Some(bytes) = board.filter(|bytes| !bytes.is_empty()) {
-        board_store(repo)
-            .write_bytes(&bytes)
-            .map_err(|err| err.to_string())?;
-    }
-    ensure_gitignore(repo);
-    let _ = git(repo, &["add", "-A"]);
-    let _ = git(
-        repo,
-        &[
-            "-c",
-            "user.name=tasu",
-            "-c",
-            "user.email=tasu@localhost",
-            "commit",
-            "--quiet",
-            "-m",
-            "tasu: local",
-        ],
-    );
-    mark_settled(repo, url);
-    Ok(())
-}
-
-/// Point `origin` at `url`. `set-url` works on an existing origin, unlike
-/// `remote add`, which silently fails and leaves a stale URL.
-fn set_origin(repo: &Path, url: &str) {
-    if git(repo, &["remote", "set-url", "origin", url]).is_err() {
-        let _ = git(repo, &["remote", "add", "origin", url]);
-    }
-}
-
-/// The branch tasu syncs on: the remote's default branch when it already has
-/// one, otherwise [`DEFAULT_BRANCH`].
-fn target_branch(remote: &str) -> String {
-    remote_default_branch(remote).unwrap_or_else(|| DEFAULT_BRANCH.to_string())
-}
-
-/// The remote's default branch, read from its symbolic `HEAD`. `None` when the
-/// remote is empty, unreachable, or has an unusual layout.
-fn remote_default_branch(remote: &str) -> Option<String> {
-    remote_default_branch_result(remote).ok().flatten()
-}
-
-/// Like [`remote_default_branch`], but distinguishes an unreachable remote
-/// (`Err`) from a readable one that simply has no default branch (`Ok(None)`).
-/// `ensure_repo` uses the difference to decide whether to retry later.
-fn remote_default_branch_result(remote: &str) -> Result<Option<String>, String> {
-    let mut cmd = git_command();
-    cmd.args(["ls-remote", "--symref", remote, "HEAD"]);
-    let output = run_output(&mut cmd, NETWORK_TIMEOUT)?;
-    // "ref: refs/heads/main\tHEAD"
-    Ok(output.lines().find_map(|line| {
-        let name = line
-            .strip_prefix("ref:")?
-            .trim()
-            .strip_prefix("refs/heads/")?;
-        name.split_whitespace().next().map(str::to_string)
-    }))
-}
-
-/// Remember the remote whose default branch we already reconciled, so later
-/// runs skip the `ls-remote` that needs. Stored in the repo's own config, never
-/// committed.
-fn mark_settled(repo: &Path, url: &str) {
-    let _ = git(repo, &["config", "tasu.remote", url]);
-}
-
-/// Whether the branch for `url` was already reconciled on a previous run.
-fn is_settled(repo: &Path, url: &str) -> bool {
-    git_string(repo, &["config", "--get", "tasu.remote"]).as_deref() == Some(url)
-}
-
-/// The current branch, or `None` on a detached HEAD or an error.
-fn current_branch(repo: &Path) -> Option<String> {
-    let output = git_cmd(repo, &["symbolic-ref", "--short", "-q", "HEAD"])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    (!name.is_empty()).then_some(name)
-}
-
-/// Make sure a freshly cloned repository is on a real branch. When the clone
-/// checked something out, normalise the name; otherwise check out the remote
-/// branch we expected, or any branch it does have.
-fn settle_head(repo: &Path, target: &str) {
-    if git_ok(repo, &["rev-parse", "--verify", "--quiet", "HEAD"]) {
-        name_branch(repo, target);
-        return;
-    }
-    if git_ok(
-        repo,
-        &[
-            "show-ref",
-            "--verify",
-            "--quiet",
-            &format!("refs/remotes/origin/{target}"),
-        ],
-    ) {
-        let _ = git(repo, &["checkout", "--quiet", target]);
-    } else if let Some(branch) = first_remote_branch(repo) {
-        let _ = git(repo, &["checkout", "--quiet", &branch]);
-    } else {
-        name_branch(repo, target);
-    }
-}
-
-/// The first branch under `origin/`, for a remote whose symbolic `HEAD` is
-/// stale. `None` when the remote has no branches.
-fn first_remote_branch(repo: &Path) -> Option<String> {
-    let output = git_cmd(
-        repo,
-        &[
-            "for-each-ref",
-            "--format=%(refname:short)",
-            "refs/remotes/origin/",
-        ],
-    )
-    .output()
-    .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .map(str::trim)
-        .filter(|name| !name.is_empty() && *name != "origin/HEAD")
-        .filter_map(|name| name.strip_prefix("origin/"))
-        .map(str::to_string)
-        .next()
-}
-
-/// Rename the local branch to `target` (or name an unborn HEAD), so pushes land
-/// on the branch every machine agreed on. A no-op when already correct.
-fn name_branch(repo: &Path, target: &str) {
-    let Some(current) = current_branch(repo) else {
-        let _ = git(
-            repo,
-            &["symbolic-ref", "HEAD", &format!("refs/heads/{target}")],
-        );
-        return;
-    };
-    if current == target {
-        return;
-    }
-    if git_ok(repo, &["rev-parse", "--verify", "--quiet", "HEAD"]) {
-        // A born branch: `branch -m` moves the ref and HEAD together. If the
-        // target already exists locally we cannot rename, so switch instead.
-        if git(repo, &["branch", "-m", target]).is_ok() {
-            eprintln!("tasu: sync branch {current} renamed to {target}");
-        } else {
-            let _ = git(repo, &["checkout", "--quiet", target]);
-        }
-    } else {
-        // Unborn HEAD (fresh init or an empty clone): just point HEAD.
-        let _ = git(
-            repo,
-            &["symbolic-ref", "HEAD", &format!("refs/heads/{target}")],
-        );
-    }
-}
-
-/// Keep the transient files `Store` writes — a half-written temp, a corrupt
-/// backup — out of the synced repository. Added idempotently.
-fn ensure_gitignore(repo: &Path) {
-    let path = repo.join(".gitignore");
-    let mut text = std::fs::read_to_string(&path).unwrap_or_default();
-    let mut changed = false;
-    for entry in ["*.tmp", "*.corrupt-*"] {
-        if !text.lines().any(|line| line.trim() == entry) {
-            if !text.is_empty() && !text.ends_with('\n') {
-                text.push('\n');
-            }
-            text.push_str(entry);
-            text.push('\n');
-            changed = true;
-        }
-    }
-    if changed && let Err(err) = std::fs::write(&path, &text) {
-        eprintln!("tasu: could not write {}: {err}", path.display());
-    }
-}
-
-fn clone(url: &str, repo: &Path) -> Result<(), String> {
-    let mut cmd = git_command();
-    cmd.args(["clone", "--quiet", url]).arg(repo);
-    run_bounded(&mut cmd, NETWORK_TIMEOUT)
+    git::bounded(&mut cmd, NETWORK_TIMEOUT).map(|_| ())
 }
 
 /// Bring the local branch up to date with the remote without ever producing a
@@ -539,12 +157,12 @@ fn clone(url: &str, repo: &Path) -> Result<(), String> {
 /// meaning: the remote's board is handed back to be merged **task by task**, and
 /// the branch is moved with `--soft`, leaving the working tree — the app's
 /// `todos.json` in particular — exactly as the app has it.
-fn pull(repo: &Path, remote: Option<&str>) -> Result<Pulled, String> {
+fn pull(repo: &Path, remote: Option<&str>) -> Result<Pulled, Error> {
     if remote.is_none() {
         return Ok(Pulled::UpToDate);
     }
     // Nothing to pull until the first commit exists (fresh remote).
-    if !git_ok(repo, &["rev-parse", "--verify", "--quiet", "HEAD"]) {
+    if !git::ok(repo, &["rev-parse", "--verify", "--quiet", "HEAD"]) {
         return Ok(Pulled::UpToDate);
     }
     let Some(branch) = current_branch(repo) else {
@@ -553,7 +171,7 @@ fn pull(repo: &Path, remote: Option<&str>) -> Result<Pulled, String> {
 
     // Fetch the remote branch into a private ref (remote-tracking refs are not
     // always created), then compare histories.
-    let mut fetch = git_cmd(
+    let mut fetch = git::in_repo(
         repo,
         &[
             "fetch",
@@ -562,10 +180,10 @@ fn pull(repo: &Path, remote: Option<&str>) -> Result<Pulled, String> {
             &format!("+refs/heads/{branch}:refs/tasu/remote"),
         ],
     );
-    run_bounded(&mut fetch, NETWORK_TIMEOUT)?;
+    git::bounded(&mut fetch, NETWORK_TIMEOUT)?;
 
     // If the remote is already reachable from HEAD, we are level or ahead.
-    if git_ok(
+    if git::ok(
         repo,
         &["merge-base", "--is-ancestor", "refs/tasu/remote", "HEAD"],
     ) {
@@ -577,59 +195,40 @@ fn pull(repo: &Path, remote: Option<&str>) -> Result<Pulled, String> {
     // written behind the app's back; the caller merges it in and saves it, and
     // is therefore the file's only writer. A board that cannot be read is an
     // error, never a silent empty list.
-    let remote_board = match git_bytes(repo, &["show", "refs/tasu/remote:todos.json"]) {
+    let remote_board = match git::bytes(repo, &["show", "refs/tasu/remote:todos.json"]) {
         Some(bytes) => Some(parse_board(&bytes)?),
         None => None,
     };
     // `--soft` moves the branch (and HEAD) without touching the index or the
     // working tree, so the next commit fast-forwards from the remote tip while
     // the app's file is preserved for the caller to merge.
-    git(repo, &["reset", "--soft", "refs/tasu/remote"])?;
+    git::run(repo, &["reset", "--soft", "refs/tasu/remote"])?;
     Ok(Pulled::Merge(remote_board))
 }
 
 /// Parse a board read out of the repository. A board that cannot be parsed is
 /// an error, never a silent empty list: that would drop a machine's tasks.
-fn parse_board(bytes: &[u8]) -> Result<Board, String> {
+fn parse_board(bytes: &[u8]) -> Result<Board, Error> {
     crate::store::board_from_bytes(bytes).ok_or_else(|| {
-        "the remote board could not be read; sync stopped to avoid dropping tasks".to_string()
+        Error::new("the remote board could not be read; sync stopped to avoid dropping tasks")
     })
 }
 
-fn commit_push(repo: &Path, remote: Option<&str>) -> Result<(), String> {
+fn commit_push(repo: &Path, remote: Option<&str>) -> Result<(), Error> {
     commit_push_with(repo, remote, PUSH_TIMEOUT)
 }
 
 /// `commit_push` with an explicit push deadline, so tests can allow for a slow
 /// machine without loosening the bound the app ships with.
-fn commit_push_with(repo: &Path, remote: Option<&str>, timeout: Duration) -> Result<(), String> {
+fn commit_push_with(repo: &Path, remote: Option<&str>, timeout: Duration) -> Result<(), Error> {
     if remote.is_none() {
         return Ok(());
     }
-    ensure_gitignore(repo);
-    git(repo, &["add", "-A"])?;
-    // `git commit` fails when there is nothing staged, and its message is
-    // locale-dependent; decide with a machine-readable check instead of parsing
-    // it. Nothing to commit is a no-op, not an error.
-    if !git_ok(repo, &["diff", "--cached", "--quiet"]) {
-        git(
-            repo,
-            &[
-                "-c",
-                "user.name=tasu",
-                "-c",
-                "user.email=tasu@localhost",
-                "commit",
-                "--quiet",
-                "-m",
-                "tasu: sync",
-            ],
-        )?;
-    }
+    commit_all(repo, "tasu: sync")?;
     // Push to the explicit branch name instead of a bare `HEAD`, so a stray
     // local branch can never create a second branch on the remote.
     let branch = current_branch(repo).unwrap_or_else(|| DEFAULT_BRANCH.to_string());
-    let mut cmd = git_cmd(
+    let mut cmd = git::in_repo(
         repo,
         &[
             "push",
@@ -639,155 +238,19 @@ fn commit_push_with(repo: &Path, remote: Option<&str>, timeout: Duration) -> Res
             &format!("HEAD:refs/heads/{branch}"),
         ],
     );
-    run_bounded(&mut cmd, timeout)?;
-    Ok(())
-}
-
-fn git_cmd(repo: &Path, args: &[&str]) -> Command {
-    let mut cmd = git_command();
-    cmd.arg("-C").arg(repo).args(args);
-    cmd
-}
-
-/// Every git invocation goes through here. Output is forced to the C locale so
-/// git's messages are stable English: tasu classifies them (and the commit path
-/// used to parse one), and a translated git must never change behaviour.
-fn git_command() -> Command {
-    let mut cmd = Command::new("git");
-    cmd.env("LC_ALL", "C").env("LANG", "C");
-    cmd
-}
-
-fn git(repo: &Path, args: &[&str]) -> Result<(), String> {
-    let output = git_cmd(repo, args)
-        .output()
-        .map_err(|err| err.to_string())?;
-    check(output)
-}
-
-fn git_ok(repo: &Path, args: &[&str]) -> bool {
-    git_cmd(repo, args)
-        .output()
-        .map(|output| output.status.success())
-        .unwrap_or(false)
-}
-
-/// stdout of a git command expected to succeed, for reading a file out of a
-/// commit (`git show <ref>:<path>`).
-fn git_bytes(repo: &Path, args: &[&str]) -> Option<Vec<u8>> {
-    let output = git_cmd(repo, args).output().ok()?;
-    output.status.success().then_some(output.stdout)
-}
-
-/// Trimmed stdout of a git command expected to succeed.
-fn git_string(repo: &Path, args: &[&str]) -> Option<String> {
-    let bytes = git_bytes(repo, args)?;
-    Some(String::from_utf8_lossy(&bytes).trim().to_string())
-}
-
-/// Run a command with a deadline, killing it if it overruns. Used for the
-/// network-bound git operations so nothing can hang indefinitely.
-fn run_bounded(cmd: &mut Command, timeout: Duration) -> Result<(), String> {
-    let mut child = cmd
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|err| err.to_string())?;
-
-    let deadline = Instant::now() + timeout;
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) if status.success() => return Ok(()),
-            Ok(Some(_)) => {
-                let mut message = String::new();
-                if let Some(mut stderr) = child.stderr.take() {
-                    let _ = stderr.read_to_string(&mut message);
-                }
-                let message = message.trim();
-                return Err(if message.is_empty() {
-                    "git command failed".to_string()
-                } else {
-                    message.to_string()
-                });
-            }
-            Ok(None) => {
-                if Instant::now() >= deadline {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return Err("git command timed out".to_string());
-                }
-                thread::sleep(Duration::from_millis(50));
-            }
-            Err(err) => return Err(err.to_string()),
-        }
-    }
-}
-
-/// Like [`run_bounded`], but returns stdout so a caller can parse it. Only for
-/// small outputs (`ls-remote`), since stdout is read after the process exits.
-fn run_output(cmd: &mut Command, timeout: Duration) -> Result<String, String> {
-    let mut child = cmd
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|err| err.to_string())?;
-
-    let deadline = Instant::now() + timeout;
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                let mut stdout = String::new();
-                let mut stderr = String::new();
-                if let Some(mut out) = child.stdout.take() {
-                    let _ = out.read_to_string(&mut stdout);
-                }
-                if let Some(mut err) = child.stderr.take() {
-                    let _ = err.read_to_string(&mut stderr);
-                }
-                if status.success() {
-                    return Ok(stdout);
-                }
-                let message = stderr.trim();
-                return Err(if message.is_empty() {
-                    "git command failed".to_string()
-                } else {
-                    message.to_string()
-                });
-            }
-            Ok(None) => {
-                if Instant::now() >= deadline {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return Err("git command timed out".to_string());
-                }
-                thread::sleep(Duration::from_millis(50));
-            }
-            Err(err) => return Err(err.to_string()),
-        }
-    }
-}
-
-fn check(output: std::process::Output) -> Result<(), String> {
-    if output.status.success() {
-        return Ok(());
-    }
-    let mut message = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    if message.is_empty() {
-        message = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    }
-    Err(message)
+    git::bounded(&mut cmd, timeout).map(|_| ())
 }
 
 #[cfg(test)]
 mod tests {
+    use super::git::run as git;
+    use super::repo::is_settled;
     use super::*;
 
     /// Shadow the production `commit_push` with a generous deadline: CI —
     /// Windows especially — can be slow when these tests spawn many git
     /// processes in parallel.
-    fn commit_push(repo: &Path, remote: Option<&str>) -> Result<(), String> {
+    fn commit_push(repo: &Path, remote: Option<&str>) -> Result<(), Error> {
         commit_push_with(repo, remote, Duration::from_secs(60))
     }
     use std::process::Command;
@@ -1171,25 +634,6 @@ mod tests {
     }
 
     #[test]
-    fn classifies_common_git_failures() {
-        assert_eq!(
-            Failure::classify("remote: Repository not found."),
-            Failure::NotFound
-        );
-        assert_eq!(
-            Failure::classify(
-                "fatal: could not read Username for 'https://github.com': terminal prompts disabled"
-            ),
-            Failure::Auth
-        );
-        assert_eq!(
-            Failure::classify("fatal: unable to access 'x': Could not resolve host: github.com"),
-            Failure::Network
-        );
-        assert_eq!(Failure::classify("something else"), Failure::Other);
-    }
-
-    #[test]
     fn without_a_remote_nothing_breaks() {
         let dir = tempfile::tempdir().unwrap();
         let data = dir.path().join("data");
@@ -1359,7 +803,7 @@ mod tests {
         write_board(&data, &[("keep me", 5)]);
 
         let err = ensure_repo(&data, Some(&remote)).unwrap_err();
-        assert!(err.contains("could not be read"), "{err}");
+        assert!(err.detail().contains("could not be read"), "{err}");
 
         let titles = board_titles(&data);
         assert!(

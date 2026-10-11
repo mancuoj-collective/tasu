@@ -8,6 +8,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A failed git step during setup is reported instead of ignored. Branch
+  renaming, the `origin` URL, the first commit and the `.gitignore` write all
+  surface their error in the footer, and a clone that fails no longer falls
+  back to a silent local repository.
+- Sync messages no longer corrupt the TUI. Branch renames and an unreadable
+  backup used to print to stderr while the screen was drawn; they now reach the
+  footer, and a save that fails on quit is printed after the terminal is back.
+- `tasu add`, `done`, `drop` and `move` now say `tasu: pull failed: …` on stderr
+  when the pre-command pull fails, matching the existing push message. The
+  command still runs on the local board.
+
 - A board file that cannot be read is no longer treated as an empty board in
   silence. The file is moved aside and every front-end says so — the TUI in the
   footer, each CLI command on stderr — so a board that appears to have vanished

@@ -28,8 +28,9 @@ pub enum SyncStatus {
     Idle,
     /// A pull or push is in flight.
     Syncing,
-    /// The last sync failed and will be retried.
-    Failed,
+    /// The last sync failed and will be retried. Carries the footer reason,
+    /// classified once where the failure happened.
+    Failed(&'static str),
 }
 
 /// A transient message shown after capturing, without stealing focus.
@@ -51,8 +52,6 @@ pub struct UiState {
     pub history_view: HistoryView,
     /// Background sync status, refreshed from the runtime each frame.
     pub sync: SyncStatus,
-    /// Message from the last failed sync, summarised in the footer.
-    pub sync_error: Option<String>,
     /// A fatal-ish error (e.g. the board could not be written) shown in the
     /// footer, so data loss is never silent.
     pub error: Option<String>,
@@ -80,7 +79,6 @@ impl Default for UiState {
             done_filter: Input::default(),
             history_view: HistoryView::Done,
             sync: SyncStatus::Local,
-            sync_error: None,
             error: None,
             board_damage: None,
             edit_target: None,

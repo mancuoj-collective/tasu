@@ -65,12 +65,12 @@ fn draw_column(
         let Some(task) = model.board.task(index) else {
             continue;
         };
-        let mut line = components::task_line(task, theme, area.width);
-        if Some(position) == local_selected {
-            line = components::pad_line(line, area.width, theme.highlight());
-            line = line.style(theme.highlight());
-        }
-        lines.push(line);
+        lines.push(components::selectable_row(
+            task,
+            theme,
+            area.width,
+            Some(position) == local_selected,
+        ));
     }
 
     f.render_widget(Paragraph::new(lines), area);

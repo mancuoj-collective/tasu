@@ -111,7 +111,7 @@ fn main() {
     status.ui.tick = 6;
     println!("\n=== syncing (84x12) ===");
     print(&status, 84, 12);
-    status.ui.sync = tasu::app::SyncStatus::Failed;
+    status.ui.sync = tasu::app::SyncStatus::Failed("offline");
     println!("\n=== sync failed (84x12) ===");
     print(&status, 84, 12);
 }
@@ -133,13 +133,13 @@ fn print(model: &Model, width: u16, height: u16) {
     let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
     terminal
         .draw(|frame| {
-            let _ = ui::draw(
-                frame,
-                model,
-                &ui::theme::Theme::DARK,
-                std::path::Path::new("/Users/mancuoj/Library/Application Support/tasu/todos.json"),
-                Some("git@github.com:mancuoj/tasu-data.git"),
-            );
+            let chrome = ui::Chrome {
+                data_path: std::path::Path::new(
+                    "/Users/mancuoj/Library/Application Support/tasu/todos.json",
+                ),
+                remote: Some("git@github.com:mancuoj/tasu-data.git"),
+            };
+            let _ = ui::draw(frame, model, &ui::theme::Theme::DARK, &chrome);
         })
         .unwrap();
 

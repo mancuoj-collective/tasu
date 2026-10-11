@@ -7,6 +7,7 @@ pub mod cli;
 pub mod command;
 pub mod config;
 pub mod domain;
+pub mod session;
 pub mod store;
 pub mod sync;
 pub mod ui;

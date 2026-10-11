@@ -4,9 +4,11 @@
 use std::path::Path;
 use std::process::Command;
 
-use chrono::{DateTime, Local, TimeZone};
+use chrono::{DateTime, Local};
 use ratatui::Terminal;
-use ratatui::backend::TestBackend;
+
+mod common;
+use common::{draw_text, dt};
 
 use crossterm::event::KeyCode;
 
@@ -16,14 +18,6 @@ use tasu::config::Config;
 use tasu::domain::{Board, Bucket, TaskState};
 use tasu::store::Store;
 use tasu::sync;
-use tasu::ui;
-
-fn dt(day: u32) -> DateTime<Local> {
-    Local
-        .with_ymd_and_hms(2026, 10, day, 9, 0, 0)
-        .single()
-        .unwrap()
-}
 
 fn press(code: crossterm::event::KeyCode) -> Action {
     Action::Key(crossterm::event::KeyEvent::new(
@@ -32,40 +26,24 @@ fn press(code: crossterm::event::KeyCode) -> Action {
     ))
 }
 
+fn render(model: &mut Model, width: u16, height: u16) -> String {
+    let (text, help_scroll) = draw_text(
+        model,
+        width,
+        height,
+        Path::new("/tmp/tasu/todos.json"),
+        None,
+    );
+    if let Some(offset) = help_scroll {
+        model.ui.help_scroll = offset;
+    }
+    text
+}
+
 fn type_str(model: &mut Model, text: &str, now: DateTime<Local>) {
     for c in text.chars() {
         update(model, press(crossterm::event::KeyCode::Char(c)), now);
     }
-}
-
-fn render(model: &mut Model, width: u16, height: u16) -> String {
-    let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
-    let mut help_scroll = None;
-    terminal
-        .draw(|frame| {
-            help_scroll = ui::draw(
-                frame,
-                &*model,
-                &ui::theme::Theme::DARK,
-                Path::new("/tmp/tasu/todos.json"),
-                None,
-            );
-        })
-        .unwrap();
-    if let Some(offset) = help_scroll {
-        model.ui.help_scroll = offset;
-    }
-
-    let buffer = terminal.backend().buffer();
-    let area = buffer.area();
-    let mut out = String::new();
-    for y in area.top()..area.bottom() {
-        for x in area.left()..area.right() {
-            out.push_str(buffer.cell((x, y)).map_or(" ", |cell| cell.symbol()));
-        }
-        out.push('\n');
-    }
-    out
 }
 
 #[test]
@@ -354,7 +332,7 @@ fn a_pull_in_flight_does_not_lose_a_task_added_meanwhile() {
         .iter()
         .any(|task| task.title == "from B")
     {
-        if let Some(action) = runtime.poll_external() {
+        for action in runtime.poll_external() {
             let effects = update(&mut model, action, now);
             runtime.apply(&mut model, effects);
         }
@@ -600,7 +578,7 @@ fn an_external_write_is_reloaded() {
     // Our own write must not look like an external change.
     runtime.apply(&mut model, vec![Effect::Save]);
     assert!(
-        runtime.poll_external().is_none(),
+        runtime.poll_external().is_empty(),
         "our own write was seen as external"
     );
 
@@ -610,8 +588,8 @@ fn an_external_write_is_reloaded() {
     other.add("from elsewhere", dt(5));
     Store::new(config.board_path()).save(&other).unwrap();
 
-    match runtime.poll_external() {
-        Some(Action::Reload { board, .. }) => assert!(
+    match runtime.poll_external().as_slice() {
+        [Action::Reload { board, .. }] => assert!(
             board
                 .tasks()
                 .iter()
@@ -726,6 +704,32 @@ fn cli_sync_exits_nonzero_on_an_unreachable_remote() {
 }
 
 #[test]
+fn cli_add_offline_says_the_pull_failed_and_still_captures() {
+    let dir = tempfile::tempdir().unwrap();
+    let data = dir.path().join("data");
+    let cfg = dir.path().join("cfg");
+    let bad = dir.path().join("nope.git");
+
+    let out = tasu(&data, &cfg)
+        .env("TASU_REMOTE", bad.to_string_lossy().as_ref())
+        .args(["add", "offline capture"])
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "a capture must not fail offline");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("tasu: pull failed:"), "{stderr}");
+    assert!(
+        Store::new(data.join("todos.json"))
+            .load()
+            .board
+            .tasks()
+            .iter()
+            .any(|task| task.title == "offline capture"),
+        "the task must be saved locally"
+    );
+}
+
+#[test]
 fn cli_warns_when_the_board_cannot_be_read() {
     let dir = tempfile::tempdir().unwrap();
     let data = dir.path().join("data");
@@ -798,4 +802,45 @@ fn a_later_rename_survives_a_diverged_sync() {
         "named on B",
         "the later rename must survive the diverged merge"
     );
+}
+
+#[test]
+fn the_session_loop_captures_a_task_from_scripted_keys() {
+    use ratatui::backend::TestBackend;
+    use tasu::session;
+    use tasu::ui::Chrome;
+    use tasu::ui::theme::Theme;
+
+    let dir = tempfile::tempdir().unwrap();
+    let config = Config {
+        data_dir: dir.path().to_path_buf(),
+        remote: None,
+    };
+    let mut runtime = Runtime::new(&config);
+    let mut model = Model::new(runtime.load_board(dt(5)).board, dt(5));
+
+    let mut script: Vec<Action> = vec![press(KeyCode::Char('a'))];
+    script.extend("ship it".chars().map(|c| press(KeyCode::Char(c))));
+    script.push(press(KeyCode::Enter));
+    script.push(press(KeyCode::Char('q')));
+    let mut script = script.into_iter();
+
+    let mut terminal = Terminal::new(TestBackend::new(80, 12)).unwrap();
+    let chrome = Chrome {
+        data_path: dir.path(),
+        remote: None,
+    };
+    session::run(
+        &mut terminal,
+        &mut runtime,
+        &mut model,
+        &Theme::DARK,
+        &chrome,
+        || Ok(script.next().expect("the script ended before quit")),
+    )
+    .unwrap();
+
+    assert!(model.should_quit);
+    let saved = Store::new(config.board_path()).load().board;
+    assert!(saved.tasks().iter().any(|task| task.title == "ship it"));
 }

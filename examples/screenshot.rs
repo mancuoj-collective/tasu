@@ -80,13 +80,11 @@ fn main() {
         let mut terminal = Terminal::new(TestBackend::new(COLS, ROWS)).unwrap();
         terminal
             .draw(|frame| {
-                let _ = ui::draw(
-                    frame,
-                    &model,
-                    &theme,
-                    Path::new("~/.local/share/tasu/todos.json"),
-                    None,
-                );
+                let chrome = ui::Chrome {
+                    data_path: Path::new("~/.local/share/tasu/todos.json"),
+                    remote: None,
+                };
+                let _ = ui::draw(frame, &model, &theme, &chrome);
             })
             .unwrap();
 

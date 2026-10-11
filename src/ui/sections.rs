@@ -37,13 +37,11 @@ pub fn draw(f: &mut Frame, model: &Model, area: Rect, theme: &Theme) {
             let Some(task) = model.board.task(index) else {
                 continue;
             };
-            let mut line = components::task_line(task, theme, width);
-            if selectable == model.ui.cursor {
+            let selected = selectable == model.ui.cursor;
+            if selected {
                 selected_line = lines.len();
-                line = components::pad_line(line, width, theme.highlight());
-                line = line.style(theme.highlight());
             }
-            lines.push(line);
+            lines.push(components::selectable_row(task, theme, width, selected));
             selectable += 1;
         }
     }
