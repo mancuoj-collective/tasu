@@ -68,7 +68,7 @@ fn main() {
     help.ui.mode = Mode::Help;
     println!("\n=== help (84x26) ===");
     print(&help, 84, 26);
-    help.ui.help_scroll = 6;
+    help.ui.overlay_scroll = 6;
     println!("\n=== help scrolled (60x12) ===");
     print(&help, 60, 12);
 

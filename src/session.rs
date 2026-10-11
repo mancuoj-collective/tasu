@@ -25,13 +25,13 @@ where
 {
     while !model.should_quit {
         model.ui.sync = runtime.status();
-        let mut help_scroll = None;
+        let mut overlay_scroll = None;
         terminal.draw(|frame| {
-            help_scroll = ui::draw(frame, model, theme, chrome);
+            overlay_scroll = ui::draw(frame, model, theme, chrome);
         })?;
         // The renderer hands back the help overlay's clamped offset.
-        if let Some(offset) = help_scroll {
-            model.ui.help_scroll = offset;
+        if let Some(offset) = overlay_scroll {
+            model.ui.overlay_scroll = offset;
         }
 
         for action in runtime.poll_external() {

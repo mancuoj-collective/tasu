@@ -27,15 +27,15 @@ fn press(code: crossterm::event::KeyCode) -> Action {
 }
 
 fn render(model: &mut Model, width: u16, height: u16) -> String {
-    let (text, help_scroll) = draw_text(
+    let (text, overlay_scroll) = draw_text(
         model,
         width,
         height,
         Path::new("/tmp/tasu/todos.json"),
         None,
     );
-    if let Some(offset) = help_scroll {
-        model.ui.help_scroll = offset;
+    if let Some(offset) = overlay_scroll {
+        model.ui.overlay_scroll = offset;
     }
     text
 }
@@ -159,7 +159,7 @@ fn cli_add_syncs_to_a_remote_and_back() {
 }
 
 #[test]
-fn help_scroll_moves_back_up_from_the_bottom() {
+fn overlay_scroll_moves_back_up_from_the_bottom() {
     let mut model = Model::new(Board::new(), dt(5));
     model.ui.mode = Mode::Help;
 
@@ -169,12 +169,12 @@ fn help_scroll_moves_back_up_from_the_bottom() {
         update(&mut model, press(crossterm::event::KeyCode::Down), dt(5));
         render(&mut model, 60, 12);
     }
-    let bottom = model.ui.help_scroll;
+    let bottom = model.ui.overlay_scroll;
     assert!(bottom > 0, "help should have scrolled");
 
     update(&mut model, press(crossterm::event::KeyCode::Up), dt(5));
     render(&mut model, 60, 12);
-    assert_eq!(model.ui.help_scroll, bottom - 1, "up should move back");
+    assert_eq!(model.ui.overlay_scroll, bottom - 1, "up should move back");
 }
 
 #[test]

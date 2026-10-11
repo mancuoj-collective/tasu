@@ -108,7 +108,7 @@ pub fn draw(f: &mut Frame, model: &Model, theme: &Theme, chrome: &Chrome) -> usi
 
     let inner_height = height.saturating_sub(HELP_CHROME) as usize;
     let max_offset = lines.len().saturating_sub(inner_height);
-    let offset = model.ui.help_scroll.min(max_offset);
+    let offset = model.ui.overlay_scroll.min(max_offset);
     let visible: Vec<Line> = lines.into_iter().skip(offset).collect();
     f.render_widget(Paragraph::new(visible).block(block), area);
     offset

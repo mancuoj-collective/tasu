@@ -65,7 +65,7 @@ pub struct UiState {
     pub tick: u64,
     /// Scroll offset of the help overlay. The renderer clamps it to the content
     /// and hands the clamped value back, so key handling always starts valid.
-    pub help_scroll: usize,
+    pub overlay_scroll: usize,
 }
 
 impl Default for UiState {
@@ -83,7 +83,7 @@ impl Default for UiState {
             board_damage: None,
             edit_target: None,
             tick: 0,
-            help_scroll: 0,
+            overlay_scroll: 0,
         }
     }
 }

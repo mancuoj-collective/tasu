@@ -29,10 +29,10 @@ pub fn draw_text(
 ) -> (String, Option<usize>) {
     let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
     let chrome = Chrome { data_path, remote };
-    let mut help_scroll = None;
+    let mut overlay_scroll = None;
     terminal
         .draw(|frame| {
-            help_scroll = ui::draw(frame, model, &Theme::DARK, &chrome);
+            overlay_scroll = ui::draw(frame, model, &Theme::DARK, &chrome);
         })
         .unwrap();
 
@@ -45,5 +45,5 @@ pub fn draw_text(
         }
         out.push('\n');
     }
-    (out, help_scroll)
+    (out, overlay_scroll)
 }

@@ -141,7 +141,7 @@ fn normal(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effect>
             model.ui.history_view = HistoryView::Done;
         }
         KeyCode::Char('?') => {
-            model.ui.help_scroll = 0;
+            model.ui.overlay_scroll = 0;
             model.ui.mode = Mode::Help;
         }
         _ => {}
@@ -268,14 +268,14 @@ fn completed(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effe
 /// modal writes the clamped offset back after rendering, so these updates
 /// always start from a valid position.
 fn help(model: &mut Model, key: KeyEvent) -> Vec<Effect> {
-    let scroll = model.ui.help_scroll;
+    let scroll = model.ui.overlay_scroll;
     match key.code {
         KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('?') => {
             model.ui.mode = Mode::Normal;
-            model.ui.help_scroll = 0;
+            model.ui.overlay_scroll = 0;
         }
-        KeyCode::Down | KeyCode::Char('j') => model.ui.help_scroll = scroll + 1,
-        KeyCode::Up | KeyCode::Char('k') => model.ui.help_scroll = scroll.saturating_sub(1),
+        KeyCode::Down | KeyCode::Char('j') => model.ui.overlay_scroll = scroll + 1,
+        KeyCode::Up | KeyCode::Char('k') => model.ui.overlay_scroll = scroll.saturating_sub(1),
         _ => {}
     }
     Vec::new()
@@ -370,14 +370,14 @@ mod tests {
     }
 
     #[test]
-    fn help_scrolls_and_closes_explicitly() {
+    fn overlay_scrolls_and_closes_explicitly() {
         let mut model = model();
         update(&mut model, press(KeyCode::Char('?')), at(2026, 10, 5));
         assert_eq!(model.ui.mode, Mode::Help);
 
         update(&mut model, press(KeyCode::Down), at(2026, 10, 5));
         update(&mut model, press(KeyCode::Down), at(2026, 10, 5));
-        assert_eq!(model.ui.help_scroll, 2);
+        assert_eq!(model.ui.overlay_scroll, 2);
 
         // A random key must not dismiss the help.
         update(&mut model, press(KeyCode::Char('x')), at(2026, 10, 5));
@@ -385,7 +385,7 @@ mod tests {
 
         update(&mut model, press(KeyCode::Esc), at(2026, 10, 5));
         assert_eq!(model.ui.mode, Mode::Normal);
-        assert_eq!(model.ui.help_scroll, 0);
+        assert_eq!(model.ui.overlay_scroll, 0);
     }
 
     #[test]
