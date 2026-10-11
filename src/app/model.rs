@@ -178,13 +178,14 @@ impl Model {
     }
 
     /// The board index of the task under the cursor, if the cursor is on one.
+    /// Derived from the cursor's bucket position, so only that one bucket's
+    /// index list is built instead of all three.
     pub fn selected(&self) -> Option<usize> {
-        self.rows()
-            .filter_map(|row| match row {
-                Row::Task(index) => Some(index),
-                Row::Header(_) => None,
-            })
-            .nth(self.ui.cursor)
+        let (position, local) = self.cursor_bucket_position()?;
+        self.board
+            .open_in(Self::BUCKETS[position])
+            .get(local)
+            .copied()
     }
 
     pub fn cursor_down(&mut self) {
