@@ -1,9 +1,4 @@
-use ratatui::{
-    Frame,
-    layout::Rect,
-    text::{Line, Span},
-    widgets::Paragraph,
-};
+use ratatui::{Frame, layout::Rect, text::Line, widgets::Paragraph};
 
 use crate::app::Model;
 
@@ -13,12 +8,6 @@ use super::{components, scroll_offset, theme::Theme};
 /// is a labeled rule line followed by its tasks, separated by a blank line, and
 /// scrolled so the cursor stays visible.
 pub fn draw(f: &mut Frame, model: &Model, area: Rect, theme: &Theme) {
-    if model.selectable_len() == 0 {
-        let hint = Line::from(Span::styled("press a to add something", theme.muted()));
-        f.render_widget(Paragraph::new(hint).centered(), center_row(area));
-        return;
-    }
-
     let width = area.width;
     let mut lines: Vec<Line> = Vec::new();
     let mut selectable = 0usize;
@@ -50,12 +39,4 @@ pub fn draw(f: &mut Frame, model: &Model, area: Rect, theme: &Theme) {
     let offset = scroll_offset(selected_line, lines.len(), height);
     let visible: Vec<Line> = lines.into_iter().skip(offset).take(height).collect();
     f.render_widget(Paragraph::new(visible), area);
-}
-
-fn center_row(area: Rect) -> Rect {
-    Rect {
-        y: area.y + area.height / 2,
-        height: 1,
-        ..area
-    }
 }

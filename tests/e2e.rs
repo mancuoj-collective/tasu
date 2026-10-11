@@ -537,6 +537,8 @@ fn adding_shows_hints_then_a_toast() {
 fn an_empty_board_asks_for_a_first_task() {
     let mut model = Model::new(Board::new(), dt(5));
     assert!(render(&mut model, 80, 12).contains("press a to add something"));
+    // The same hint must survive on a wide (kanban) terminal.
+    assert!(render(&mut model, 120, 12).contains("press a to add something"));
 }
 
 #[test]

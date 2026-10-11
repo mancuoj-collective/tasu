@@ -12,7 +12,7 @@ use std::path::Path;
 
 use ratatui::{
     Frame,
-    layout::{Constraint, Layout, Margin},
+    layout::{Constraint, Layout, Margin, Rect},
     text::{Line, Span},
     widgets::{Block, Paragraph},
 };
@@ -62,13 +62,28 @@ pub fn draw(f: &mut Frame, model: &Model, theme: &Theme, chrome: &Chrome) -> Opt
     let [list, footer_area] =
         Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).areas(body);
 
-    if list.width >= KANBAN_MIN_WIDTH {
+    if model.selectable_len() == 0 {
+        // The empty hint belongs to both layouts, so it lives here rather than in
+        // one of them — otherwise the first-run hint vanishes on a wide terminal.
+        empty_board(f, theme, list);
+    } else if list.width >= KANBAN_MIN_WIDTH {
         kanban::draw(f, model, list, theme);
     } else {
         sections::draw(f, model, list, theme);
     }
     footer(f, model, theme, footer_area);
     modal::draw(f, model, theme, chrome)
+}
+
+/// A centred "add something" hint for an empty board, the same at any width.
+fn empty_board(f: &mut Frame, theme: &Theme, area: Rect) {
+    let hint = Line::from(Span::styled("press a to add something", theme.muted()));
+    let row = Rect {
+        y: area.y + area.height / 2,
+        height: 1,
+        ..area
+    };
+    f.render_widget(Paragraph::new(hint).centered(), row);
 }
 
 fn too_small(f: &mut Frame, theme: &Theme) {
