@@ -1,4 +1,5 @@
 pub mod components;
+pub mod details;
 pub mod help;
 pub mod kanban;
 pub mod keys;
@@ -140,22 +141,24 @@ fn toast_line(model: &Model, theme: &Theme) -> Option<Line<'static>> {
         .map(|toast| Line::from(Span::styled(format!(" {} ", toast.text), theme.success())))
 }
 
-/// A write error takes priority over everything else on the right.
+/// A write error takes priority over everything else on the right. The full
+/// text is kept for the details overlay, so the footer stays one short line.
 fn error_line(model: &Model, theme: &Theme) -> Option<Line<'static>> {
-    model.ui.error.as_ref().map(|message| {
-        let short = components::truncate(message, 60);
-        Line::from(Span::styled(format!(" \u{26a0} {short} "), theme.warn()))
+    model.ui.error.as_ref().map(|problem| {
+        Line::from(Span::styled(
+            format!(" \u{26a0} {} \u{b7} ! details ", problem.summary),
+            theme.warn(),
+        ))
     })
 }
 
 /// The footer line for a board file that could not be read, or `None` when the
-/// board is intact.
+/// board is intact. The backup path and the reason are in the details overlay.
 fn board_damage_line(model: &Model, theme: &Theme, width: u16) -> Option<Line<'static>> {
-    let message = model.ui.board_damage.as_ref()?;
-    // " " + warning glyph + " "
-    let available = (width as usize).saturating_sub(3);
+    let problem = model.ui.board_damage.as_ref()?;
+    let text = format!(" \u{26a0} {} \u{b7} ! details ", problem.summary);
     Some(Line::from(Span::styled(
-        format!(" \u{26a0} {}", components::truncate(message, available)),
+        components::truncate(&text, width as usize),
         theme.warn(),
     )))
 }

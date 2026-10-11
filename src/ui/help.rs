@@ -129,7 +129,7 @@ fn display_path(path: &Path) -> String {
 /// Append a labelled, wrapped block to `lines`. The first line begins with
 /// `prefix`; continuation lines are indented under it. Long tokens without
 /// spaces (paths, URLs) are hard-broken, so nothing is ever cut off.
-fn push_block(
+pub(super) fn push_block(
     lines: &mut Vec<Line<'static>>,
     prefix: &str,
     body: &str,

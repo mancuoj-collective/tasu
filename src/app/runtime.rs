@@ -13,7 +13,7 @@ use crate::store::{Loaded, Store};
 use crate::sync::Sync;
 
 use super::action::{Action, Effect};
-use super::model::{Model, SyncStatus};
+use super::model::{Model, Problem, SyncStatus};
 use super::tracker::{Due, SyncTracker};
 
 /// Owns the store and the sync worker, plus the mtime baseline that separates
@@ -104,7 +104,12 @@ impl Runtime {
                             // pushed; otherwise we would publish a stale board.
                             self.tracker.changed(Instant::now());
                         }
-                        Err(err) => model.ui.error = Some(format!("could not save: {err}")),
+                        Err(err) => {
+                            model.ui.error = Some(Problem::new(
+                                "could not save",
+                                format!("could not save: {err}"),
+                            ))
+                        }
                     }
                     self.sync_mtime();
                 }
@@ -162,7 +167,7 @@ impl Runtime {
         let loaded = self.store.load();
         Some(Action::Reload {
             board: loaded.board,
-            damaged: loaded.damaged.map(|damage| damage.message()),
+            damaged: loaded.damaged.map(|damage| damage.detail()),
         })
     }
 }

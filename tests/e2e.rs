@@ -12,7 +12,7 @@ use common::{draw_text, dt};
 
 use crossterm::event::KeyCode;
 
-use tasu::app::{Action, Effect, Mode, Model, Runtime, update};
+use tasu::app::{Action, Effect, Mode, Model, Problem, Runtime, update};
 use tasu::command;
 use tasu::config::Config;
 use tasu::domain::{Board, Bucket, TaskState};
@@ -601,7 +601,7 @@ fn an_external_write_is_reloaded() {
 }
 
 #[test]
-fn a_corrupt_board_is_reported_in_the_footer() {
+fn a_corrupt_board_is_reported_and_its_backup_is_readable() {
     let dir = tempfile::tempdir().unwrap();
     let config = Config {
         data_dir: dir.path().to_path_buf(),
@@ -614,7 +614,9 @@ fn a_corrupt_board_is_reported_in_the_footer() {
     let loaded = runtime.load_board(now);
     assert!(loaded.board.is_empty(), "a damaged board loads empty");
     let mut model = Model::new(loaded.board, now);
-    model.ui.board_damage = loaded.damaged.map(|damage| damage.message());
+    model.ui.board_damage = loaded
+        .damaged
+        .map(|d| Problem::new("board unreadable", d.detail()));
 
     let screen = render(&mut model, 80, 12);
     assert!(
@@ -622,8 +624,18 @@ fn a_corrupt_board_is_reported_in_the_footer() {
         "the footer should explain the missing board:\n{screen}"
     );
     assert!(
+        screen.contains("! details"),
+        "the footer should point at the details overlay:\n{screen}"
+    );
+
+    // The backup path is too long for the one-line footer; it lives in the
+    // details overlay, which `!` opens.
+    update(&mut model, press(KeyCode::Char('!')), now);
+    assert_eq!(model.ui.mode, Mode::Details);
+    let screen = render(&mut model, 80, 12);
+    assert!(
         screen.contains(".corrupt-"),
-        "the footer should name the backup:\n{screen}"
+        "the details overlay should name the backup:\n{screen}"
     );
 }
 

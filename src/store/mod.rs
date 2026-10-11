@@ -33,19 +33,6 @@ pub struct Damage {
 }
 
 impl Damage {
-    /// A short line for the footer: the board is unreadable and, when the file
-    /// could be moved aside, the backup's own name (the data directory is shown
-    /// elsewhere, and the footer truncates).
-    pub fn message(&self) -> String {
-        match self.backup.as_ref().and_then(|path| path.file_name()) {
-            Some(name) => format!(
-                "board unreadable \u{b7} saved as {}",
-                name.to_string_lossy()
-            ),
-            None => "board unreadable".to_string(),
-        }
-    }
-
     /// A fuller line for stderr: why the read failed and where the original went.
     pub fn detail(&self) -> String {
         match &self.backup {

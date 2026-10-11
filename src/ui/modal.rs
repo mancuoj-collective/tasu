@@ -10,7 +10,7 @@ use crate::app::{HistoryView, Mode, Model};
 
 use tui_input::Input;
 
-use super::{Chrome, components, help, scroll_offset, theme::Theme};
+use super::{Chrome, components, details, help, scroll_offset, theme::Theme};
 
 /// Render the active modal. Returns the help overlay's clamped scroll offset
 /// (only when help is open), so the caller stores it and the renderer never has
@@ -26,6 +26,7 @@ pub fn draw(f: &mut Frame, model: &Model, theme: &Theme, chrome: &Chrome) -> Opt
             None
         }
         Mode::Help => Some(help::draw(f, model, theme, chrome)),
+        Mode::Details => Some(details::draw(f, model, theme)),
         Mode::Normal => None,
     }
 }

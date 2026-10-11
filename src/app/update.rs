@@ -7,7 +7,7 @@ use tui_input::backend::crossterm::EventHandler;
 use crate::domain::settle;
 
 use super::action::{Action, Effect};
-use super::model::{HistoryView, Mode, Model};
+use super::model::{HistoryView, Mode, Model, Problem};
 
 /// The toast lingers this long before a `Tick` clears it.
 const TOAST_TTL: Duration = Duration::from_secs(3);
@@ -32,7 +32,7 @@ pub fn update(model: &mut Model, action: Action, now: DateTime<Local>) -> Vec<Ef
             // A reloaded file that could not be parsed is empty; say so rather
             // than letting the board appear to have vanished.
             if let Some(damage) = damaged {
-                model.ui.board_damage = Some(damage);
+                model.ui.board_damage = Some(Problem::new("board unreadable", damage));
             }
             settle(&mut model.board, now);
             model.clamp_cursor();
@@ -56,6 +56,7 @@ pub fn update(model: &mut Model, action: Action, now: DateTime<Local>) -> Vec<Ef
             Mode::Add | Mode::Edit => editing(model, key, now),
             Mode::Completed => completed(model, key, now),
             Mode::Help => help(model, key),
+            Mode::Details => details(model, key),
         },
     }
 }
@@ -143,6 +144,11 @@ fn normal(model: &mut Model, key: KeyEvent, now: DateTime<Local>) -> Vec<Effect>
         KeyCode::Char('?') => {
             model.ui.overlay_scroll = 0;
             model.ui.mode = Mode::Help;
+        }
+        KeyCode::Char('!') if model.problems().next().is_some() => {
+            // Only worth opening when there is something to read.
+            model.ui.overlay_scroll = 0;
+            model.ui.mode = Mode::Details;
         }
         _ => {}
     }
@@ -281,6 +287,22 @@ fn help(model: &mut Model, key: KeyEvent) -> Vec<Effect> {
     Vec::new()
 }
 
+/// The details overlay: the full text of whatever went wrong, scrollable, closed
+/// the same way help is. Same scroll handling, since only one overlay is open.
+fn details(model: &mut Model, key: KeyEvent) -> Vec<Effect> {
+    let scroll = model.ui.overlay_scroll;
+    match key.code {
+        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('!') => {
+            model.ui.mode = Mode::Normal;
+            model.ui.overlay_scroll = 0;
+        }
+        KeyCode::Down | KeyCode::Char('j') => model.ui.overlay_scroll = scroll + 1,
+        KeyCode::Up | KeyCode::Char('k') => model.ui.overlay_scroll = scroll.saturating_sub(1),
+        _ => {}
+    }
+    Vec::new()
+}
+
 #[cfg(test)]
 mod tests {
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -389,9 +411,38 @@ mod tests {
     }
 
     #[test]
+    fn bang_opens_the_details_only_when_something_is_wrong() {
+        let mut model = model();
+
+        // Nothing to read: the key is inert.
+        update(&mut model, press(KeyCode::Char('!')), at(2026, 10, 5));
+        assert_eq!(model.ui.mode, Mode::Normal);
+
+        model.ui.error = Some(Problem::new(
+            "could not save",
+            "could not save: Permission denied (os error 13)",
+        ));
+        update(&mut model, press(KeyCode::Char('!')), at(2026, 10, 5));
+        assert_eq!(model.ui.mode, Mode::Details);
+
+        // Scrolling and closing behave like the help overlay.
+        update(&mut model, press(KeyCode::Down), at(2026, 10, 5));
+        assert_eq!(model.ui.overlay_scroll, 1);
+        update(&mut model, press(KeyCode::Esc), at(2026, 10, 5));
+        assert_eq!(model.ui.mode, Mode::Normal);
+        assert_eq!(model.ui.overlay_scroll, 0);
+    }
+
+    #[test]
     fn ctrl_c_quits_from_any_mode() {
         let mut model = model();
-        for mode in [Mode::Normal, Mode::Add, Mode::Completed, Mode::Help] {
+        for mode in [
+            Mode::Normal,
+            Mode::Add,
+            Mode::Completed,
+            Mode::Help,
+            Mode::Details,
+        ] {
             model.ui.mode = mode;
             let action = Action::Key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
             assert_eq!(

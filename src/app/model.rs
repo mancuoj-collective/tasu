@@ -10,6 +10,25 @@ pub enum Mode {
     Edit,
     Completed,
     Help,
+    Details,
+}
+
+/// Something that went wrong and stays visible until it is resolved. The footer
+/// shows `summary`; the details overlay shows `detail`, which is never
+/// truncated, so a long IO error or a backup path is readable.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Problem {
+    pub summary: String,
+    pub detail: String,
+}
+
+impl Problem {
+    pub fn new(summary: impl Into<String>, detail: impl Into<String>) -> Self {
+        Self {
+            summary: summary.into(),
+            detail: detail.into(),
+        }
+    }
 }
 
 /// Which list the history modal shows. Both are restorable.
@@ -52,19 +71,20 @@ pub struct UiState {
     pub history_view: HistoryView,
     /// Background sync status, refreshed from the runtime each frame.
     pub sync: SyncStatus,
-    /// A fatal-ish error (e.g. the board could not be written) shown in the
-    /// footer, so data loss is never silent.
-    pub error: Option<String>,
+    /// A write error (e.g. the board could not be saved), shown in the footer
+    /// until the next successful save, so data loss is never silent.
+    pub error: Option<Problem>,
     /// A board file that could not be read and was moved aside. Shown in the
     /// footer until the next successful save, so a vanished board is explained.
-    pub board_damage: Option<String>,
+    pub board_damage: Option<Problem>,
     /// `created_at` of the task being edited. Latched when the editor opens so a
     /// reload during editing cannot retarget the rename to a different task.
     pub edit_target: Option<DateTime<Local>>,
     /// Tick counter, used to animate the syncing spinner.
     pub tick: u64,
-    /// Scroll offset of the help overlay. The renderer clamps it to the content
-    /// and hands the clamped value back, so key handling always starts valid.
+    /// Scroll offset of whichever overlay is open (help or details). The
+    /// renderer clamps it to the content and hands the clamped value back, so
+    /// key handling always starts valid.
     pub overlay_scroll: usize,
 }
 
@@ -228,6 +248,14 @@ impl Model {
                         .is_some_and(|task| task.title.to_lowercase().contains(&needle))
             })
             .collect()
+    }
+
+    /// Everything currently wrong, for the footer and the details overlay: the
+    /// write error first, then board damage.
+    pub fn problems(&self) -> impl Iterator<Item = &Problem> {
+        [self.ui.error.as_ref(), self.ui.board_damage.as_ref()]
+            .into_iter()
+            .flatten()
     }
 
     pub fn set_toast(&mut self, text: impl Into<String>) {

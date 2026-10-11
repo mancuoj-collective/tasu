@@ -22,6 +22,7 @@ pub fn hints(mode: Mode) -> &'static [(&'static str, &'static str)] {
             ("esc", "back"),
         ],
         Mode::Help => &[("\u{2191}\u{2193}", "scroll"), ("esc", "close")],
+        Mode::Details => &[("\u{2191}\u{2193}", "scroll"), ("esc", "close")],
     }
 }
 

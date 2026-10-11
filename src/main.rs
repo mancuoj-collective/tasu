@@ -7,7 +7,7 @@ use chrono::Local;
 use clap::Parser;
 use crossterm::event;
 
-use tasu::app::{Action, Model, Runtime};
+use tasu::app::{Action, Model, Problem, Runtime};
 use tasu::cli::{Cli, Command, HistoryName};
 use tasu::command;
 use tasu::config::Config;
@@ -69,7 +69,9 @@ fn run_tui(config: Config) -> Result<()> {
     let now = Local::now();
     let loaded = runtime.load_board(now);
     let mut model = Model::new(loaded.board, now);
-    model.ui.board_damage = loaded.damaged.map(|damage| damage.message());
+    model.ui.board_damage = loaded
+        .damaged
+        .map(|d| Problem::new("board unreadable", d.detail()));
     let theme = Theme::detect();
     let chrome = Chrome {
         data_path: &board_path,
