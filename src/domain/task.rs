@@ -15,7 +15,7 @@ pub enum Bucket {
 
 impl Bucket {
     /// Position in the pipeline, used to shift between buckets.
-    pub fn index(self) -> usize {
+    fn index(self) -> usize {
         match self {
             Bucket::Today => 0,
             Bucket::Week => 1,
