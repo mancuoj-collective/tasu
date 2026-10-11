@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-11
+
 ### Changed
 
 - The problems overlay (`!`) reads as a list of headings, not a wall of text:
@@ -14,6 +16,50 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   behind an accent `→`. The summary is no longer repeated in the body, and the
   overlay is titled `problems`. The footer uses the same `⚠` marker, so one
   failure looks the same in both views.
+- `tasu history` loads through the same settled path as the other commands, and
+  `tasu move` to the bucket a task is already in is now refused instead of
+  reporting a move that did not happen.
+- Empty `TASU_DATA` / `TASU_REMOTE` now count as set: an empty `TASU_REMOTE`
+  disables sync rather than falling back to the config file, and an empty
+  `TASU_DATA` no longer means the current directory. `tasu remote` warns when
+  `TASU_REMOTE` shadows a change it just wrote.
+
+### Fixed
+
+- A failed rename can no longer lose the board. `atomic_write` no longer deletes
+  `todos.json` before retrying the rename, so a failed write leaves the previous
+  board intact.
+- A pull over a board that cannot be read now reports the damage instead of
+  silently replacing the local tasks with the remote's copy, and
+  `Store::read_bytes` tells an unreadable board apart from a missing one.
+- A local I/O error (a permission problem, a failed process spawn) is no longer
+  classified as a git authentication failure, so the footer and `tasu remote`
+  give the right advice.
+- A sync worker that has died is surfaced as a failure instead of looking idle
+  forever, and a failing `git merge-base` is an error rather than "histories
+  diverged".
+- `git`'s stdout and stderr are drained while the deadline runs, so a command
+  whose output fills the pipe buffer is no longer killed as a fake timeout, and
+  a push refuses to run when no branch is checked out.
+- A clean reload clears a stale "board unreadable" problem; an edit whose target
+  a reload removed is reported instead of dropped silently; a backwards clock
+  step (DST, NTP) expires the capture toast instead of pinning it.
+- Corrupt backups no longer overwrite each other within the same second.
+- The empty-board hint shows at every width, a control character in a title no
+  longer breaks the row, the home directory is abbreviated only at a path
+  boundary, and `truncate` honours a zero-width budget.
+
+### Internal
+
+- The domain, store, sync, app and UI layers were reviewed and tidied: the
+  `created_at` identity invariant is enforced by `from_tasks`, `rename` reports
+  a real change like every other mutator, the help and details overlays share
+  one renderer, `truncate` and `push_block` live in the text module, sync's
+  failure enum is `Kind` with a flattened `JobOutcome`, and the remote-tip fetch
+  is shared between `pull` and `graft`. Several hot paths allocate less (a
+  borrowed serialization, an incremental text wrap, one bucket instead of three
+  per keypress, no per-frame string copies) and the idle tick only settles when
+  the local date changes.
 
 ## [0.15.0] - 2026-10-11
 
@@ -270,7 +316,9 @@ architecture and optional git sync.
 Initial release: a flat terminal todo list with JSON persistence (add, edit,
 toggle, delete) built with ratatui.
 
-[Unreleased]: https://github.com/mancuoj-collective/tasu/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/mancuoj-collective/tasu/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.16.0
+[0.15.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.15.0
 [0.14.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.14.0
 [0.13.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.13.0
 [0.12.0]: https://github.com/mancuoj-collective/tasu/releases/tag/v0.12.0
