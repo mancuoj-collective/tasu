@@ -1,7 +1,5 @@
 //! Fixtures and render helpers shared by the end-to-end and snapshot tests.
 
-#![allow(dead_code)]
-
 use std::path::Path;
 
 use chrono::{DateTime, Local, TimeZone};
