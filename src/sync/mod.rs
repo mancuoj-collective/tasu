@@ -11,7 +11,7 @@ use crate::domain::Board;
 use crate::store::Damage;
 
 pub use failure::{Error, Failure};
-use repo::{DEFAULT_BRANCH, board_store, commit_all, current_branch, ensure_repo};
+use repo::{board_store, commit_all, current_branch, ensure_repo};
 
 /// Network operations are bounded so a hung connection cannot freeze a caller.
 const NETWORK_TIMEOUT: Duration = Duration::from_secs(20);
@@ -234,8 +234,12 @@ fn commit_push_with(repo: &Path, remote: Option<&str>, timeout: Duration) -> Res
     }
     commit_all(repo, "tasu: sync")?;
     // Push to the explicit branch name instead of a bare `HEAD`, so a stray
-    // local branch can never create a second branch on the remote.
-    let branch = current_branch(repo).unwrap_or_else(|| DEFAULT_BRANCH.to_string());
+    // local branch can never create a second branch on the remote. Refuse when
+    // no branch is checked out rather than defaulting to `main`, which could
+    // publish onto an unrelated remote branch.
+    let Some(branch) = current_branch(repo) else {
+        return Err(Error::io("no branch checked out; refusing to push"));
+    };
     let mut cmd = git::in_repo(
         repo,
         &[
