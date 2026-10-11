@@ -81,7 +81,7 @@ impl Theme {
     }
 
     pub fn key_hint(&self) -> (Style, Style) {
-        let key = Style::new().fg(self.accent).bold();
+        let key = self.accent();
         let label = Style::new().fg(self.muted);
         (key, label)
     }
