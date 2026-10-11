@@ -72,6 +72,7 @@ src/
     components.rs    task rows, selected-row bar, headers (ISO week), toast
     modal.rs         add/edit and history overlays
     help.rs          help overlay
+    details.rs       full text of a write error or board damage, opened with `!`
     text.rs          pure text wrapping for the overlays
 ```
 
@@ -230,11 +231,18 @@ which is what separates "our write" from "an external one".
   (a blinking dot while syncing, `✗ <reason> · run tasu sync` on failure), then
   the toast. Sync failures live only here — the help overlay does not repeat
   them — and never as a raw git dump; the full error is left to `tasu sync`.
+- A write error and a board that could not be read each keep a `Problem`
+  (`summary` + `detail`). The footer shows only the short `summary` with a
+  `· ! details` affordance, so a long IO error or backup path never crowds it
+  out; pressing `!` opens the details overlay, which wraps the full `detail`
+  (backup path included) and scrolls like help. `!` is inert when nothing is
+  wrong. Both clear on the next successful save.
 - When `todos.json` could not be read, the footer's **left** side replaces the
-  key hints with the damage notice (the backup's name), so the sync status on the
-  right stays visible. The notice clears on the next successful save.
-- Help overlay: geometry lives in a few constants at the top of `modal.rs`; long
+  key hints with the damage summary, so the sync status on the right stays
+  visible.
+- Help overlay: geometry lives in a few constants at the top of `help.rs`; long
   paths and URLs wrap at their separators and right-align with the key column.
+  The details overlay reuses that wrapping.
 - Quitting returns to the shell at once: the board is already saved, and the
   final commit+push is spawned as a detached `tasu flush` rather than awaited.
 
