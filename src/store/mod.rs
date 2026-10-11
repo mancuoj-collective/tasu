@@ -160,9 +160,19 @@ impl Store {
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or_default();
-        let backup = self
+        // Seconds alone collide when the board is unreadable twice in one
+        // second, and `rename` would overwrite the first backup — the only copy
+        // of the earlier bad board. Pick the next free name.
+        let mut backup = self
             .path
             .with_file_name(format!("{file_name}.corrupt-{seconds}"));
+        let mut suffix = 1;
+        while backup.exists() {
+            backup = self
+                .path
+                .with_file_name(format!("{file_name}.corrupt-{seconds}.{suffix}"));
+            suffix += 1;
+        }
         fs::rename(&self.path, &backup)?;
         Ok(backup)
     }
@@ -338,6 +348,23 @@ mod tests {
             .filter(|name| name.contains(".corrupt-"))
             .collect();
         assert_eq!(backups.len(), 1);
+    }
+
+    #[test]
+    fn repeated_damage_does_not_overwrite_the_first_backup() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_in(&dir);
+        std::fs::write(store.path(), "{ not json").unwrap();
+        store.load();
+        std::fs::write(store.path(), "{ also not json").unwrap();
+        store.load();
+
+        let backups = std::fs::read_dir(dir.path())
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_name().to_string_lossy().contains(".corrupt-"))
+            .count();
+        assert_eq!(backups, 2, "each bad board must be kept");
     }
 
     #[test]
