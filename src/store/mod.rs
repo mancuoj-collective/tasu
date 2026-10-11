@@ -203,10 +203,16 @@ pub fn board_from_bytes(bytes: &[u8]) -> Option<Board> {
 /// Serialize a board to the on-disk file shape. The one place that knows that
 /// layout, so `Store::save` and `merge_files` cannot drift apart.
 fn serialize(board: &Board) -> serde_json::Result<Vec<u8>> {
-    let schema = FileSchema {
-        tasks: board.tasks().to_vec(),
-    };
-    serde_json::to_vec_pretty(&schema)
+    // A borrowed view: serializing must not clone every task just to hand serde
+    // an owned `Vec`.
+    #[derive(Serialize)]
+    struct FileSchemaRef<'a> {
+        #[serde(default)]
+        tasks: &'a [Task],
+    }
+    serde_json::to_vec_pretty(&FileSchemaRef {
+        tasks: board.tasks(),
+    })
 }
 
 /// Which side of a [`merge_files`] call could not be parsed.
