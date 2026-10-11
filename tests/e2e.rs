@@ -324,8 +324,11 @@ fn a_pull_in_flight_does_not_lose_a_task_added_meanwhile() {
     let effects = update(&mut model, press(KeyCode::Enter), now);
     runtime.apply(&mut model, effects);
 
-    // Drive the loop until the pull's board has been merged in.
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+    // Drive the loop until the pull's board has been merged in. The bound is
+    // generous on purpose: it must not race the worker's own network timeouts,
+    // or a slow CI machine reports "never landed" for a pull that is merely
+    // still in flight.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
     while !model
         .board
         .tasks()
@@ -582,11 +585,21 @@ fn an_external_write_is_reloaded() {
         "our own write was seen as external"
     );
 
-    // Another writer changes the file; give the mtime a moment to move on.
-    std::thread::sleep(std::time::Duration::from_millis(20));
+    // Another writer changes the file. Force a later mtime instead of sleeping:
+    // on a coarse filesystem the two writes can share a timestamp, and the test
+    // would race the clock rather than the behaviour under test.
+    let path = config.board_path();
     let mut other = Board::new();
     other.add("from elsewhere", dt(5));
-    Store::new(config.board_path()).save(&other).unwrap();
+    Store::new(&path).save(&other).unwrap();
+    let bumped =
+        std::fs::metadata(&path).unwrap().modified().unwrap() + std::time::Duration::from_secs(1);
+    std::fs::File::options()
+        .write(true)
+        .open(&path)
+        .unwrap()
+        .set_times(std::fs::FileTimes::new().set_modified(bumped))
+        .unwrap();
 
     match runtime.poll_external().as_slice() {
         [Action::Reload { board, .. }] => assert!(
