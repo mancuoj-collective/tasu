@@ -102,7 +102,7 @@ less you finish, the deeper it sinks.
 - Quitting never waits on the network: the board is already saved, and the last
   push is handed to a detached process that runs after the shell returns.
 - Offline or a failed push: stay quiet and retry later, without interrupting.
-  A failure is summarised in the footer as `✗ <reason> · run tasu sync`.
+  A failure is summarised in the footer as `✗ <reason> · ! details`.
 - If the machines ever diverge, the boards are merged task by task (a completed
   or dropped copy wins over an open one) rather than conflicting; no CRDT, but
   never stuck.

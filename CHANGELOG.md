@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- A failure shown in the footer — a write error, an unreadable board, or a
+  failed sync — keeps its full text behind a `! details` hint. Pressing `!`
+  opens an overlay that wraps and scrolls the whole error, including a backup
+  path or git's own message, so the footer's one line never cuts off the part
+  that matters.
+
 ### Fixed
 
 - A failed git step during setup is reported instead of ignored. Branch
@@ -18,7 +26,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `tasu add`, `done`, `drop` and `move` now say `tasu: pull failed: …` on stderr
   when the pre-command pull fails, matching the existing push message. The
   command still runs on the local board.
-
 - A board file that cannot be read is no longer treated as an empty board in
   silence. The file is moved aside and every front-end says so — the TUI in the
   footer, each CLI command on stderr — so a board that appears to have vanished
