@@ -113,7 +113,9 @@ fn graft(repo: &Path, url: &str) -> Result<(), Error> {
     } else {
         None
     };
-    let local_board = board_store(repo).read_bytes();
+    let local_board = board_store(repo)
+        .read_bytes()
+        .map_err(|err| Error::io(format!("could not read the local board: {err}")))?;
     let board = match (local_board, remote_board) {
         (Some(local), Some(remote)) => Some(
             merge_files(&local, &remote)

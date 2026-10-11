@@ -122,10 +122,17 @@ impl Store {
         atomic_write(&self.path, &json)
     }
 
-    /// Read the raw board bytes, or `None` when the file is missing. The sync
-    /// layer merges serialized boards and needs the bytes as-is.
-    pub fn read_bytes(&self) -> Option<Vec<u8>> {
-        fs::read(&self.path).ok()
+    /// Read the raw board bytes: `Ok(None)` when the file is missing, `Err` when
+    /// it exists but cannot be read. The sync layer merges serialized boards and
+    /// needs the bytes as-is, and must tell "no local board" apart from "the
+    /// local board could not be read" so a read failure never looks like an
+    /// absent side of the merge.
+    pub fn read_bytes(&self) -> std::io::Result<Option<Vec<u8>>> {
+        match fs::read(&self.path) {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(err) => Err(err),
+        }
     }
 
     /// Atomically replace the board with raw bytes, through the same temp-file
@@ -362,9 +369,25 @@ mod tests {
     fn raw_bytes_roundtrip_through_the_atomic_path() {
         let dir = tempfile::tempdir().unwrap();
         let store = store_in(&dir);
-        assert!(store.read_bytes().is_none(), "a missing file reads as None");
+        assert!(
+            store.read_bytes().unwrap().is_none(),
+            "a missing file reads as None"
+        );
 
         store.write_bytes(b"{\"tasks\":[]}").unwrap();
-        assert_eq!(store.read_bytes().as_deref(), Some(&b"{\"tasks\":[]}"[..]));
+        assert_eq!(
+            store.read_bytes().unwrap().as_deref(),
+            Some(&b"{\"tasks\":[]}"[..])
+        );
+    }
+
+    #[test]
+    fn unreadable_file_is_an_error_not_a_missing_board() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_in(&dir);
+        // A directory in the file's place cannot be read; that must be `Err`,
+        // not `Ok(None)`, or a merge would treat it as an absent board.
+        std::fs::create_dir(store.path()).unwrap();
+        assert!(store.read_bytes().is_err());
     }
 }
