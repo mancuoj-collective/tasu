@@ -45,5 +45,8 @@ than hiding it.
 - Discuss a change before making it — the author's ideas are not always right.
 - Keep all UI chrome in English.
 - Every failure must be visible to the user (a footer hint, a command error, or
-  a sync status) — never silent.
+  a sync status) — never silent. The one deliberate exception is the detached
+  final push on quit (`tasu flush`): it runs after the terminal is restored and
+  reports nowhere, so quitting stays instant. Do not lean on it for anything the
+  user must know about.
 - Prefer prebuilt, zero-friction installs (Homebrew tap + release installer).

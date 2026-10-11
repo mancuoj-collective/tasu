@@ -203,6 +203,9 @@ which is what separates "our write" from "an external one".
   (non-fast-forward) push can recover.
 - **Failures never reach stderr during the TUI.** Sync and store problems go to
   the footer; a save that fails on quit is printed after the terminal is restored.
+  The detached `tasu flush` on quit is the one exception: it runs after the
+  terminal is gone and reports nowhere, so a failed final push is deliberately
+  silent — the next launch's pull retries the change.
 - **Sync worker**: `Sync` spawns one thread that adopts or creates the
   repository, then processes `Pull` / `CommitPush` jobs and returns a
   `JobOutcome` (`Pulled` / `Pushed` / `Failed`) over a channel. It reports its
@@ -249,6 +252,8 @@ which is what separates "our write" from "an external one".
   The details overlay reuses that wrapping.
 - Quitting returns to the shell at once: the board is already saved, and the
   final commit+push is spawned as a detached `tasu flush` rather than awaited.
+  That push is best-effort and silent (see the failure rule above); the next
+  launch's pull reconciles anything it missed.
 
 ## CLI
 
