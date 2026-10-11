@@ -4,6 +4,7 @@
 //! setup reaches the footer instead of looking healthy.
 
 use std::path::Path;
+use std::time::Duration;
 
 use crate::store::{MergeSide, Store, merge_files};
 
@@ -86,17 +87,22 @@ pub(super) struct RemoteTip {
 /// branch first, then the remote's `HEAD` — and read its board. The one place
 /// that knows the fetch-and-read contract, shared by `pull` and `graft`, so the
 /// two cannot drift on how the remote is addressed or how an unreadable board is
-/// reported. A fetch that fails entirely is returned as an error; a best-effort
-/// caller maps it to an unfetched tip.
-pub(super) fn fetch_remote_tip(repo: &Path, branch: &str) -> Result<RemoteTip, Error> {
+/// reported. Bounded by `timeout`, so a caller that must not stall (a one-shot
+/// capture) can pass a short one. A fetch that fails entirely is returned as an
+/// error; a best-effort caller maps it to an unfetched tip.
+pub(super) fn fetch_remote_tip(
+    repo: &Path,
+    branch: &str,
+    timeout: Duration,
+) -> Result<RemoteTip, Error> {
     let named = format!("+refs/heads/{branch}:refs/tasu/remote");
     let mut cmd = git::in_repo(repo, &["fetch", "--quiet", "origin", &named]);
-    if let Err(err) = git::bounded(&mut cmd, NETWORK_TIMEOUT) {
+    if let Err(err) = git::bounded(&mut cmd, timeout) {
         let mut head = git::in_repo(
             repo,
             &["fetch", "--quiet", "origin", "+HEAD:refs/tasu/remote"],
         );
-        if git::bounded(&mut head, NETWORK_TIMEOUT).is_err() {
+        if git::bounded(&mut head, timeout).is_err() {
             return Err(err);
         }
     }
@@ -122,7 +128,7 @@ fn graft(repo: &Path, url: &str) -> Result<(), Error> {
     // Fetch the remote's current tip. Best-effort: if the remote cannot be
     // reached, graft still proceeds with the local board and the later push
     // reports the failure.
-    let tip = fetch_remote_tip(repo, &branch).unwrap_or(RemoteTip {
+    let tip = fetch_remote_tip(repo, &branch, NETWORK_TIMEOUT).unwrap_or(RemoteTip {
         fetched: false,
         board: None,
     });

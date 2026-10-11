@@ -5,6 +5,8 @@ mod remote;
 mod render;
 mod update;
 
+use std::time::Duration;
+
 use anyhow::Result;
 use chrono::{DateTime, Local};
 
@@ -17,6 +19,11 @@ pub use remote::remote;
 pub use update::update;
 
 use render::{bucket_label, history_sections, render_history, render_open};
+
+/// How long the pre-command pull may wait on the network. A capture must stay
+/// instant, so this is well under the app's own sync timeout; a slow pull is
+/// simply skipped (best-effort) and the change is pushed later.
+const PULL_BEFORE_COMMAND: Duration = Duration::from_secs(2);
 
 /// Load the board for a CLI command. A file that cannot be read has been moved
 /// aside by the store; the command still runs on an empty board, but the user is
@@ -210,8 +217,15 @@ fn joined_title(words: &[String]) -> Option<String> {
 /// local board, but a failed pull is reported like a failed push, never silent.
 /// A local board that could not be read would otherwise be replaced by the
 /// remote's copy, so its damage is printed too.
+///
+/// Bounded short: a capture must stay instant, so a configured remote on a slow
+/// or black-holed network is not waited on for the full network timeout.
 fn best_effort_pull(config: &Config) {
-    match sync::pull_now(&config.data_dir, config.remote.as_deref()) {
+    match sync::pull_now_within(
+        &config.data_dir,
+        config.remote.as_deref(),
+        PULL_BEFORE_COMMAND,
+    ) {
         Ok(Some(damage)) => warn(damage.detail()),
         Ok(None) => {}
         Err(err) => warn(format!("pull failed: {err}")),

@@ -145,8 +145,19 @@ pub fn commit_now(repo: &Path, remote: Option<&str>) -> Result<(), Error> {
 /// from the local board that could not be read, so the caller can surface it
 /// instead of letting the tasks look lost.
 pub fn pull_now(repo: &Path, remote: Option<&str>) -> Result<Option<Damage>, Error> {
+    pull_now_within(repo, remote, NETWORK_TIMEOUT)
+}
+
+/// `pull_now` with a caller-chosen network deadline. A one-shot capture passes a
+/// short one, so a configured remote on a slow or black-holed network cannot
+/// stall the command before it writes.
+pub fn pull_now_within(
+    repo: &Path,
+    remote: Option<&str>,
+    timeout: Duration,
+) -> Result<Option<Damage>, Error> {
     ensure_repo(repo, remote)?;
-    apply_pull(repo, pull(repo, remote)?)
+    apply_pull(repo, pull_within(repo, remote, timeout)?)
 }
 
 /// Merge a pull result into the on-disk board. The one-shot CLI is a single
@@ -182,7 +193,14 @@ pub fn probe_remote(url: &str) -> Result<(), Error> {
 /// meaning: the remote's board is handed back to be merged **task by task**, and
 /// the branch is moved with `--soft`, leaving the working tree — the app's
 /// `todos.json` in particular — exactly as the app has it.
+/// A pull with the app's standard network deadline.
 fn pull(repo: &Path, remote: Option<&str>) -> Result<Pulled, Error> {
+    pull_within(repo, remote, NETWORK_TIMEOUT)
+}
+
+/// `pull` with an explicit fetch deadline, so a caller that must not stall can
+/// bound it.
+fn pull_within(repo: &Path, remote: Option<&str>, timeout: Duration) -> Result<Pulled, Error> {
     if remote.is_none() {
         return Ok(Pulled::UpToDate);
     }
@@ -195,7 +213,7 @@ fn pull(repo: &Path, remote: Option<&str>) -> Result<Pulled, Error> {
     };
 
     // Fetch the remote branch into a private ref, then compare histories.
-    let tip = repo::fetch_remote_tip(repo, &branch)?;
+    let tip = repo::fetch_remote_tip(repo, &branch, timeout)?;
 
     // If the remote is already reachable from HEAD, we are level or ahead.
     if git::is_ancestor(repo, "refs/tasu/remote", "HEAD")? {

@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- A one-shot command (`tasu add`, `done`, `drop`, `move`) no longer waits on the
+  full network timeout before it writes. The pre-command pull is bounded to a
+  couple of seconds, so a capture stays instant on a slow or black-holed remote;
+  a skipped pull is reported and the change is pushed later.
+
 ## [0.17.0] - 2026-10-11
 
 ### Fixed
